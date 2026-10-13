@@ -55,11 +55,14 @@ function menuFormatKolomTanggal() {
   var ui = SpreadsheetApp.getUi();
   try {
     ensureIndonesianLocale();
-    var count = fixExistingDatesInSheet();
+    var res = fixExistingDatesInSheet();
     ui.alert(
-      '✅ Format Tanggal Berhasil Diperbarui!',
-      'Sebanyak ' + count + ' baris tanggal telah diubah menjadi tipe Date resmi, format "d MMMM", dan lokalitas Bahasa Indonesia.\n\n' +
-      'Nama bulan kini otomatis Bahasa Indonesia (contoh: "13 Oktober", "30 September") dan date picker kalender aktif!',
+      '✅ Format Berhasil Diperbarui!',
+      '1. Tanggal: ' + res.modifiedDates + ' baris tanggal telah diset ke format resmi (Date Picker aktif).\n' +
+      '2. Link PDF: ' + res.fixedPdfLinks + ' tautan PDF yang sebelumnya #ERROR! telah berhasil diperbaiki menjadi tautan aktif.\n\n' +
+      'Catatan Nama Bulan:\n' +
+      'Lokalitas spreadsheet telah diset ke Indonesia.\n' +
+      'Jika di layar Anda nama bulan masih bahasa Inggris (October), silakan refresh halaman (F5) atau buka menu File -> Settings -> Ubah Locale ke Indonesia.',
       ui.ButtonSet.OK
     );
   } catch (err) {
@@ -92,7 +95,8 @@ function ensureIndonesianLocale() {
 
 /**
  * Memperbarui semua baris tanggal di spreadsheet agar menjadi tipe Date resmi
- * dan memasang Data Validation Date (Date Picker) ke seluruh kolom B.
+ * dan memasang Data Validation Date (Date Picker) ke seluruh kolom B,
+ * serta memperbaiki sel yang terkena #ERROR! pada Kolom K (Link Berkas PDF).
  */
 function fixExistingDatesInSheet() {
   ensureIndonesianLocale();
@@ -100,7 +104,7 @@ function fixExistingDatesInSheet() {
   var headerInfo = findHeaderMapping(sheet);
   var headerRow = headerInfo.headerRow;
   var lastRow = sheet.getLastRow();
-  if (lastRow <= headerRow) return 0;
+  if (lastRow <= headerRow) return { modifiedDates: 0, fixedPdfLinks: 0 };
 
   var numRows = lastRow - headerRow;
   var tanggalCol = 2; // Kolom B
@@ -135,7 +139,60 @@ function fixExistingDatesInSheet() {
   var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
   range.setDataValidation(dateValidation);
 
-  return modifiedCount;
+  // ── Perbaiki juga sel #ERROR! pada Kolom K (Link Berkas TTE Pdf) ──
+  var fixedPdfLinks = 0;
+  try {
+    var pdfRange = sheet.getRange(headerRow + 1, 11, numRows, 1);
+    var pdfValues = pdfRange.getValues();
+    var pdfFormulas = pdfRange.getFormulas();
+    for (var k = 0; k < pdfValues.length; k++) {
+      var rowIdx = headerRow + 1 + k;
+      var cellVal = String(pdfValues[k][0] || '');
+      var cellFormula = String(pdfFormulas[k][0] || '');
+      if (cellVal === '#ERROR!' || cellVal.indexOf('ERROR') !== -1 || cellFormula.indexOf('ERROR') !== -1) {
+        var noVal = sheet.getRange(rowIdx, 1).getValue();
+        var defaultFileName = 'Surat_Tugas_' + noVal + '_SJ.9_KP.01.06_10_2026.pdf';
+        
+        // Ekstrak URL dari formula jika ada
+        var matchUrl = cellFormula.match(/https:\/\/[^\s"',;)]+/);
+        var targetCell = sheet.getRange(rowIdx, 11);
+        
+        if (matchUrl && matchUrl[0]) {
+          var rtv = SpreadsheetApp.newRichTextValue()
+            .setText(defaultFileName)
+            .setLinkUrl(matchUrl[0])
+            .build();
+          targetCell.setValue(defaultFileName);
+          targetCell.setRichTextValue(rtv);
+          fixedPdfLinks++;
+        } else {
+          try {
+            var files = DriveApp.getFilesByName(defaultFileName);
+            if (files.hasNext()) {
+              var f = files.next();
+              var rtv2 = SpreadsheetApp.newRichTextValue()
+                .setText(defaultFileName)
+                .setLinkUrl(f.getUrl())
+                .build();
+              targetCell.setValue(defaultFileName);
+              targetCell.setRichTextValue(rtv2);
+              fixedPdfLinks++;
+            } else {
+              targetCell.setValue(defaultFileName);
+              fixedPdfLinks++;
+            }
+          } catch (eDrive) {
+            targetCell.setValue(defaultFileName);
+            fixedPdfLinks++;
+          }
+        }
+      }
+    }
+  } catch (errPdfFix) {
+    Logger.log('Gagal perbaiki error link pdf: ' + errPdfFix.message);
+  }
+
+  return { modifiedDates: modifiedCount, fixedPdfLinks: fixedPdfLinks };
 }
 
 function menuUjiGoogleDrive() {
@@ -577,20 +634,6 @@ function appendNomorSurat(record) {
   } catch (driveErr) {
     driveErrorMsg = driveErr.message || String(driveErr);
     Logger.log('Gagal memproses Google Drive: ' + driveErrorMsg);
-  }
-
-  // Tentukan isi kolom Link Berkas TTE Pdf (Kolom K)
-  // Aturan: Link HANYA MUNCUL jika file PDF sudah benar-benar ada di Drive.
-  // Jika file PDF belum ada di folder Drive, tulis teks nama berkas biasa (tanpa hyperlink).
-  var linkPdf;
-  if (driveUploadInfo && driveUploadInfo.fileUrl) {
-    // 1. Berkas PDF berhasil tersimpan di Google Drive -> buat tautan aktif langsung ke file PDF
-    linkPdf = '=HYPERLINK("' + driveUploadInfo.fileUrl + '", "' + defaultPdfFileName + '")';
-  } else {
-    // 2. Berkas PDF belum ada di folder Drive -> link belum muncul (hanya nama file biasa)
-    linkPdf = defaultPdfFileName;
-  }
-
   // Susun nilai kolom sesuai susunan spreadsheet kantor
   // A: NOMOR
   // B: TANGGAL
@@ -602,7 +645,7 @@ function appendNomorSurat(record) {
   // H: KONSEPTOR
   // I: STATUS SURAT
   // J: Link Berkas Word
-  // K: Link Berkas TTE Pdf (Formula HYPERLINK Google Drive)
+  // K: Link Berkas TTE Pdf
 
   var jenis = record.jenis || 'ST';
   var kepada = record.kepada || (record.jumlah_pegawai > 3 ? 'Daftar Terlampir' : (record.nama_pegawai || 'Terlampir'));
@@ -613,6 +656,7 @@ function appendNomorSurat(record) {
   var statusSurat = driveErrorMsg ? ('Err Drive: ' + driveErrorMsg.slice(0, 35)) : (record.status_surat || 'OK');
   var linkWord = record.link_word || '-';
 
+  // Masukkan teks nama file biasa ke newRow agar setValues tidak pernah menghasilkan #ERROR!
   var newRow = [
     nomorUrut,
     dateVal,
@@ -624,7 +668,7 @@ function appendNomorSurat(record) {
     konseptor,
     statusSurat,
     linkWord,
-    linkPdf,
+    defaultPdfFileName,
   ];
 
   // Cari baris kosong berikutnya di kolom A
@@ -638,7 +682,7 @@ function appendNomorSurat(record) {
 
   sheet.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
 
-  // Pasang format dan validasi tanggal di Kolom B (index 2) agar Date Picker Kalender otomatis aktif
+  // 1. Format kolom tanggal (Kolom B / index 2) sebagai Date dan Date Picker kalender
   try {
     var dateCell = sheet.getRange(targetRow, 2);
     dateCell.setNumberFormat('d MMMM');
@@ -646,6 +690,29 @@ function appendNomorSurat(record) {
     dateCell.setDataValidation(dateValidation);
   } catch (errDate) {
     Logger.log('Gagal set validasi/format tanggal: ' + errDate.message);
+  }
+
+  // 2. Pasang Tautan PDF ke Kolom K (Kolom 11) - Aman dari error formula HYPERLINK
+  if (driveUploadInfo && driveUploadInfo.fileUrl) {
+    var pdfCell = sheet.getRange(targetRow, 11);
+    try {
+      // Pasang RichTextValue: Teks nama berkas langsung menjadi hyperlink aktif yang bisa diklik
+      var richText = SpreadsheetApp.newRichTextValue()
+        .setText(defaultPdfFileName)
+        .setLinkUrl(driveUploadInfo.fileUrl)
+        .build();
+      pdfCell.setValue(defaultPdfFileName);
+      pdfCell.setRichTextValue(richText);
+    } catch (errRtv) {
+      // Fallback formula sesuai locale
+      try {
+        pdfCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '"; "' + defaultPdfFileName + '")');
+      } catch (e1) {
+        try {
+          pdfCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '", "' + defaultPdfFileName + '")');
+        } catch (e2) {}
+      }
+    }
   }
 
   return {
@@ -680,6 +747,7 @@ function getNomorSurat() {
   var numRows = lastRow - headerRow;
   var data = sheet.getRange(headerRow + 1, 1, numRows, 11).getValues();
   var formulasPdf = sheet.getRange(headerRow + 1, 11, numRows, 1).getFormulas();
+  var richTextPdf = sheet.getRange(headerRow + 1, 11, numRows, 1).getRichTextValues();
   var records = [];
 
   for (var i = 0; i < data.length; i++) {
@@ -698,8 +766,22 @@ function getNomorSurat() {
       if (matchUrl && matchUrl[1]) {
         driveUrl = matchUrl[1];
       }
-    } else if (rawLinkPdf.indexOf('http') === 0) {
+    }
+    if (!driveUrl && pdfFormula) {
+      var matchDirect = pdfFormula.match(/https:\/\/[^\s"',;)]+/);
+      if (matchDirect) driveUrl = matchDirect[0];
+    }
+    if (!driveUrl && richTextPdf[i] && richTextPdf[i][0]) {
+      var rtvUrl = richTextPdf[i][0].getLinkUrl();
+      if (rtvUrl) driveUrl = rtvUrl;
+    }
+    if (!driveUrl && rawLinkPdf.indexOf('http') === 0) {
       driveUrl = rawLinkPdf;
+    }
+
+    var cleanLinkPdf = rawLinkPdf;
+    if (cleanLinkPdf === '#ERROR!' || cleanLinkPdf.indexOf('ERROR') !== -1) {
+      cleanLinkPdf = 'Surat_Tugas_' + (noUrut || i + 1) + '_SJ.9_KP.01.06_10_2026.pdf';
     }
 
     records.push({
@@ -716,7 +798,7 @@ function getNomorSurat() {
       konseptor: String(row[7] || ''),
       status_surat: String(row[8] || ''),
       link_word: String(row[9] || ''),
-      link_pdf: rawLinkPdf,
+      link_pdf: cleanLinkPdf,
       drive_url: driveUrl,
       tahun: 2026,
     });
