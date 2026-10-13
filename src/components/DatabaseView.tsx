@@ -87,15 +87,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   const formatDisplayDate = (val?: string) => {
     if (!val || val.trim() === '') return '-';
     const trimmed = val.trim();
-    // Jika sudah rapi (misal: "13 Oktober 2026")
-    if (/^\d{1,2}\s+[a-zA-Z]+\s+\d{4}$/.test(trimmed)) return trimmed;
+    // Jika sudah berupa tanggal dan bulan saja (misal: "29 September")
+    if (/^\d{1,2}\s+[a-zA-Z]+$/.test(trimmed)) return trimmed;
+    // Jika format memiliki tahun (misal: "13 Oktober 2026")
+    const matchIndo = trimmed.match(/^(\d{1,2})\s+([a-zA-Z]+)(?:\s+\d{4})?$/);
+    if (matchIndo) return `${matchIndo[1]} ${matchIndo[2]}`;
+
     const d = new Date(trimmed);
     if (!isNaN(d.getTime())) {
       const bulanIndo = [
         'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
         'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
       ];
-      return `${d.getDate()} ${bulanIndo[d.getMonth()]} ${d.getFullYear()}`;
+      return `${d.getDate()} ${bulanIndo[d.getMonth()]}`;
     }
     return trimmed;
   };

@@ -104,7 +104,7 @@ function fixExistingDatesInSheet() {
   }
 
   range.setValues(updatedValues);
-  range.setNumberFormat('d MMMM yyyy');
+  range.setNumberFormat('d MMMM');
 
   // Pasang Data Validation requireDate() agar double-click memunculkan kalender date picker
   var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
@@ -615,7 +615,7 @@ function appendNomorSurat(record) {
   // Pasang format dan validasi tanggal di Kolom B (index 2) agar Date Picker Kalender otomatis aktif
   try {
     var dateCell = sheet.getRange(targetRow, 2);
-    dateCell.setNumberFormat('d MMMM yyyy');
+    dateCell.setNumberFormat('d MMMM');
     var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
     dateCell.setDataValidation(dateValidation);
   } catch (errDate) {
@@ -742,7 +742,7 @@ function formatTanggalIndoOutput(val) {
       'Januari','Februari','Maret','April','Mei','Juni',
       'Juli','Agustus','September','Oktober','November','Desember'
     ];
-    return val.getDate() + ' ' + bulanIndo[val.getMonth()] + ' ' + val.getFullYear();
+    return val.getDate() + ' ' + bulanIndo[val.getMonth()];
   }
   return String(val);
 }
@@ -753,5 +753,5 @@ function formatCurrentDateIndo() {
     'Juli','Agustus','September','Oktober','November','Desember'
   ];
   var now = new Date();
-  return now.getDate() + ' ' + bulanIndo[now.getMonth()] + ' ' + now.getFullYear();
+  return now.getDate() + ' ' + bulanIndo[now.getMonth()];
 }
