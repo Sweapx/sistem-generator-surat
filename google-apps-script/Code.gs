@@ -54,11 +54,12 @@ function onOpen() {
 function menuFormatKolomTanggal() {
   var ui = SpreadsheetApp.getUi();
   try {
+    ensureIndonesianLocale();
     var count = fixExistingDatesInSheet();
     ui.alert(
       '✅ Format Tanggal Berhasil Diperbarui!',
-      'Sebanyak ' + count + ' baris tanggal telah diubah menjadi tipe Date resmi dan dipasangi validasi Date Picker.\n\n' +
-      'Sekarang seluruh sel tanggal di Kolom B dapat di-double-click untuk memunculkan kalender interaktif!',
+      'Sebanyak ' + count + ' baris tanggal telah diubah menjadi tipe Date resmi, format "d MMMM", dan lokalitas Bahasa Indonesia.\n\n' +
+      'Nama bulan kini otomatis Bahasa Indonesia (contoh: "13 Oktober", "30 September") dan date picker kalender aktif!',
       ui.ButtonSet.OK
     );
   } catch (err) {
@@ -67,10 +68,34 @@ function menuFormatKolomTanggal() {
 }
 
 /**
+ * Memastikan Locale Spreadsheet diatur ke Indonesia ('id_ID')
+ * agar format tanggal 'd MMMM' otomatis menampilkan nama bulan bahasa Indonesia (Oktober, bukan October).
+ */
+function ensureIndonesianLocale() {
+  try {
+    var ss = getTargetSpreadsheet();
+    var cur = (ss.getSpreadsheetLocale() || '').toLowerCase();
+    if (cur !== 'id' && cur !== 'id_id' && cur !== 'in_id') {
+      try {
+        ss.setSpreadsheetLocale('id_ID');
+      } catch (e1) {
+        ss.setSpreadsheetLocale('id');
+      }
+    }
+    try {
+      ss.setSpreadsheetTimeZone('Asia/Jakarta');
+    } catch (e2) {}
+  } catch (err) {
+    Logger.log('Gagal mengatur locale spreadsheet: ' + err.message);
+  }
+}
+
+/**
  * Memperbarui semua baris tanggal di spreadsheet agar menjadi tipe Date resmi
  * dan memasang Data Validation Date (Date Picker) ke seluruh kolom B.
  */
 function fixExistingDatesInSheet() {
+  ensureIndonesianLocale();
   var sheet = getTargetSheet();
   var headerInfo = findHeaderMapping(sheet);
   var headerRow = headerInfo.headerRow;
@@ -489,6 +514,7 @@ function appendNomorSurat(record) {
     throw new Error('Data record surat kosong.');
   }
 
+  ensureIndonesianLocale();
   var sheet = getTargetSheet();
   var headerInfo = findHeaderMapping(sheet);
   var headerRow = headerInfo.headerRow;
