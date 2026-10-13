@@ -45,10 +45,25 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('📌 Pusaka Surat Tugas')
+      .addItem('🔗 Perbaiki Sel Link PDF yang #ERROR!', 'menuPerbaikiLinkPdf')
       .addItem('📅 Format Kolom Tanggal (Aktifkan Date Picker Kalender)', 'menuFormatKolomTanggal')
       .addItem('☁️ Otorisasi & Buat Folder Bulan Ini', 'menuUjiGoogleDrive')
       .addToUi();
   } catch (e) {}
+}
+
+function menuPerbaikiLinkPdf() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var res = fixExistingDatesInSheet();
+    ui.alert(
+      '✅ Link PDF Berhasil Diperbaiki!',
+      'Sebanyak ' + res.fixedPdfLinks + ' tautan PDF yang sebelumnya #ERROR! telah dipulihkan menjadi tautan aktif Google Drive yang bisa langsung diklik.',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('❌ Gagal Memperbaiki Link PDF', err.message, ui.ButtonSet.OK);
+  }
 }
 
 function menuFormatKolomTanggal() {
@@ -155,15 +170,29 @@ function fixExistingDatesInSheet() {
         
         // Ekstrak URL dari formula jika ada
         var matchUrl = cellFormula.match(/https:\/\/[^\s"',;)]+/);
-        var targetCell = sheet.getRange(rowIdx, 11);
-        
         if (matchUrl && matchUrl[0]) {
-          var rtv = SpreadsheetApp.newRichTextValue()
-            .setText(defaultFileName)
-            .setLinkUrl(matchUrl[0])
-            .build();
-          targetCell.setValue(defaultFileName);
-          targetCell.setRichTextValue(rtv);
+          var targetUrl = matchUrl[0];
+          var mFileName = cellFormula.match(/[",;]\s*"([^"]+\.pdf)"/i);
+          var actualFileName = (mFileName && mFileName[1]) ? mFileName[1] : defaultFileName;
+
+          var fixedOk = false;
+          // Coba pasang formula resmi lokalitas Indonesia dengan titik-koma (;)
+          try {
+            targetCell.setValue('=HYPERLINK("' + targetUrl + '"; "' + actualFileName + '")');
+            if (String(targetCell.getValue()).indexOf('ERROR') === -1) {
+              fixedOk = true;
+            }
+          } catch (eSemi) {}
+
+          // Jika formula masih error, pasang RichTextValue langsung yang dijamin 100% aktif dan tanpa formula error
+          if (!fixedOk || String(targetCell.getValue()).indexOf('ERROR') !== -1) {
+            var rtv = SpreadsheetApp.newRichTextValue()
+              .setText(actualFileName)
+              .setLinkUrl(targetUrl)
+              .build();
+            targetCell.setValue(actualFileName);
+            targetCell.setRichTextValue(rtv);
+          }
           fixedPdfLinks++;
         } else {
           try {
@@ -634,6 +663,8 @@ function appendNomorSurat(record) {
   } catch (driveErr) {
     driveErrorMsg = driveErr.message || String(driveErr);
     Logger.log('Gagal memproses Google Drive: ' + driveErrorMsg);
+  }
+
   // Susun nilai kolom sesuai susunan spreadsheet kantor
   // A: NOMOR
   // B: TANGGAL
