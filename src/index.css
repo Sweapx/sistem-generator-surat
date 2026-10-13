@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* Base font */
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-900 antialiased;
+  }
+}
+
+/* Styling untuk field yang dapat diedit langsung di lembar surat */
+.editable-text-field {
+  border-radius: 3px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 1px 3px;
+}
+.editable-text-field:hover {
+  background-color: rgba(204, 251, 241, 0.45);
+  box-shadow: 0 0 0 1px #0d9488;
+  cursor: text;
+}
+.editable-text-field:focus {
+  background-color: #ffffff;
+  box-shadow: 0 0 0 1.5px #0f766e;
+}
+
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Sembunyikan SEMUA elemen form, navigasi, header, dan elemen non-cetak */
+  header, nav, aside, footer, button, .action-bar-print-hide, .no-print, [data-no-print], .print\:hidden,
+  .lg\:col-span-5 {
+    display: none !important;
+  }
+
+  /* Reset layout utama agar mengambil lebar penuh dokumen */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .grid {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .lg\:col-span-7 {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Tampilkan area dokumen surat tugas secara bersih di aliran dokumen utama */
+  #surat-tugas-document {
+    visibility: visible !important;
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  .print-page {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-page.single-page-locked {
+    height: 296mm !important;
+    max-height: 296mm !important;
+    overflow: hidden !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .print-page.is-lampiran {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
+

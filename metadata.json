@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Generator Surat Tugas Otomatis",
+  "description": "Aplikasi otomasi pembuatan Surat Tugas dinas dengan ekstraksi AI undangan, penomoran otomatis, manajemen kepegawaian, format kondisional <=3 dan >3 pegawai, serta implementasi Python lengkap.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
