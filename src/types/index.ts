@@ -27,6 +27,8 @@ export interface NomorSuratRecord {
   bulan: string;
   nomor_lengkap: string;
   tanggal_dibuat: string;
+  tanggal?: string;
+  tanggal_surat?: string;
   perihal: string;
   dibuat_oleh: string;
   tujuan_lokasi: string;

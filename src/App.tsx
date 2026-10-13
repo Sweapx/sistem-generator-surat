@@ -391,6 +391,8 @@ export function App() {
       tahun: nextNomorInfo.tahun,
       bulan: nextNomorInfo.bulan,
       nomor_lengkap: nextNomorInfo.nomor_lengkap,
+      tanggal: form.tanggal_surat,
+      tanggal_surat: form.tanggal_surat,
       tanggal_dibuat: new Date().toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'short',

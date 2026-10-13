@@ -45,9 +45,72 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('📌 Pusaka Surat Tugas')
+      .addItem('📅 Format Kolom Tanggal (Aktifkan Date Picker Kalender)', 'menuFormatKolomTanggal')
       .addItem('☁️ Otorisasi & Buat Folder Bulan Ini', 'menuUjiGoogleDrive')
       .addToUi();
   } catch (e) {}
+}
+
+function menuFormatKolomTanggal() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var count = fixExistingDatesInSheet();
+    ui.alert(
+      '✅ Format Tanggal Berhasil Diperbarui!',
+      'Sebanyak ' + count + ' baris tanggal telah diubah menjadi tipe Date resmi dan dipasangi validasi Date Picker.\n\n' +
+      'Sekarang seluruh sel tanggal di Kolom B dapat di-double-click untuk memunculkan kalender interaktif!',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('❌ Gagal Format Tanggal', err.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Memperbarui semua baris tanggal di spreadsheet agar menjadi tipe Date resmi
+ * dan memasang Data Validation Date (Date Picker) ke seluruh kolom B.
+ */
+function fixExistingDatesInSheet() {
+  var sheet = getTargetSheet();
+  var headerInfo = findHeaderMapping(sheet);
+  var headerRow = headerInfo.headerRow;
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= headerRow) return 0;
+
+  var numRows = lastRow - headerRow;
+  var tanggalCol = 2; // Kolom B
+  if (headerInfo.colMap['TANGGAL']) {
+    tanggalCol = headerInfo.colMap['TANGGAL'];
+  }
+
+  var range = sheet.getRange(headerRow + 1, tanggalCol, numRows, 1);
+  var values = range.getValues();
+  var updatedValues = [];
+  var modifiedCount = 0;
+
+  for (var i = 0; i < values.length; i++) {
+    var val = values[i][0];
+    if (val === '' || val === null || val === undefined) {
+      updatedValues.push([val]);
+      continue;
+    }
+    if (val instanceof Date) {
+      updatedValues.push([val]);
+    } else {
+      var d = parseDateValue(val);
+      updatedValues.push([d]);
+      modifiedCount++;
+    }
+  }
+
+  range.setValues(updatedValues);
+  range.setNumberFormat('d MMMM yyyy');
+
+  // Pasang Data Validation requireDate() agar double-click memunculkan kalender date picker
+  var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
+  range.setDataValidation(dateValidation);
+
+  return modifiedCount;
 }
 
 function menuUjiGoogleDrive() {
@@ -149,6 +212,10 @@ function handleAction(action, payload) {
 
       case 'getNomorSurat':
         return jsonResponse({ status: 'ok', result: getNomorSurat() });
+
+      case 'fixDates':
+      case 'formatTanggal':
+        return jsonResponse({ status: 'ok', result: { modified: fixExistingDatesInSheet() } });
 
       default:
         return jsonResponse({ status: 'error', message: 'Action tidak dikenal: ' + action });
@@ -434,26 +501,13 @@ function appendNomorSurat(record) {
     nomorUrut = lastInfo.next_nomor;
   }
 
-  // Format tanggal: misal "30 September 2026" atau sesuai input
-  var tanggalStr = record.tanggal || record.tanggal_surat || formatCurrentDateIndo();
+  // Parse tanggal menjadi objek Date nyata agar Google Sheets mengenali sebagai tipe Tanggal resmi
+  var dateVal = parseDateValue(record.tanggal || record.tanggal_surat || record.tanggal_dibuat);
+  var tanggalDisplayStr = formatTanggalIndoOutput(dateVal);
 
   // Tentukan tahun dan bulan untuk folder Google Drive
-  var now = new Date();
-  var year = record.tahun || now.getFullYear();
-  var monthIndex = now.getMonth(); // 0-11
-
-  if (record.tanggal_surat) {
-    var parsedD = new Date(record.tanggal_surat);
-    if (!isNaN(parsedD.getTime())) {
-      year = parsedD.getFullYear();
-      monthIndex = parsedD.getMonth();
-    }
-  } else if (record.bulan) {
-    var bNum = parseInt(record.bulan, 10);
-    if (!isNaN(bNum) && bNum >= 1 && bNum <= 12) {
-      monthIndex = bNum - 1;
-    }
-  }
+  var year = record.tahun || dateVal.getFullYear();
+  var monthIndex = dateVal.getMonth(); // 0-11
 
   var monthPad = (monthIndex + 1 < 10 ? '0' : '') + (monthIndex + 1);
   var defaultPdfFileName = record.pdf_filename || (
@@ -535,7 +589,7 @@ function appendNomorSurat(record) {
 
   var newRow = [
     nomorUrut,
-    tanggalStr,
+    dateVal,
     jenis,
     kepada,
     hal,
@@ -558,11 +612,21 @@ function appendNomorSurat(record) {
 
   sheet.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
 
+  // Pasang format dan validasi tanggal di Kolom B (index 2) agar Date Picker Kalender otomatis aktif
+  try {
+    var dateCell = sheet.getRange(targetRow, 2);
+    dateCell.setNumberFormat('d MMMM yyyy');
+    var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
+    dateCell.setDataValidation(dateValidation);
+  } catch (errDate) {
+    Logger.log('Gagal set validasi/format tanggal: ' + errDate.message);
+  }
+
   return {
     id: record.id || ('ns-' + Date.now()),
     nomor_urut: nomorUrut,
     nomor_lengkap: record.nomor_lengkap || (nomorUrut + '/SJ.9/KP.01.06/' + monthPad + '/' + year),
-    tanggal_dibuat: tanggalStr,
+    tanggal_dibuat: tanggalDisplayStr,
     perihal: hal,
     status: driveUploadInfo
       ? 'Tersimpan di Spreadsheet & File Terunggah di Google Drive'
@@ -616,7 +680,7 @@ function getNomorSurat() {
       id: 'ns-' + (noUrut || i + 1),
       nomor_urut: isNaN(noUrut) ? 0 : noUrut,
       nomor_lengkap: isNaN(noUrut) ? String(noVal) : (noUrut + '/SJ.9/KP.01.06/09/2026'),
-      tanggal_dibuat: String(row[1] || ''),
+      tanggal_dibuat: formatTanggalIndoOutput(row[1]),
       jenis: String(row[2] || ''),
       kepada: String(row[3] || ''),
       perihal: String(row[4] || ''),
@@ -633,6 +697,54 @@ function getNomorSurat() {
   }
 
   return records;
+}
+
+function parseDateValue(input) {
+  if (!input) return new Date();
+  if (input instanceof Date) return input;
+
+  if (typeof input === 'string') {
+    var trimmed = input.trim();
+    // 1. Format ISO YYYY-MM-DD
+    var isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+      return new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10));
+    }
+
+    // 2. Format Indonesia: "13 Oktober 2026" atau "30 September"
+    var bulanIndo = {
+      januari: 0, februari: 1, maret: 2, april: 3, mei: 4, juni: 5,
+      juli: 6, agustus: 7, september: 8, oktober: 9, november: 10, desember: 11,
+      jan: 0, feb: 1, mar: 2, apr: 3, mei: 4, jun: 5,
+      jul: 6, ags: 7, agu: 7, sep: 8, okt: 9, nov: 10, des: 11
+    };
+    var indoMatch = trimmed.match(/^(\d{1,2})\s+([a-zA-Z]+)(?:\s+(\d{4}))?/i);
+    if (indoMatch) {
+      var d = parseInt(indoMatch[1], 10);
+      var mStr = indoMatch[2].toLowerCase();
+      var y = indoMatch[3] ? parseInt(indoMatch[3], 10) : new Date().getFullYear();
+      if (bulanIndo[mStr] !== undefined) {
+        return new Date(y, bulanIndo[mStr], d);
+      }
+    }
+
+    // 3. Fallback standar
+    var parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function formatTanggalIndoOutput(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    var bulanIndo = [
+      'Januari','Februari','Maret','April','Mei','Juni',
+      'Juli','Agustus','September','Oktober','November','Desember'
+    ];
+    return val.getDate() + ' ' + bulanIndo[val.getMonth()] + ' ' + val.getFullYear();
+  }
+  return String(val);
 }
 
 function formatCurrentDateIndo() {

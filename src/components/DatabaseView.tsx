@@ -84,6 +84,22 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
     }
   };
 
+  const formatDisplayDate = (val?: string) => {
+    if (!val || val.trim() === '') return '-';
+    const trimmed = val.trim();
+    // Jika sudah rapi (misal: "13 Oktober 2026")
+    if (/^\d{1,2}\s+[a-zA-Z]+\s+\d{4}$/.test(trimmed)) return trimmed;
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const bulanIndo = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      return `${d.getDate()} ${bulanIndo[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    return trimmed;
+  };
+
   // ─── Filter States untuk Arsip Nomor Surat ─────────────────────────────────
   const [filterTahun, setFilterTahun] = useState<string>('Semua');
   const [filterJenis, setFilterJenis] = useState<string>('Semua');
@@ -602,7 +618,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                         {rec.nomor_urut || '-'}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap text-slate-700">
-                        {rec.tanggal_dibuat || '-'}
+                        {formatDisplayDate(rec.tanggal_dibuat || rec.tanggal)}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
