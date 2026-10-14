@@ -7,23 +7,25 @@
 
 ## 📌 DAFTAR ISI
 1. [Tentang Aplikasi](#1-tentang-aplikasi)
-2. [Alur Kerja Sistem (Workflow)](#2-alur-kerja-sistem-workflow)
-3. [Panduan Penggunaan Fitur Utama](#3-panduan-penggunaan-fitur-utama)
-   - 3.1 [Pembuatan Surat Tugas Baru](#31-pembuatan-surat-tugas-baru)
-   - 3.2 [Ekstraksi Undangan Otomatis Berbasis AI](#32-ekstraksi-undangan-otomatis-berbasis-ai)
-   - 3.3 [Pemilihan Personil & Pejabat Penandatangan](#33-pemilihan-personil--pejabat-penandatangan)
-   - 3.4 [Fitur Edit Langsung pada Lembar Pratinjau (ContentEditable)](#34-fitur-edit-langsung-pada-lembar-pratinjau)
-   - 3.5 [Unduh PDF Resmi & Cetak Dokumen](#35-unduh-pdf-resmi--cetak-dokumen)
-   - 3.6 [Penerbitan & Sinkronisasi ke Google Sheets + Google Drive](#36-penerbitan--sinkronisasi-ke-google-sheets--google-drive)
-4. [Fitur Edit Naskah Surat yang Sudah Diterbitkan](#4-fitur-edit-naskah-surat-yang-sudah-diterbitkan)
-5. [Pengelolaan Database & Buku Agenda Persuratan](#5-pengelolaan-database--buku-agenda-persuratan)
-   - 5.1 [Arsip Register Surat Tugas (Kolom A s.d. K)](#51-arsip-register-surat-tugas)
-   - 5.2 [Kelola Data Pegawai Pusaka](#52-kelola-data-pegawai-pusaka)
-   - 5.3 [Kelola Pejabat Penandatangan](#53-kelola-pejabat-penandatangan)
-6. [Integrasi & Pemeliharaan Google Apps Script](#6-integrasi--pemeliharaan-google-apps-script)
-   - 6.1 [Cara Update Script di Google Spreadsheet](#61-cara-update-script-di-google-spreadsheet)
-   - 6.2 [Fitur Menu Tambahan pada Google Sheets](#62-fitur-menu-tambahan-pada-google-sheets)
-7. [Pusat Bantuan & Troubleshooting](#7-pusat-bantuan--troubleshooting)
+2. [Sistem Autentikasi & Hak Akses Pengguna (Login)](#2-sistem-autentikasi--hak-akses-pengguna-login)
+3. [Alur Kerja Sistem (Workflow)](#3-alur-kerja-sistem-workflow)
+4. [Panduan Penggunaan Fitur Utama](#4-panduan-penggunaan-fitur-utama)
+   - 4.1 [Pembuatan Surat Tugas Baru](#41-pembuatan-surat-tugas-baru)
+   - 4.2 [Ekstraksi Undangan Otomatis Berbasis AI](#42-ekstraksi-undangan-otomatis-berbasis-ai)
+   - 4.3 [Pemilihan Personil & Pejabat Penandatangan](#43-pemilihan-personil--pejabat-penandatangan)
+   - 4.4 [Fitur Edit Langsung pada Lembar Pratinjau (ContentEditable)](#44-fitur-edit-langsung-pada-lembar-pratinjau)
+   - 4.5 [Unduh PDF Resmi & Cetak Dokumen](#45-unduh-pdf-resmi--cetak-dokumen)
+   - 4.6 [Penerbitan & Sinkronisasi ke Google Sheets + Google Drive](#46-penerbitan--sinkronisasi-ke-google-sheets--google-drive)
+5. [Fitur Edit Naskah Surat yang Sudah Diterbitkan](#5-fitur-edit-naskah-surat-yang-sudah-diterbitkan)
+6. [Pengelolaan Database & Buku Agenda Persuratan](#6-pengelolaan-database--buku-agenda-persuratan)
+   - 6.1 [Arsip Register Surat Tugas (Kolom A s.d. K)](#61-arsip-register-surat-tugas)
+   - 6.2 [Kelola Data Pegawai Pusaka](#62-kelola-data-pegawai-pusaka)
+   - 6.3 [Kelola Pejabat Penandatangan](#63-kelola-pejabat-penandatangan)
+   - 6.4 [Kelola Akun Pengguna (Khusus Admin TU)](#64-kelola-akun-pengguna-khusus-admin-tu)
+7. [Integrasi & Pemeliharaan Google Apps Script](#7-integrasi--pemeliharaan-google-apps-script)
+   - 7.1 [Cara Update Script di Google Spreadsheet](#71-cara-update-script-di-google-spreadsheet)
+   - 7.2 [Fitur Menu Tambahan pada Google Sheets](#72-fitur-menu-tambahan-pada-google-sheets)
+8. [Pusat Bantuan & Troubleshooting](#8-pusat-bantuan--troubleshooting)
 
 ---
 
@@ -32,6 +34,7 @@
 Aplikasi **Sistem Generator Surat Tugas & Penomoran Otomatis PUSAKA** dirancang khusus untuk mempermudah, mempercepat, dan menstandarkan tata kelola penerbitan Surat Tugas kedinasan di lingkungan Pusat Kebijakan Strategis, Kementerian Komunikasi dan Digital RI.
 
 ### Keunggulan Utama:
+* **Keamanan Gerbang Akses (Login Gatekeeper)**: Hanya pegawai terdaftar yang dapat mengakses sistem penerbitan surat tugas dan database kantor.
 * **Penomoran Otomatis Anti-Duplikasi**: Menghitung nomor urut resmi berikutnya secara *real-time* langsung dari Google Spreadsheet register kantor dengan format resmi:  
   `[Nomor Urut]/SJ.9/KP.01.06/[Bulan]/[Tahun]`.
 * **Ekstraksi Dokumen Undangan AI**: Menggunakan teknologi OCR canggih (Gemini AI) untuk membaca dokumen surat undangan (PDF/Gambar) dan otomatis mengisi formulir serta merumuskan klausul *Menimbang*, *Dasar*, dan *Untuk*.
@@ -41,7 +44,42 @@ Aplikasi **Sistem Generator Surat Tugas & Penomoran Otomatis PUSAKA** dirancang 
 
 ---
 
-## 2. Alur Kerja Sistem (Workflow)
+## 2. Sistem Autentikasi & Hak Akses Pengguna (Login)
+
+Untuk menjamin keamanan dan keteraturan administrasi naskah dinas, aplikasi dilengkapi dengan sistem login terintegrasi:
+
+```
+┌────────────────────────────────────────────────────────┐
+│               GERBANG LOGIN KOMDIGI RI                │
+│    Akses Terbatas: Pusat Kebijakan Strategis (PUSAKA)  │
+└───────────────────────────┬────────────────────────────┘
+                            │
+               ┌────────────┴────────────┐
+               ▼                         ▼
+   ┌───────────────────────┐ ┌───────────────────────┐
+   │    ROLE: ADMIN TU     │ │ ROLE: STAF KONSEPTOR  │
+   │  - Akses Generator    │ │  - Akses Generator    │
+   │  - Akses Buku Agenda  │ │  - Otomatis Konseptor │
+   │  - Kelola Pegawai/Pej │ │  - Lihat Buku Agenda  │
+   │  - 👥 KELOLA AKUN     │ └───────────────────────┘
+   └───────────────────────┘
+```
+
+### Akun Bawaan (Default Credentials):
+| Username | Password | Nama Akun | Peran (Role) | Hak Istimewa |
+| :--- | :--- | :--- | :--- | :--- |
+| `admin_tu` | `pusaka2026` | Administrator TU Pusaka | **Admin TU** | Akses penuh superuser + Tab Kelola Akun Pengguna |
+| `yuliano` | `pusaka2026` | Yuliano Christoper, S.Tr.Kom. | **Staf Konseptor** | Akses pembuatan surat tugas & pratinjau buku agenda |
+| `staf_pusaka` | `pusaka2026` | Staf Kebijakan Strategis | **Staf Konseptor** | Akses pembuatan surat tugas & pratinjau buku agenda |
+
+> **Catatan Keamanan:**
+> * Kata sandi dapat diperbarui kapan saja oleh Admin TU melalui menu **Buku Agenda & Database** → **Kelola Akun Pengguna**.
+> * Akun pengguna tersinkronisasi secara otomatis dengan lembar kerja Google Sheets tab **`Pengguna`**. Jika Google Sheets terhubung, data pengguna dibaca langsung dari cloud.
+> * Fitur **"Ingat Saya"**: Jika dicentang, sesi login akan tetap tersimpan di browser Anda sehingga Anda tidak perlu memasukkan username & password setiap kali membuka aplikasi.
+
+---
+
+## 3. Alur Kerja Sistem (Workflow)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -83,15 +121,15 @@ Aplikasi **Sistem Generator Surat Tugas & Penomoran Otomatis PUSAKA** dirancang 
 
 ---
 
-## 3. Panduan Penggunaan Fitur Utama
+## 4. Panduan Penggunaan Fitur Utama
 
-### 3.1 Pembuatan Surat Tugas Baru
+### 4.1 Pembuatan Surat Tugas Baru
 1. Buka aplikasi di browser (akses menu tab **Generator** pada bagian atas).
 2. Perhatikan bagian header Navbar: Nomor urut surat berikutnya akan ditampilkan otomatis (misal: `853/SJ.9/KP.01.06/10/2026`).
 
 ---
 
-### 3.2 Ekstraksi Undangan Otomatis Berbasis AI
+### 4.2 Ekstraksi Undangan Otomatis Berbasis AI
 Jika Anda memiliki dokumen surat undangan acara (format PDF, JPG, atau PNG):
 1. Pada **Kotak 1: Dasar Undangan & Acara**, klik tombol **"Pindai Undangan (AI)"** bertanda bintang ✨.
 2. Unggah file dokumen undangan (bisa dengan *drag-and-drop* atau klik untuk memilih file).
@@ -102,7 +140,7 @@ Jika Anda memiliki dokumen surat undangan acara (format PDF, JPG, atau PNG):
 
 ---
 
-### 3.3 Pemilihan Personil & Pejabat Penandatangan
+### 4.3 Pemilihan Personil & Pejabat Penandatangan
 1. **Waktu & Lokasi Kegiatan (Kotak 2)**: Pastikan rentang tanggal mulai s.d. selesai, jam pelaksanaan, dan kota tempat kegiatan sudah sesuai.
 2. **Personil yang Ditugaskan (Kotak 3)**:
    - Gunakan kolom pencarian cepat untuk mencari staf berdasarkan Nama atau NIP.
@@ -112,12 +150,12 @@ Jika Anda memiliki dokumen surat undangan acara (format PDF, JPG, atau PNG):
 3. **Penandatangan & Pejabat (Kotak 4)**:
    - Pilih nama Pejabat Penandatangan (otomatis membedakan status jabatan **Kapus** atau **Plh. Kapus**).
    - Opsi: Anda dapat mengunggah tanda tangan basah (scan PNG transparan) atau membiarkan sistem menggunakan penanda TTE BSrE resmi.
-   - Pilih staf **Konseptor** (staf TU yang menyusun surat).
+   - Pilih staf **Konseptor** (otomatis terisi nama akun yang login, atau dapat dipilih manual dari daftar).
    - Atur **Tanggal Surat Dibuat**.
 
 ---
 
-### 3.4 Fitur Edit Langsung pada Lembar Pratinjau
+### 4.4 Fitur Edit Langsung pada Lembar Pratinjau
 Selain melalui formulir kiri, Anda dapat **mengklik langsung** pada teks dokumen di layar pratinjau sebelah kanan:
 * Klik bagian teks narasi **Menimbang**, **Dasar**, **Untuk**, atau **Penutup**.
 * Ketikkan perubahan kata/kalimat secara leluasa layaknya mengetik di Microsoft Word.
@@ -125,7 +163,7 @@ Selain melalui formulir kiri, Anda dapat **mengklik langsung** pada teks dokumen
 
 ---
 
-### 3.5 Unduh PDF Resmi & Cetak Dokumen
+### 4.5 Unduh PDF Resmi & Cetak Dokumen
 Pada toolbar di atas lembar pratinjau surat:
 * **Tombol "Unduh PDF"**: Menghasilkan berkas PDF siap cetak dengan penamaan standar otomatis:  
   `Surat_Tugas_[Nomor]_[Bulan]_[Tahun].pdf`.
@@ -133,7 +171,7 @@ Pada toolbar di atas lembar pratinjau surat:
 
 ---
 
-### 3.6 Penerbitan & Sinkronisasi ke Google Sheets + Google Drive
+### 4.6 Penerbitan & Sinkronisasi ke Google Sheets + Google Drive
 Setelah naskah surat dipastikan benar:
 1. Klik tombol **"Terbitkan & Simpan"** (berwarna hijau).
 2. Sistem akan bekerja otomatis di latar belakang:
@@ -145,7 +183,7 @@ Setelah naskah surat dipastikan benar:
 
 ---
 
-## 4. Fitur Edit Naskah Surat yang Sudah Diterbitkan
+## 5. Fitur Edit Naskah Surat yang Sudah Diterbitkan
 
 Jika terdapat perubahan naskah pada surat tugas yang **sudah pernah dibuat dan dicatat di Spreadsheet** (misal ada penggantian personil, ralat tanggal kegiatan, atau perbaikan nomor surat undangan):
 
@@ -166,11 +204,11 @@ Jika terdapat perubahan naskah pada surat tugas yang **sudah pernah dibuat dan d
 
 ---
 
-## 5. Pengelolaan Database & Buku Agenda Persuratan
+## 6. Pengelolaan Database & Buku Agenda Persuratan
 
 Klik tab navigasi **Buku Agenda & Database** untuk mengakses seluruh basis data kantor:
 
-### 5.1 Arsip Register Surat Tugas
+### 6.1 Arsip Register Surat Tugas
 Tabel ini menampilkan data persuratan persis seperti susunan Google Spreadsheet kantor:
 * **Struktur Kolom**:
   * **Kolom A**: NOMOR (Nomor urut surat)
@@ -192,7 +230,7 @@ Tabel ini menampilkan data persuratan persis seperti susunan Google Spreadsheet 
 
 ---
 
-### 5.2 Kelola Data Pegawai Pusaka
+### 6.2 Kelola Data Pegawai Pusaka
 Pilih sub-tab **Data Pegawai Pusaka**:
 * **Tambah Pegawai Baru**: Klik tombol **"+ Tambah Pegawai"**, masukkan Nama, NIP, Pangkat/Golongan, Jabatan, dan Unit Kerja.
 * **Ubah Data**: Klik ikon pensil pada baris pegawai untuk memperbarui data pegawai.
@@ -201,18 +239,33 @@ Pilih sub-tab **Data Pegawai Pusaka**:
 
 ---
 
-### 5.3 Kelola Pejabat Penandatangan
+### 6.3 Kelola Pejabat Penandatangan
 Pilih sub-tab **Pejabat Penandatangan**:
 * Tambahkan pejabat definitif atau Pelaksana Harian (Plh).
 * Tentukan pejabat *Default* (pejabat yang otomatis terpilih saat aplikasi dibuka).
 
 ---
 
-## 6. Integrasi & Pemeliharaan Google Apps Script
+### 6.4 Kelola Akun Pengguna (Khusus Admin TU)
+Sub-tab **Kelola Akun Pengguna** hanya dapat diakses oleh akun dengan peran **Admin TU**:
+* **Tambah Akun Baru**: Klik tombol **"+ Tambah Akun Pengguna"**, masukkan:
+  * **Username**: Huruf kecil tanpa spasi (misal: `andi_pratama`).
+  * **Password**: Kata sandi akses (minimal 6 karakter).
+  * **Nama Lengkap & Gelar**: Nama yang akan otomatis menjadi nama konseptor saat membuat surat tugas.
+  * **NIP**: Nomor Induk Pegawai.
+  * **Peran (Role)**: Pilih `Staf Konseptor` atau `Admin TU`.
+  * **Status**: `Aktif` atau `Nonaktif`.
+* **Ubah Data / Reset Password**: Klik tombol pensil pada baris akun untuk memperbarui data atau mengganti password pegawai.
+* **Hapus Akun**: Klik ikon tempat sampah untuk mencabut akun pengguna (akun bawaan `admin_tu` dilindungi dari penghapusan).
+* **Sinkronisasi Otomatis**: Setiap penambahan/perubahan akun langsung tersimpan ke lembar kerja **`Pengguna`** di Google Sheets.
+
+---
+
+## 7. Integrasi & Pemeliharaan Google Apps Script
 
 Aplikasi terhubung dengan Google Sheets dan Google Drive menggunakan perantara skrip **Google Apps Script** yang tersimpan pada file `google-apps-script/Code.gs`.
 
-### 6.1 Cara Update Script di Google Spreadsheet
+### 7.1 Cara Update Script di Google Spreadsheet
 Setiap kali ada pembaruan kode pada file `Code.gs`:
 1. Buka file Google Spreadsheet database kantor Anda di browser.
 2. Di bilah menu atas Google Sheets, klik menu **Ekstensi** (*Extensions*) → pilih **Apps Script**.
@@ -227,15 +280,16 @@ Setiap kali ada pembaruan kode pada file `Code.gs`:
 
 ---
 
-### 6.2 Fitur Menu Tambahan pada Google Sheets
+### 7.2 Fitur Menu Tambahan pada Google Sheets
 Saat Google Spreadsheet kantor Anda dibuka dan di-refresh, akan muncul menu khusus di bilah toolbar atas:
 * **📌 Pusaka Surat Tugas**:
   * **☁️ Otorisasi & Buat Folder Bulan Ini**: Untuk melakukan otorisasi Google Drive pertama kali atau membuat folder arsip bulan baru secara manual.
   * **📅 Perbaiki Format Tanggal (d MMMM) & Link PDF**: Otomatis memindai seluruh baris tabel, membetulkan format tanggal menjadi bahasa Indonesia dengan kalender date-picker, serta memperbaiki jika ada sel formula PDF yang bertuliskan `#ERROR!`.
+  * **👥 Inisialisasi Database Pengguna (Login)**: Otomatis memeriksa dan membuatkan sheet tab `Pengguna` lengkap dengan format header dan akun bawaan (`admin_tu`, `yuliano`, `staf_pusaka`) jika belum tersedia.
 
 ---
 
-## 7. Pusat Bantuan & Troubleshooting
+## 8. Pusat Bantuan & Troubleshooting
 
 | Gejala / Kendala | Kemungkinan Penyebab | Solusi Penanganan |
 | :--- | :--- | :--- |

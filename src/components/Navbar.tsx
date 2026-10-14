@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   FileText,
   Database,
@@ -6,7 +5,11 @@ import {
   Hash,
   Wifi,
   WifiOff,
+  User as UserIcon,
+  LogOut,
+  Shield,
 } from 'lucide-react';
+import { User } from '../types';
 
 interface NavbarProps {
   activeTab: 'generator' | 'database';
@@ -14,6 +17,8 @@ interface NavbarProps {
   nextNomorLengkap: string;
   isSheetsConnected?: boolean;
   onOpenSheetsConfig?: () => void;
+  currentUser?: User | null;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,6 +27,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   nextNomorLengkap,
   isSheetsConnected = false,
   onOpenSheetsConfig,
+  currentUser,
+  onLogout,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
@@ -76,9 +83,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right: Next Number Indicator & Sheets Status */}
-          <div className="flex items-center space-x-3">
-            <div className="hidden lg:flex items-center space-x-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
+          {/* Right: Next Number Indicator, Sheets Status, & User Profile */}
+          <div className="flex items-center space-x-2.5">
+            <div className="hidden xl:flex items-center space-x-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
               <Hash className="w-3.5 h-3.5 text-teal-700" />
               <span>Nomor Berikutnya:</span>
               <span className="font-mono font-semibold text-slate-900">
@@ -94,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'Terhubung ke Google Sheets — Klik untuk konfigurasi'
                   : 'Belum terhubung ke Google Sheets — Klik untuk setup'
               }
-              className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-md border transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border transition-all cursor-pointer ${
                 isSheetsConnected
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
                   : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
@@ -105,8 +112,42 @@ export const Navbar: React.FC<NavbarProps> = ({
               ) : (
                 <WifiOff className="w-3.5 h-3.5" />
               )}
-              <span>{isSheetsConnected ? 'Sheets: Terhubung' : 'Sheets: Belum Setup'}</span>
+              <span className="hidden sm:inline">
+                {isSheetsConnected ? 'Sheets: Terhubung' : 'Sheets: Belum Setup'}
+              </span>
             </button>
+
+            {/* User Profile Badge & Logout */}
+            {currentUser && (
+              <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
+                <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 py-1 px-2.5 rounded-md text-xs">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] text-white ${
+                    currentUser.role === 'admin' ? 'bg-teal-700' : 'bg-blue-600'
+                  }`}>
+                    {currentUser.nama.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="hidden md:block text-left">
+                    <div className="font-semibold text-slate-800 text-[11px] leading-tight max-w-[130px] truncate" title={currentUser.nama}>
+                      {currentUser.nama}
+                    </div>
+                    <div className="text-[10px] text-slate-500 flex items-center space-x-1">
+                      <span>{currentUser.role === 'admin' ? 'Admin TU' : 'Staf'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    title="Keluar dari akun (Logout)"
+                    className="flex items-center space-x-1 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline text-[11px]">Keluar</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

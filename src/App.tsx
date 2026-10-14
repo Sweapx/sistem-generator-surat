@@ -22,13 +22,17 @@ import {
   NomorSuratRecord,
   EkstraksiUndangan,
   SuratTugasFormState,
+  AuthState,
+  User,
 } from './types';
 import {
   INITIAL_PEGAWAI,
   INITIAL_PEJABAT,
   INITIAL_NOMOR_SURAT,
+  INITIAL_USERS,
 } from './data/initialData';
 import { Navbar } from './components/Navbar';
+import { LoginView } from './components/LoginView';
 import { InvitationUploadModal } from './components/InvitationUploadModal';
 import { SuratPreview } from './components/SuratPreview';
 import { DatabaseView } from './components/DatabaseView';
@@ -41,6 +45,14 @@ import {
   appendNomorSuratToSheets,
   updateNomorSuratInSheets,
 } from './services/sheetsService';
+import {
+  getCurrentAuth,
+  clearAuthSession,
+  getStoredUsers,
+  fetchUsersList,
+  saveUserAccount,
+  deleteUserAccount,
+} from './services/authService';
 
 // ─── localStorage keys for data persistence ───────────────────────────────────
 const LS_PEGAWAI = 'pusaka_pegawai_v2';
@@ -66,6 +78,10 @@ function saveToStorage<T>(key: string, value: T): void {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'generator' | 'database'>('generator');
+
+  // ─── Authentication & User State ───────────────────────────────────────────
+  const [auth, setAuth] = useState<AuthState>(() => getCurrentAuth());
+  const [usersList, setUsersList] = useState<User[]>(() => getStoredUsers());
 
   // Master Data State
   const [pegawaiList, setPegawaiList] = useState<Pegawai[]>(() =>
@@ -98,10 +114,11 @@ export function App() {
     if (!isSheetsConfigured()) return;
     setIsSyncingSheets(true);
     try {
-      const [pegawai, pejabat, nomorSurat] = await Promise.all([
+      const [pegawai, pejabat, nomorSurat, users] = await Promise.all([
         fetchPegawaiFromSheets(),
         fetchPejabatFromSheets(),
         fetchNomorSuratFromSheets(),
+        fetchUsersList().catch(() => [] as User[]),
       ]);
       if (pegawai.length > 0) setPegawaiList(pegawai);
       if (pejabat.length > 0) setPejabatList(pejabat);
@@ -111,6 +128,9 @@ export function App() {
           id: `ns-${item.nomor_urut || idx}-${idx}`,
         }));
         setNomorSuratList(withUnique);
+      }
+      if (users && users.length > 0) {
+        setUsersList(users);
       }
       setIsSheetsConnected(true);
       setLastSyncMsg(`Tersinkronisasi (${nomorSurat.length} surat) ${new Date().toLocaleTimeString('id-ID')}`);
@@ -680,6 +700,97 @@ export function App() {
     setForm((prev) => ({ ...prev, selectedPejabatId: id }));
   };
 
+  // ─── Authentication & User Handlers ─────────────────────────────────────────
+  const refreshUsers = useCallback(async () => {
+    try {
+      const users = await fetchUsersList();
+      if (users && users.length > 0) {
+        setUsersList(users);
+      }
+    } catch (e) {
+      console.warn('Failed to load users:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      refreshUsers();
+    }
+  }, [auth.isAuthenticated, refreshUsers]);
+
+  // Otomatis isi nama konseptor dengan nama akun staf/admin yang sedang aktif
+  useEffect(() => {
+    if (auth.user?.nama && !form.konseptor && !editingRecord) {
+      setForm((prev) => ({
+        ...prev,
+        konseptor: auth.user!.nama,
+      }));
+    }
+  }, [auth.user, editingRecord]);
+
+  const handleLoginSuccess = (user: User) => {
+    setAuth({
+      isAuthenticated: true,
+      user,
+    });
+    if (user.nama && !form.konseptor) {
+      setForm((prev) => ({
+        ...prev,
+        konseptor: user.nama,
+      }));
+    }
+  };
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setAuth({
+      isAuthenticated: false,
+      user: null,
+    });
+  };
+
+  const handleAddUser = async (userData: Partial<User>) => {
+    const saved = await saveUserAccount(userData);
+    setUsersList((prev) => {
+      const exists = prev.some((u) => u.id === saved.id || u.username === saved.username);
+      if (exists) {
+        return prev.map((u) => (u.id === saved.id || u.username === saved.username ? saved : u));
+      }
+      return [...prev, saved];
+    });
+    alert(`Akun pengguna "${saved.username}" berhasil dibuat!`);
+  };
+
+  const handleUpdateUser = async (userData: Partial<User>) => {
+    const saved = await saveUserAccount(userData);
+    setUsersList((prev) =>
+      prev.map((u) => (u.id === saved.id ? saved : u))
+    );
+    if (auth.user?.id === saved.id) {
+      setAuth((prev) => ({
+        ...prev,
+        user: saved,
+      }));
+    }
+    alert(`Data akun pengguna "${saved.username}" berhasil diperbarui!`);
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    await deleteUserAccount(id);
+    setUsersList((prev) => prev.filter((u) => u.id !== id));
+    alert('Akun pengguna berhasil dihapus.');
+  };
+
+  // ─── Gatekeeper Login Screen ───────────────────────────────────────────────
+  if (!auth.isAuthenticated || !auth.user) {
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        isSheetsConnected={isSheetsConnected}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
       {/* Top Navbar */}
@@ -689,6 +800,8 @@ export function App() {
         nextNomorLengkap={nextNomorInfo.nomor_lengkap}
         isSheetsConnected={isSheetsConnected}
         onOpenSheetsConfig={() => setIsSheetsModalOpen(true)}
+        currentUser={auth.user}
+        onLogout={handleLogout}
       />
 
       {/* Sync Status Bar */}
@@ -1263,6 +1376,11 @@ export function App() {
                 prev.map((rec) => (rec.id === updated.id ? updated : rec))
               );
             }}
+            currentUser={auth.user}
+            usersList={usersList}
+            onAddUser={handleAddUser}
+            onUpdateUser={handleUpdateUser}
+            onDeleteUser={handleDeleteUser}
           />
         )}
       </main>

@@ -123,3 +123,24 @@ export interface SampleInvitation {
   rawText: string;
   mockExtraction: EkstraksiUndangan;
 }
+
+// ─── Authentication & User Management ───────────────────────────────
+export type UserRole = 'admin' | 'staff';
+
+export interface User {
+  id: string;
+  username: string;
+  password?: string;
+  nama: string;
+  nip?: string;
+  role: UserRole;
+  unit_kerja?: string;
+  status: 'Aktif' | 'Nonaktif';
+  created_at?: string;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  token?: string;
+}

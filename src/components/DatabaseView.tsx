@@ -22,7 +22,7 @@ import {
   Globe,
   FileDown,
 } from 'lucide-react';
-import { Pegawai, Pejabat, NomorSuratRecord, StatusPegawai } from '../types';
+import { Pegawai, Pejabat, NomorSuratRecord, StatusPegawai, User } from '../types';
 
 interface DatabaseViewProps {
   pegawaiList: Pegawai[];
@@ -38,6 +38,11 @@ interface DatabaseViewProps {
   onSetDefaultPejabat: (id: string) => void;
   onUpdateNomorSurat?: (record: NomorSuratRecord) => void;
   onEditSurat?: (record: NomorSuratRecord) => void;
+  currentUser?: User | null;
+  usersList?: User[];
+  onAddUser?: (user: Partial<User>) => void;
+  onUpdateUser?: (user: Partial<User>) => void;
+  onDeleteUser?: (id: string) => void;
 }
 
 export const DatabaseView: React.FC<DatabaseViewProps> = ({
@@ -54,8 +59,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   onSetDefaultPejabat,
   onUpdateNomorSurat,
   onEditSurat,
+  currentUser,
+  usersList = [],
+  onAddUser,
+  onUpdateUser,
+  onDeleteUser,
 }) => {
-  const [subTab, setSubTab] = useState<'nomor' | 'kepegawaian' | 'pejabat'>('nomor');
+  const [subTab, setSubTab] = useState<'nomor' | 'kepegawaian' | 'pejabat' | 'pengguna'>('nomor');
   const [searchQuery, setSearchQuery] = useState('');
 
   // ─── Modal Akses Berkas TTE PDF ───────────────────────────────────────────
@@ -145,6 +155,90 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
     sebagai: 'Kepala Pusat',
     is_default: false,
   });
+
+  // ─── Modal States CRUD Pengguna ───────────────────────────────────────────
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userForm, setUserForm] = useState<{
+    username: string;
+    password: string;
+    nama: string;
+    nip: string;
+    role: 'admin' | 'staff';
+    unit_kerja: string;
+    status: 'Aktif' | 'Nonaktif';
+  }>({
+    username: '',
+    password: '',
+    nama: '',
+    nip: '',
+    role: 'staff',
+    unit_kerja: 'Pusat Kebijakan Strategis',
+    status: 'Aktif',
+  });
+
+  const handleOpenAddUser = () => {
+    setUserForm({
+      username: '',
+      password: '',
+      nama: '',
+      nip: '',
+      role: 'staff',
+      unit_kerja: 'Pusat Kebijakan Strategis',
+      status: 'Aktif',
+    });
+    setEditingUser(null);
+    setIsAddUserOpen(true);
+  };
+
+  const handleOpenEditUser = (u: User) => {
+    setEditingUser(u);
+    setUserForm({
+      username: u.username,
+      password: u.password || '',
+      nama: u.nama,
+      nip: u.nip || '',
+      role: u.role,
+      unit_kerja: u.unit_kerja || 'Pusat Kebijakan Strategis',
+      status: u.status,
+    });
+    setIsAddUserOpen(false);
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingUser && onUpdateUser) {
+      onUpdateUser({
+        ...editingUser,
+        ...userForm,
+      });
+      setEditingUser(null);
+    } else if (onAddUser) {
+      onAddUser({
+        ...userForm,
+        id: `user-${Date.now()}`,
+      });
+      setIsAddUserOpen(false);
+    }
+  };
+
+  const handleDeleteUserConfirm = (id: string, username: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus akun pengguna "${username}"?`)) {
+      if (onDeleteUser) onDeleteUser(id);
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery) return usersList;
+    const q = searchQuery.toLowerCase();
+    return usersList.filter(
+      (u) =>
+        u.username.toLowerCase().includes(q) ||
+        u.nama.toLowerCase().includes(q) ||
+        (u.nip && u.nip.includes(q)) ||
+        (u.unit_kerja && u.unit_kerja.toLowerCase().includes(q))
+    );
+  }, [usersList, searchQuery]);
 
   // ─── Options Filter Unik dari Data ─────────────────────────────────────────
   const tahunOptions = useMemo(() => {
@@ -445,6 +539,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
               ({pejabatList.length})
             </span>
           </button>
+
+          {currentUser?.role === 'admin' && (
+            <button
+              onClick={() => setSubTab('pengguna')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                subTab === 'pengguna'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Kelola Akun Pengguna</span>
+              <span className="text-[11px] text-slate-500 font-mono font-semibold ml-1">
+                ({usersList.length})
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Global Search */}
@@ -455,6 +566,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
             placeholder={
               subTab === 'nomor'
                 ? 'Cari nomor, perihal, kepada, konseptor...'
+                : subTab === 'pengguna'
+                ? 'Cari nama, username, NIP...'
                 : 'Cari nama, NIP, jabatan...'
             }
             value={searchQuery}
@@ -959,6 +1072,111 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
+          4. SUBTAB: KELOLA AKUN PENGGUNA (HANYA ADMIN TU)
+      ══════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'pengguna' && currentUser?.role === 'admin' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-lg border border-slate-200">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>Daftar Akun Pengguna Sistem</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Kelola akun staf Tata Usaha dan konseptor yang berwenang mengakses aplikasi di Vercel.
+              </p>
+            </div>
+            <button
+              onClick={handleOpenAddUser}
+              className="flex items-center space-x-1.5 bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-1.5 rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Tambah Pengguna Baru</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10.5px]">
+                  <tr>
+                    <th className="py-2.5 px-3">USERNAME</th>
+                    <th className="py-2.5 px-3">NAMA LENGKAP</th>
+                    <th className="py-2.5 px-3">NIP</th>
+                    <th className="py-2.5 px-3">ROLE (PERAN)</th>
+                    <th className="py-2.5 px-3">UNIT KERJA</th>
+                    <th className="py-2.5 px-3">STATUS</th>
+                    <th className="py-2.5 px-3 text-center">AKSI</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-600">
+                  {filteredUsers.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 px-3 font-mono font-bold text-teal-900 whitespace-nowrap">
+                        @{u.username}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">{u.nama}</td>
+                      <td className="py-2.5 px-3 font-mono text-slate-700">{u.nip || '-'}</td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
+                            u.role === 'admin'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-blue-100 text-blue-800 border border-blue-200'
+                          }`}
+                        >
+                          {u.role === 'admin' ? 'Admin TU' : 'Staf Konseptor'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">{u.unit_kerja || 'Pusat Kebijakan Strategis'}</td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            u.status === 'Aktif'
+                              ? 'bg-teal-50 text-teal-800'
+                              : 'bg-rose-50 text-rose-800'
+                          }`}
+                        >
+                          {u.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            onClick={() => handleOpenEditUser(u)}
+                            className="p-1 text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded transition-colors cursor-pointer"
+                            title="Edit Akun & Password"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          {u.username !== 'admin_tu' && u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => handleDeleteUserConfirm(u.id, u.username)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Hapus Akun"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        Tidak ada data akun pengguna yang sesuai dengan pencarian.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
           MODAL TAMBAH / EDIT PEGAWAI
       ══════════════════════════════════════════════════════════════════════ */}
       {(isAddPegawaiOpen || editingPegawai) && (
@@ -1184,6 +1402,143 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                   className="px-4 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded font-semibold shadow-xs cursor-pointer"
                 >
                   {editingPejabat ? 'Simpan Perubahan' : 'Tambah Pejabat'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL TAMBAH / EDIT PENGGUNA
+      ══════════════════════════════════════════════════════════════════════ */}
+      {(isAddUserOpen || editingUser) && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingUser ? `Edit Akun: ${editingUser.username}` : 'Tambah Akun Pengguna Baru'}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddUserOpen(false);
+                  setEditingUser(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="p-5 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Username:</label>
+                  <input
+                    type="text"
+                    required
+                    disabled={editingUser?.username === 'admin_tu'}
+                    value={userForm.username}
+                    onChange={(e) => setUserForm({ ...userForm, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
+                    placeholder="misal: nama_user"
+                    className="w-full p-2 border border-slate-300 rounded font-mono focus:ring-1 focus:ring-teal-500 disabled:bg-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {editingUser ? 'Password Baru:' : 'Password:'}
+                  </label>
+                  <input
+                    type="text"
+                    required={!editingUser}
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    placeholder={editingUser ? 'Kosongkan jika tak diubah' : 'Password...'}
+                    className="w-full p-2 border border-slate-300 rounded font-mono focus:ring-1 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Nama Lengkap &amp; Gelar:</label>
+                <input
+                  type="text"
+                  required
+                  value={userForm.nama}
+                  onChange={(e) => setUserForm({ ...userForm, nama: e.target.value })}
+                  placeholder="Contoh: Yuliano Christoper, S.Tr.Kom."
+                  className="w-full p-2 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">NIP (Nomor Induk Pegawai):</label>
+                <input
+                  type="text"
+                  value={userForm.nip}
+                  onChange={(e) => setUserForm({ ...userForm, nip: e.target.value })}
+                  placeholder="Contoh: 19980101 202201 1 001"
+                  className="w-full p-2 border border-slate-300 rounded font-mono focus:ring-1 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Peran Akses:</label>
+                  <select
+                    value={userForm.role}
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as 'admin' | 'staff' })}
+                    disabled={editingUser?.username === 'admin_tu'}
+                    className="w-full p-2 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 disabled:bg-slate-100"
+                  >
+                    <option value="staff">Staf Konseptor</option>
+                    <option value="admin">Admin TU (Superuser)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status Akun:</label>
+                  <select
+                    value={userForm.status}
+                    onChange={(e) => setUserForm({ ...userForm, status: e.target.value as 'Aktif' | 'Nonaktif' })}
+                    disabled={editingUser?.username === 'admin_tu'}
+                    className="w-full p-2 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 disabled:bg-slate-100"
+                  >
+                    <option value="Aktif">Aktif</option>
+                    <option value="Nonaktif">Nonaktif</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Unit Kerja:</label>
+                <input
+                  type="text"
+                  value={userForm.unit_kerja}
+                  onChange={(e) => setUserForm({ ...userForm, unit_kerja: e.target.value })}
+                  placeholder="Pusat Kebijakan Strategis"
+                  className="w-full p-2 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddUserOpen(false);
+                    setEditingUser(null);
+                  }}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded font-semibold shadow-xs cursor-pointer"
+                >
+                  {editingUser ? 'Simpan Perubahan' : 'Buat Akun'}
                 </button>
               </div>
             </form>

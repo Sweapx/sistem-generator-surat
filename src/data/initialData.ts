@@ -569,3 +569,40 @@ Demikian kami sampaikan, atas perhatian dan kerja sama yang baik diucapkan terim
   }
 ];
 
+export const INITIAL_USERS = [
+  {
+    id: 'user-admin',
+    username: 'admin_tu',
+    password: 'pusaka2026',
+    nama: 'Admin Tata Usaha PUSAKA',
+    nip: '198204142008032002',
+    role: 'admin' as const,
+    unit_kerja: 'Bagian Tata Usaha PUSAKA',
+    status: 'Aktif' as const,
+    created_at: '2026-10-14',
+  },
+  {
+    id: 'user-yuliano',
+    username: 'yuliano',
+    password: 'pusaka2026',
+    nama: 'Yuliano Christoper',
+    nip: '199501012022011001',
+    role: 'admin' as const,
+    unit_kerja: 'Pusat Kebijakan Strategis',
+    status: 'Aktif' as const,
+    created_at: '2026-10-14',
+  },
+  {
+    id: 'user-staff',
+    username: 'staf_pusaka',
+    password: 'pusaka2026',
+    nama: 'Staf Konseptor PUSAKA',
+    nip: '199205122019031005',
+    role: 'staff' as const,
+    unit_kerja: 'Pusat Kebijakan Strategis',
+    status: 'Aktif' as const,
+    created_at: '2026-10-14',
+  },
+];
+
+

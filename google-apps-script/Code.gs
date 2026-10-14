@@ -35,6 +35,9 @@ var CONFIG = {
   // ID Folder Utama Google Drive untuk Arsip PDF Surat Tugas:
   // URL: https://drive.google.com/drive/folders/11qtu8wXAqElbXG2Zr47M7SydcpiLC0_H
   DRIVE_PARENT_FOLDER_ID: '11qtu8wXAqElbXG2Zr47M7SydcpiLC0_H',
+
+  // Nama sheet untuk akun pengguna (Login)
+  SHEET_PENGGUNA: 'Pengguna',
 };
 
 // ════════════════════════════════════════════
@@ -48,6 +51,7 @@ function onOpen() {
       .addItem('🔗 Perbaiki Sel Link PDF yang #ERROR!', 'menuPerbaikiLinkPdf')
       .addItem('📅 Format Kolom Tanggal (Aktifkan Date Picker Kalender)', 'menuFormatKolomTanggal')
       .addItem('☁️ Otorisasi & Buat Folder Bulan Ini', 'menuUjiGoogleDrive')
+      .addItem('👥 Inisialisasi Sheet Pengguna (Login Akun)', 'menuInisialisasiPengguna')
       .addToUi();
   } catch (e) {}
 }
@@ -330,6 +334,22 @@ function handleAction(action, payload) {
 
       case 'getNomorSurat':
         return jsonResponse({ status: 'ok', result: getNomorSurat() });
+
+      case 'login':
+        var u = (payload && payload.username) || '';
+        var p = (payload && payload.password) || '';
+        return jsonResponse({ status: 'ok', result: loginUser(u, p) });
+
+      case 'getUsers':
+        return jsonResponse({ status: 'ok', result: getUsers() });
+
+      case 'saveUser':
+        var userToSave = (payload && payload.user) ? payload.user : payload;
+        return jsonResponse({ status: 'ok', result: saveUser(userToSave) });
+
+      case 'deleteUser':
+        var idToDelete = (payload && payload.id) ? payload.id : payload;
+        return jsonResponse({ status: 'ok', result: deleteUser(idToDelete) });
 
       case 'fixDates':
       case 'formatTanggal':
@@ -1067,4 +1087,185 @@ function formatCurrentDateIndo() {
   ];
   var now = new Date();
   return now.getDate() + ' ' + bulanIndo[now.getMonth()];
+}
+
+// ════════════════════════════════════════════
+// 4. AUTENTIKASI & MANAJEMEN AKUN PENGGUNA
+// ════════════════════════════════════════════
+
+function menuInisialisasiPengguna() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var sheet = getOrCreateUsersSheet();
+    ui.alert(
+      '✅ Sheet Pengguna Siap!',
+      'Sheet "' + sheet.getName() + '" telah dibuat dan diisi dengan akun awal:\n\n' +
+      '• Admin TU: admin_tu (Sandi: pusaka2026)\n' +
+      '• Yuliano: yuliano (Sandi: pusaka2026)\n' +
+      '• Staf: staf_pusaka (Sandi: pusaka2026)\n\n' +
+      'Anda dapat menambah atau mengubah akun langsung di sheet tersebut.',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('Gagal inisialisasi sheet pengguna: ' + err.message);
+  }
+}
+
+function getOrCreateUsersSheet() {
+  var ss = getTargetSpreadsheet();
+  var sheetName = CONFIG.SHEET_PENGGUNA || 'Pengguna';
+  var sheet = ss.getSheetByName(sheetName);
+  
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    var headers = ['ID', 'USERNAME', 'PASSWORD', 'NAMA', 'NIP', 'ROLE', 'UNIT KERJA', 'STATUS'];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#0f766e').setFontColor('#ffffff');
+    
+    // Seed akun bawaan kantor
+    var initialUsers = [
+      ['user-admin', 'admin_tu', 'pusaka2026', 'Admin Tata Usaha PUSAKA', '198204142008032002', 'admin', 'Bagian Tata Usaha PUSAKA', 'Aktif'],
+      ['user-yuliano', 'yuliano', 'pusaka2026', 'Yuliano Christoper', '199501012022011001', 'admin', 'Pusat Kebijakan Strategis', 'Aktif'],
+      ['user-staff', 'staf_pusaka', 'pusaka2026', 'Staf Konseptor PUSAKA', '199205122019031005', 'staff', 'Pusat Kebijakan Strategis', 'Aktif']
+    ];
+    sheet.getRange(2, 1, initialUsers.length, headers.length).setValues(initialUsers);
+    try {
+      sheet.autoResizeColumns(1, headers.length);
+    } catch (eResize) {}
+  }
+  return sheet;
+}
+
+function loginUser(username, password) {
+  if (!username || !password) {
+    throw new Error('Username dan kata sandi wajib diisi.');
+  }
+
+  var sheet = getOrCreateUsersSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    throw new Error('Tidak ada data pengguna di sheet.');
+  }
+
+  var data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  var uClean = String(username).trim().toLowerCase();
+  var pClean = String(password).trim();
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var rowUser = String(row[1] || '').trim().toLowerCase();
+    var rowPass = String(row[2] || '').trim();
+    var rowStatus = String(row[7] || 'Aktif').trim();
+
+    if (rowUser === uClean && rowPass === pClean) {
+      if (rowStatus.toLowerCase() !== 'aktif') {
+        throw new Error('Akun Anda dinonaktifkan. Hubungi Admin Tata Usaha.');
+      }
+
+      return {
+        id: String(row[0] || ('user-' + (i + 1))),
+        username: String(row[1]),
+        nama: String(row[3] || row[1]),
+        nip: String(row[4] || ''),
+        role: String(row[5] || 'staff').toLowerCase(),
+        unit_kerja: String(row[6] || 'Pusat Kebijakan Strategis'),
+        status: rowStatus,
+        token: 'auth-' + Utilities.getUuid(),
+      };
+    }
+  }
+
+  throw new Error('Username atau kata sandi tidak sesuai.');
+}
+
+function getUsers() {
+  var sheet = getOrCreateUsersSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+
+  var data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  var users = [];
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    if (!row[1]) continue;
+    users.push({
+      id: String(row[0] || ('user-' + (i + 1))),
+      username: String(row[1]),
+      password: String(row[2] || ''),
+      nama: String(row[3] || row[1]),
+      nip: String(row[4] || ''),
+      role: String(row[5] || 'staff').toLowerCase(),
+      unit_kerja: String(row[6] || 'Pusat Kebijakan Strategis'),
+      status: String(row[7] || 'Aktif'),
+    });
+  }
+  return users;
+}
+
+function saveUser(userData) {
+  if (!userData || !userData.username) {
+    throw new Error('Username wajib diisi.');
+  }
+
+  var sheet = getOrCreateUsersSheet();
+  var lastRow = sheet.getLastRow();
+  var targetRow = -1;
+  var uClean = String(userData.username).trim().toLowerCase();
+  var userId = userData.id || ('user-' + Date.now());
+
+  if (lastRow > 1) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var rowId = String(data[i][0]);
+      var rowUser = String(data[i][1]).trim().toLowerCase();
+      if ((userData.id && rowId === userData.id) || rowUser === uClean) {
+        targetRow = i + 2;
+        userId = rowId || userId;
+        break;
+      }
+    }
+  }
+
+  var rowVals = [
+    userId,
+    String(userData.username).trim(),
+    String(userData.password || 'pusaka2026').trim(),
+    String(userData.nama || userData.username).trim(),
+    String(userData.nip || '').trim(),
+    String(userData.role || 'staff').toLowerCase(),
+    String(userData.unit_kerja || 'Pusat Kebijakan Strategis').trim(),
+    String(userData.status || 'Aktif').trim(),
+  ];
+
+  if (targetRow > 1) {
+    sheet.getRange(targetRow, 1, 1, rowVals.length).setValues([rowVals]);
+  } else {
+    sheet.appendRow(rowVals);
+  }
+
+  return {
+    id: userId,
+    username: rowVals[1],
+    nama: rowVals[3],
+    nip: rowVals[4],
+    role: rowVals[5],
+    unit_kerja: rowVals[6],
+    status: rowVals[7],
+  };
+}
+
+function deleteUser(userId) {
+  if (!userId) throw new Error('ID pengguna wajib diisi.');
+  var sheet = getOrCreateUsersSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { success: false };
+
+  var data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]) === String(userId)) {
+      sheet.deleteRow(i + 2);
+      return { success: true, deletedId: userId };
+    }
+  }
+  return { success: false, message: 'Pengguna tidak ditemukan' };
 }
