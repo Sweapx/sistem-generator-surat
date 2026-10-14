@@ -48,6 +48,9 @@ export interface NomorSuratRecord {
   drive_folder?: string;
   pdf_base64?: string;
   pdf_filename?: string;
+  form_state?: SuratTugasFormState;
+  pegawai_ids?: string[];
+  pejabat_id?: string;
 }
 
 export interface EkstraksiUndangan {

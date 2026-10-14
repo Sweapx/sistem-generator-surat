@@ -37,6 +37,7 @@ interface DatabaseViewProps {
   onDeletePejabat: (id: string) => void;
   onSetDefaultPejabat: (id: string) => void;
   onUpdateNomorSurat?: (record: NomorSuratRecord) => void;
+  onEditSurat?: (record: NomorSuratRecord) => void;
 }
 
 export const DatabaseView: React.FC<DatabaseViewProps> = ({
@@ -52,6 +53,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   onDeletePejabat,
   onSetDefaultPejabat,
   onUpdateNomorSurat,
+  onEditSurat,
 }) => {
   const [subTab, setSubTab] = useState<'nomor' | 'kepegawaian' | 'pejabat'>('nomor');
   const [searchQuery, setSearchQuery] = useState('');
@@ -613,6 +615,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                     <th className="py-2.5 px-3 whitespace-nowrap">TOPIK TIM</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">KONSEPTOR</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">STATUS SURAT</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap text-center">AKSI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-600">
@@ -677,11 +680,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                           )}
                         </div>
                       </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap text-center">
+                        {onEditSurat && (
+                          <button
+                            onClick={() => onEditSurat(rec)}
+                            className="inline-flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-md transition-colors cursor-pointer shadow-xs"
+                            title="Edit dokumen surat tugas ini di Generator"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {paginatedNomor.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                      <td colSpan={10} className="py-8 text-center text-slate-400">
                         Tidak ada data surat yang sesuai dengan filter atau kata kunci pencarian.
                       </td>
                     </tr>

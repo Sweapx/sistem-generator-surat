@@ -137,6 +137,8 @@ interface SuratPreviewProps {
   onSaveToDatabase: () => void;
   isSaved: boolean;
   onUpdateForm?: (updated: Partial<SuratTugasFormState>) => void;
+  isEditMode?: boolean;
+  onCancelEdit?: () => void;
 }
 
 /**
@@ -154,6 +156,8 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
   onSaveToDatabase,
   isSaved,
   onUpdateForm,
+  isEditMode = false,
+  onCancelEdit,
 }) => {
   const count = selectedPegawai.length;
   const isLampiran = count > 3;
@@ -296,6 +300,16 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {isEditMode && onCancelEdit && (
+            <button
+              onClick={onCancelEdit}
+              className="flex items-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors cursor-pointer"
+              title="Batalkan pengeditan dan kembali ke formulir surat baru"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Batal Edit</span>
+            </button>
+          )}
           <button
             onClick={() => window.print()}
             className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-3 py-1.5 rounded-md transition-colors cursor-pointer"
@@ -319,14 +333,44 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             className={`flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer ${
               isSaved
                 ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                : isEditMode
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
                 : 'bg-emerald-700 hover:bg-emerald-800 text-white'
             }`}
           >
             <FileCheck className="w-3.5 h-3.5" />
-            <span>{isSaved ? 'Tersimpan di Sheets' : 'Terbitkan & Simpan'}</span>
+            <span>
+              {isSaved
+                ? isEditMode
+                  ? 'Perubahan Tersimpan'
+                  : 'Tersimpan di Sheets'
+                : isEditMode
+                ? 'Perbarui Surat'
+                : 'Terbitkan & Simpan'}
+            </span>
           </button>
         </div>
       </div>
+
+      {/* Banner Mode Edit Dokumen */}
+      {isEditMode && (
+        <div className="action-bar-print-hide flex items-center justify-between bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2 rounded-lg text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-amber-800 uppercase tracking-wide">✏️ Mode Edit:</span>
+            <span>
+              Anda sedang mengedit naskah <strong>{form.nomor_lengkap}</strong>. Nomor urut surat tetap dipertahankan.
+            </span>
+          </div>
+          {onCancelEdit && (
+            <button
+              onClick={onCancelEdit}
+              className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline ml-2 cursor-pointer"
+            >
+              Kembali ke Surat Baru
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Petunjuk Edit Langsung */}
       <div className="action-bar-print-hide flex items-center space-x-1.5 text-[11px] text-teal-800 bg-teal-50/80 px-3 py-1.5 rounded border border-teal-200">

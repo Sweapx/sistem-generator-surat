@@ -39,6 +39,7 @@ import {
   fetchPegawaiFromSheets,
   fetchPejabatFromSheets,
   appendNomorSuratToSheets,
+  updateNomorSuratInSheets,
 } from './services/sheetsService';
 
 // ─── localStorage keys for data persistence ───────────────────────────────────
@@ -189,8 +190,12 @@ export function App() {
     ttd_image: undefined,
   });
 
-  // Always keep form synchronized with nextNomorInfo
+  // Edit record state
+  const [editingRecord, setEditingRecord] = useState<NomorSuratRecord | null>(null);
+
+  // Always keep form synchronized with nextNomorInfo (kecuali sedang dalam mode edit surat)
   useEffect(() => {
+    if (editingRecord) return;
     setForm((prev) => ({
       ...prev,
       nomor_urut: nextNomorInfo.nomor_urut,
@@ -198,7 +203,7 @@ export function App() {
       bulan: nextNomorInfo.bulan,
       nomor_lengkap: nextNomorInfo.nomor_lengkap,
     }));
-  }, [nextNomorInfo]);
+  }, [nextNomorInfo, editingRecord]);
 
   // ─── Modal & UI States ───────────────────────────────────────────────────────
   const [isExtractionModalOpen, setIsExtractionModalOpen] = useState(false);
@@ -326,6 +331,88 @@ export function App() {
     }
   };
 
+  // ─── Edit Surat Handlers ───────────────────────────────────────────────────
+  const handleEditSurat = (rec: NomorSuratRecord) => {
+    setEditingRecord(rec);
+    setIsSavedToDB(false);
+    setLastSavedDriveUrl(rec.drive_url || null);
+
+    if (rec.form_state) {
+      setForm(rec.form_state);
+    } else {
+      let matchedPegawaiIds: string[] = rec.pegawai_ids || [];
+      if (matchedPegawaiIds.length === 0 && rec.kepada && rec.kepada !== 'Daftar Terlampir') {
+        const names = rec.kepada.split(',').map((s) => s.trim().toLowerCase());
+        matchedPegawaiIds = pegawaiList
+          .filter((p) => names.some((n) => p.nama.toLowerCase().includes(n) || n.includes(p.nama.toLowerCase())))
+          .map((p) => p.id);
+      }
+
+      let matchedPejabatId = rec.pejabat_id || defaultPejabat.id;
+      if (!rec.pejabat_id && rec.penandatangan_nama) {
+        const pej = pejabatList.find((p) =>
+          p.nama.toLowerCase().includes(rec.penandatangan_nama!.toLowerCase())
+        );
+        if (pej) matchedPejabatId = pej.id;
+      }
+
+      let tanggalSurat = rec.tanggal || rec.tanggal_surat || new Date().toISOString().split('T')[0];
+      if (tanggalSurat && !/^\d{4}-\d{2}-\d{2}$/.test(tanggalSurat)) {
+        const d = new Date(tanggalSurat);
+        if (!isNaN(d.getTime())) {
+          tanggalSurat = d.toISOString().split('T')[0];
+        }
+      }
+
+      setForm({
+        nomor_urut: rec.nomor_urut,
+        tahun: rec.tahun || simulatedYear,
+        bulan: rec.bulan || simulatedMonth,
+        nomor_lengkap: rec.nomor_lengkap || `${rec.nomor_urut}/SJ.9/KP.01.06/${simulatedMonth}/${simulatedYear}`,
+        tanggal_surat: tanggalSurat,
+        kota_surat: 'Jakarta',
+
+        nama_acara: rec.perihal || '',
+        nomor_surat_undangan: '',
+        tanggal_surat_undangan: '',
+        instansi_pengundang: '',
+        perihal_undangan: rec.perihal || '',
+
+        tanggal_mulai: '',
+        tanggal_selesai: '',
+        waktu_kegiatan: '',
+        hari_tanggal_pelaksanaan: '',
+        lokasi_kegiatan: rec.tujuan_lokasi || '',
+        kota_kegiatan: '',
+        tujuan_tugas: '',
+        pembebanan_anggaran:
+          'DIPA Sekretariat Jenderal Kementerian Komunikasi dan Digital Tahun Anggaran 2026',
+
+        selectedPegawaiIds: matchedPegawaiIds,
+        selectedPejabatId: matchedPejabatId,
+        kriteria_peserta: '',
+        konseptor: rec.konseptor || '',
+        ttd_image: undefined,
+      });
+    }
+
+    setActiveTab('generator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRecord(null);
+    setIsSavedToDB(false);
+    setLastSavedDriveUrl(null);
+    setForm((prev) => ({
+      ...prev,
+      nomor_urut: nextNomorInfo.nomor_urut,
+      tahun: nextNomorInfo.tahun,
+      bulan: nextNomorInfo.bulan,
+      nomor_lengkap: nextNomorInfo.nomor_lengkap,
+    }));
+  };
+
   /**
    * Simpan ke database lokal DAN ke Google Sheets kantor.
    */
@@ -335,7 +422,10 @@ export function App() {
       return;
     }
 
-    const cleanNomor = (form.nomor_lengkap || 'Surat_Tugas').replace(/[\/\\:\*\?"<>\|]/g, '_');
+    const currentNomorLengkap = editingRecord
+      ? (editingRecord.nomor_lengkap || form.nomor_lengkap)
+      : (form.nomor_lengkap || nextNomorInfo.nomor_lengkap);
+    const cleanNomor = currentNomorLengkap.replace(/[\/\\:\*\?"<>\|]/g, '_');
     const pdfFileName = `Surat_Tugas_${cleanNomor}.pdf`;
 
     setIsSavingToSheets(true);
@@ -385,86 +475,154 @@ export function App() {
       }
     }
 
-    const newRecord: NomorSuratRecord = {
-      id: `ns-${Date.now()}`,
-      nomor_urut: nextNomorInfo.nomor_urut,
-      tahun: nextNomorInfo.tahun,
-      bulan: nextNomorInfo.bulan,
-      nomor_lengkap: nextNomorInfo.nomor_lengkap,
-      tanggal: form.tanggal_surat,
-      tanggal_surat: form.tanggal_surat,
-      tanggal_dibuat: new Date().toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      }),
-      perihal: form.nama_acara,
-      dibuat_oleh: 'Tata Usaha PUSAKA',
-      tujuan_lokasi: `${form.lokasi_kegiatan}, ${form.kota_kegiatan}`,
-      jumlah_pegawai: selectedPegawaiList.length,
-      penandatangan_nama: selectedPejabatObj.nama,
-      dasar_surat: `Surat Undangan ${form.instansi_pengundang} No. ${form.nomor_surat_undangan}`,
-      jenis: 'ST',
-      kepada:
-        selectedPegawaiList.length > 3
-          ? 'Daftar Terlampir'
-          : selectedPegawaiList.map((p) => p.nama).join(', '),
-      status_ttd: selectedPejabatObj.is_default ? 'Kapus' : 'Plh. Kapus',
-      topik_tim: 'TU',
-      konseptor: form.konseptor || 'TU Pusaka',
-      status_surat: 'OK',
-      link_word: '-',
-      link_pdf: pdfFileName,
-      pdf_base64: pdfBase64,
-      pdf_filename: pdfFileName,
-    };
+    if (editingRecord) {
+      // ── MODE EDIT: Perbarui record yang ada tanpa membuat nomor baru ──
+      const updatedRecord: NomorSuratRecord = {
+        ...editingRecord,
+        tanggal: form.tanggal_surat,
+        tanggal_surat: form.tanggal_surat,
+        perihal: form.nama_acara,
+        tujuan_lokasi: `${form.lokasi_kegiatan}, ${form.kota_kegiatan}`,
+        jumlah_pegawai: selectedPegawaiList.length,
+        penandatangan_nama: selectedPejabatObj.nama,
+        dasar_surat: `Surat Undangan ${form.instansi_pengundang} No. ${form.nomor_surat_undangan}`,
+        jenis: 'ST',
+        kepada:
+          selectedPegawaiList.length > 3
+            ? 'Daftar Terlampir'
+            : selectedPegawaiList.map((p) => p.nama).join(', '),
+        status_ttd: selectedPejabatObj.is_default ? 'Kapus' : 'Plh. Kapus',
+        konseptor: form.konseptor || editingRecord.konseptor || 'TU Pusaka',
+        link_pdf: pdfFileName,
+        pdf_base64: pdfBase64,
+        pdf_filename: pdfFileName,
+        form_state: { ...form },
+        pegawai_ids: form.selectedPegawaiIds,
+        pejabat_id: form.selectedPejabatId,
+      };
 
-    setNomorSuratList((prev) => [...prev, newRecord]);
-    setIsSavedToDB(true);
+      setNomorSuratList((prev) =>
+        prev.map((r) => (r.id === editingRecord.id ? updatedRecord : r))
+      );
+      setIsSavedToDB(true);
 
-    if (isSheetsConnected) {
-      try {
-        setLastSyncMsg('Mengunggah ke Google Drive & mencatat ke Spreadsheet...');
-        const savedResult = await appendNomorSuratToSheets(newRecord);
-        if (savedResult && (savedResult as any).drive_error) {
-          setLastSyncMsg(`⚠️ Tercatat di Sheets, namun Google Drive kendala: ${(savedResult as any).drive_error}`);
-          alert(
-            `⚠️ Nomor surat ${newRecord.nomor_lengkap} berhasil dicatat di Spreadsheet!\n\n` +
-            `Namun arsip Google Drive belum berhasil dibuat karena kendala izin:\n` +
-            `"${(savedResult as any).drive_error}"\n\n` +
-            `Solusi Cepat:\n` +
-            `1. Buka Google Spreadsheet kantor Anda di browser\n` +
-            `2. Refresh halaman, lalu klik menu baru di toolbar atas: "📌 Pusaka Surat Tugas" -> "☁️ Otorisasi & Buat Folder Bulan Ini"\n` +
-            `3. Klik Izinkan (Allow) saat Google meminta konfirmasi.`
-          );
-        } else if (savedResult && savedResult.drive_url) {
-          setLastSavedDriveUrl(savedResult.drive_url);
-          setLastSyncMsg(
-            `✓ Surat ${newRecord.nomor_lengkap} berhasil diunggah ke Google Drive (${savedResult.drive_folder || 'Folder Bulan'}) & dicatat di Sheets`
-          );
-          setNomorSuratList((prev) =>
-            prev.map((rec) =>
-              rec.id === newRecord.id
-                ? {
-                    ...rec,
-                    drive_url: savedResult.drive_url,
-                    drive_folder: savedResult.drive_folder,
-                  }
-                : rec
-            )
-          );
-        } else {
-          setLastSyncMsg(`Nomor surat ${newRecord.nomor_lengkap} tersinkronisasi ke Sheets ✓`);
+      if (isSheetsConnected) {
+        try {
+          setLastSyncMsg('Memperbarui perubahan surat di Google Sheets & Drive...');
+          const result = await updateNomorSuratInSheets(updatedRecord);
+          if (result && result.drive_url) {
+            setLastSavedDriveUrl(result.drive_url);
+            setLastSyncMsg(`✓ Surat ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet & Drive`);
+            setNomorSuratList((prev) =>
+              prev.map((rec) =>
+                rec.id === updatedRecord.id
+                  ? {
+                      ...rec,
+                      drive_url: result.drive_url,
+                      drive_folder: result.drive_folder,
+                    }
+                  : rec
+              )
+            );
+          } else {
+            setLastSyncMsg(`✓ Surat ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet`);
+          }
+        } catch (err) {
+          console.warn('Gagal update ke Sheets:', err);
+          setLastSyncMsg('Tersimpan lokal — gagal memperbarui ke Google Sheets');
+        } finally {
+          setIsSavingToSheets(false);
         }
-      } catch (err) {
-        console.warn('Failed to sync to Sheets & Drive:', err);
-        setLastSyncMsg('Tersimpan lokal — gagal sinkronisasi ke Sheets/Drive');
-      } finally {
+      } else {
         setIsSavingToSheets(false);
+        setLastSyncMsg('Perubahan surat tersimpan di database lokal');
       }
     } else {
-      setIsSavingToSheets(false);
-      setLastSyncMsg('Tersimpan di database lokal browser');
+      // ── MODE BUAT BARU ──
+      const newRecord: NomorSuratRecord = {
+        id: `ns-${Date.now()}`,
+        nomor_urut: nextNomorInfo.nomor_urut,
+        tahun: nextNomorInfo.tahun,
+        bulan: nextNomorInfo.bulan,
+        nomor_lengkap: nextNomorInfo.nomor_lengkap,
+        tanggal: form.tanggal_surat,
+        tanggal_surat: form.tanggal_surat,
+        tanggal_dibuat: new Date().toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }),
+        perihal: form.nama_acara,
+        dibuat_oleh: 'Tata Usaha PUSAKA',
+        tujuan_lokasi: `${form.lokasi_kegiatan}, ${form.kota_kegiatan}`,
+        jumlah_pegawai: selectedPegawaiList.length,
+        penandatangan_nama: selectedPejabatObj.nama,
+        dasar_surat: `Surat Undangan ${form.instansi_pengundang} No. ${form.nomor_surat_undangan}`,
+        jenis: 'ST',
+        kepada:
+          selectedPegawaiList.length > 3
+            ? 'Daftar Terlampir'
+            : selectedPegawaiList.map((p) => p.nama).join(', '),
+        status_ttd: selectedPejabatObj.is_default ? 'Kapus' : 'Plh. Kapus',
+        topik_tim: 'TU',
+        konseptor: form.konseptor || 'TU Pusaka',
+        status_surat: 'OK',
+        link_word: '-',
+        link_pdf: pdfFileName,
+        pdf_base64: pdfBase64,
+        pdf_filename: pdfFileName,
+        form_state: { ...form },
+        pegawai_ids: form.selectedPegawaiIds,
+        pejabat_id: form.selectedPejabatId,
+      };
+
+      setNomorSuratList((prev) => [...prev, newRecord]);
+      setIsSavedToDB(true);
+
+      if (isSheetsConnected) {
+        try {
+          setLastSyncMsg('Mengunggah ke Google Drive & mencatat ke Spreadsheet...');
+          const savedResult = await appendNomorSuratToSheets(newRecord);
+          if (savedResult && (savedResult as any).drive_error) {
+            setLastSyncMsg(`⚠️ Tercatat di Sheets, namun Google Drive kendala: ${(savedResult as any).drive_error}`);
+            alert(
+              `⚠️ Nomor surat ${newRecord.nomor_lengkap} berhasil dicatat di Spreadsheet!\n\n` +
+              `Namun arsip Google Drive belum berhasil dibuat karena kendala izin:\n` +
+              `"${(savedResult as any).drive_error}"\n\n` +
+              `Solusi Cepat:\n` +
+              `1. Buka Google Spreadsheet kantor Anda di browser\n` +
+              `2. Refresh halaman, lalu klik menu baru di toolbar atas: "📌 Pusaka Surat Tugas" -> "☁️ Otorisasi & Buat Folder Bulan Ini"\n` +
+              `3. Klik Izinkan (Allow) saat Google meminta konfirmasi.`
+            );
+          } else if (savedResult && savedResult.drive_url) {
+            setLastSavedDriveUrl(savedResult.drive_url);
+            setLastSyncMsg(
+              `✓ Surat ${newRecord.nomor_lengkap} berhasil diunggah ke Google Drive (${savedResult.drive_folder || 'Folder Bulan'}) & dicatat di Sheets`
+            );
+            setNomorSuratList((prev) =>
+              prev.map((rec) =>
+                rec.id === newRecord.id
+                  ? {
+                      ...rec,
+                      drive_url: savedResult.drive_url,
+                      drive_folder: savedResult.drive_folder,
+                    }
+                  : rec
+              )
+            );
+          } else {
+            setLastSyncMsg(`Nomor surat ${newRecord.nomor_lengkap} tersinkronisasi ke Sheets ✓`);
+          }
+        } catch (err) {
+          console.warn('Failed to sync to Sheets & Drive:', err);
+          setLastSyncMsg('Tersimpan lokal — gagal sinkronisasi ke Sheets/Drive');
+        } finally {
+          setIsSavingToSheets(false);
+        }
+      } else {
+        setIsSavingToSheets(false);
+        setLastSyncMsg('Tersimpan di database lokal browser');
+      }
     }
   };
 
@@ -575,6 +733,27 @@ export function App() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:block print:w-full print:gap-0">
             {/* Left Column: Form & Selection (5 cols) */}
             <div className="lg:col-span-5 space-y-4 no-print print:hidden">
+              {/* Banner Mode Edit di Kolom Form */}
+              {editingRecord && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+                  <div>
+                    <div className="font-bold flex items-center space-x-1.5 text-amber-900">
+                      <Edit3 className="w-4 h-4 text-amber-700" />
+                      <span>Mode Edit Surat Tugas #{editingRecord.nomor_urut}</span>
+                    </div>
+                    <div className="text-[11px] text-amber-800 mt-0.5">
+                      {editingRecord.nomor_lengkap} • Nomor urut tetap dipertahankan
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+                  >
+                    Batal Edit
+                  </button>
+                </div>
+              )}
+
               {/* Card 1: AI Undangan & Dasar Acara */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4.5 space-y-3.5">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -1053,6 +1232,8 @@ export function App() {
                 isGeneratingPdf={isGeneratingPdf}
                 onSaveToDatabase={handleSaveToDatabase}
                 isSaved={isSavedToDB}
+                isEditMode={!!editingRecord}
+                onCancelEdit={handleCancelEdit}
                 onUpdateForm={(updated) => {
                   setForm((prev) => ({ ...prev, ...updated }));
                   setIsSavedToDB(false);
@@ -1076,6 +1257,7 @@ export function App() {
             onUpdatePejabat={handleUpdatePejabat}
             onDeletePejabat={handleDeletePejabat}
             onSetDefaultPejabat={handleSetDefaultPejabat}
+            onEditSurat={handleEditSurat}
             onUpdateNomorSurat={(updated) => {
               setNomorSuratList((prev) =>
                 prev.map((rec) => (rec.id === updated.id ? updated : rec))

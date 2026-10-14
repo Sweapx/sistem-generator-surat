@@ -123,6 +123,16 @@ export async function appendNomorSuratToSheets(
 }
 
 /**
+ * Update record nomor surat yang sudah ada di Google Sheets & Google Drive.
+ * Dipanggil saat user mengedit surat tugas yang sudah ada.
+ */
+export async function updateNomorSuratInSheets(
+  record: NomorSuratRecord
+): Promise<NomorSuratRecord> {
+  return callAppsScript<NomorSuratRecord>('updateNomorSurat', { record });
+}
+
+/**
  * Ambil nomor urut terakhir dari Sheets (untuk generate nomor berikutnya).
  * Lebih ringan daripada fetch seluruh list.
  */

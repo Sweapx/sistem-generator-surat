@@ -154,65 +154,68 @@ function fixExistingDatesInSheet() {
   var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
   range.setDataValidation(dateValidation);
 
-  // ── Perbaiki juga sel #ERROR! pada Kolom K (Link Berkas TTE Pdf) ──
+  // ── Perbaiki juga sel #ERROR! pada Kolom J (Kolom 10) & Kolom K (Kolom 11) ──
   var fixedPdfLinks = 0;
   try {
-    var pdfRange = sheet.getRange(headerRow + 1, 11, numRows, 1);
-    var pdfValues = pdfRange.getValues();
-    var pdfFormulas = pdfRange.getFormulas();
-    for (var k = 0; k < pdfValues.length; k++) {
-      var rowIdx = headerRow + 1 + k;
-      var cellVal = String(pdfValues[k][0] || '');
-      var cellFormula = String(pdfFormulas[k][0] || '');
-      if (cellVal === '#ERROR!' || cellVal.indexOf('ERROR') !== -1 || cellFormula.indexOf('ERROR') !== -1) {
-        var noVal = sheet.getRange(rowIdx, 1).getValue();
-        var defaultFileName = 'Surat_Tugas_' + noVal + '_SJ.9_KP.01.06_10_2026.pdf';
-        
-        // Ekstrak URL dari formula jika ada
-        var matchUrl = cellFormula.match(/https:\/\/[^\s"',;)]+/);
-        if (matchUrl && matchUrl[0]) {
-          var targetUrl = matchUrl[0];
-          var mFileName = cellFormula.match(/[",;]\s*"([^"]+\.pdf)"/i);
-          var actualFileName = (mFileName && mFileName[1]) ? mFileName[1] : defaultFileName;
+    var checkCols = [10, 11]; // Periksa Kolom J dan Kolom K
+    for (var cIdx = 0; cIdx < checkCols.length; cIdx++) {
+      var colNum = checkCols[cIdx];
+      var pdfRange = sheet.getRange(headerRow + 1, colNum, numRows, 1);
+      var pdfValues = pdfRange.getValues();
+      var pdfFormulas = pdfRange.getFormulas();
+      for (var k = 0; k < pdfValues.length; k++) {
+        var rowIdx = headerRow + 1 + k;
+        var cellVal = String(pdfValues[k][0] || '');
+        var cellFormula = String(pdfFormulas[k][0] || '');
+        if (cellVal === '#ERROR!' || cellVal.indexOf('ERROR') !== -1 || cellFormula.indexOf('ERROR') !== -1) {
+          var targetCell = sheet.getRange(rowIdx, colNum);
+          var noVal = sheet.getRange(rowIdx, 1).getValue();
+          var defaultFileName = 'Surat_Tugas_' + noVal + '_SJ.9_KP.01.06_10_2026.pdf';
+          
+          // Ekstrak URL dari formula jika ada
+          var matchUrl = cellFormula.match(/https:\/\/[^\s"',;)]+/);
+          if (matchUrl && matchUrl[0]) {
+            var targetUrl = matchUrl[0];
+            var mFileName = cellFormula.match(/[",;]\s*"([^"]+\.pdf)"/i);
+            var actualFileName = (mFileName && mFileName[1]) ? mFileName[1] : defaultFileName;
 
-          var fixedOk = false;
-          // Coba pasang formula resmi lokalitas Indonesia dengan titik-koma (;)
-          try {
-            targetCell.setValue('=HYPERLINK("' + targetUrl + '"; "' + actualFileName + '")');
-            if (String(targetCell.getValue()).indexOf('ERROR') === -1) {
-              fixedOk = true;
-            }
-          } catch (eSemi) {}
+            var fixedOk = false;
+            try {
+              targetCell.setValue('=HYPERLINK("' + targetUrl + '"; "' + actualFileName + '")');
+              if (String(targetCell.getValue()).indexOf('ERROR') === -1) {
+                fixedOk = true;
+              }
+            } catch (eSemi) {}
 
-          // Jika formula masih error, pasang RichTextValue langsung yang dijamin 100% aktif dan tanpa formula error
-          if (!fixedOk || String(targetCell.getValue()).indexOf('ERROR') !== -1) {
-            var rtv = SpreadsheetApp.newRichTextValue()
-              .setText(actualFileName)
-              .setLinkUrl(targetUrl)
-              .build();
-            targetCell.setValue(actualFileName);
-            targetCell.setRichTextValue(rtv);
-          }
-          fixedPdfLinks++;
-        } else {
-          try {
-            var files = DriveApp.getFilesByName(defaultFileName);
-            if (files.hasNext()) {
-              var f = files.next();
-              var rtv2 = SpreadsheetApp.newRichTextValue()
-                .setText(defaultFileName)
-                .setLinkUrl(f.getUrl())
+            if (!fixedOk || String(targetCell.getValue()).indexOf('ERROR') !== -1) {
+              var rtv = SpreadsheetApp.newRichTextValue()
+                .setText(actualFileName)
+                .setLinkUrl(targetUrl)
                 .build();
-              targetCell.setValue(defaultFileName);
-              targetCell.setRichTextValue(rtv2);
-              fixedPdfLinks++;
-            } else {
+              targetCell.setValue(actualFileName);
+              targetCell.setRichTextValue(rtv);
+            }
+            fixedPdfLinks++;
+          } else {
+            try {
+              var files = DriveApp.getFilesByName(defaultFileName);
+              if (files.hasNext()) {
+                var f = files.next();
+                var rtv2 = SpreadsheetApp.newRichTextValue()
+                  .setText(defaultFileName)
+                  .setLinkUrl(f.getUrl())
+                  .build();
+                targetCell.setValue(defaultFileName);
+                targetCell.setRichTextValue(rtv2);
+                fixedPdfLinks++;
+              } else {
+                targetCell.setValue(defaultFileName);
+                fixedPdfLinks++;
+              }
+            } catch (eDrive) {
               targetCell.setValue(defaultFileName);
               fixedPdfLinks++;
             }
-          } catch (eDrive) {
-            targetCell.setValue(defaultFileName);
-            fixedPdfLinks++;
           }
         }
       }
@@ -320,6 +323,10 @@ function handleAction(action, payload) {
       case 'appendNomorSurat':
         var recordToSave = (payload && payload.record) ? payload.record : payload;
         return jsonResponse({ status: 'ok', result: appendNomorSurat(recordToSave) });
+
+      case 'updateNomorSurat':
+        var recordToUpdate = (payload && payload.record) ? payload.record : payload;
+        return jsonResponse({ status: 'ok', result: updateNomorSurat(recordToUpdate) });
 
       case 'getNomorSurat':
         return jsonResponse({ status: 'ok', result: getNomorSurat() });
@@ -675,8 +682,8 @@ function appendNomorSurat(record) {
   // G: TOPIK TIM
   // H: KONSEPTOR
   // I: STATUS SURAT
-  // J: Link Berkas Word
-  // K: Link Berkas TTE Pdf
+  // J: Link Berkas PDF (Dulu Kolom K, kini resmi ditempatkan di Kolom J)
+  // K: Link Berkas TTE / Cadangan
 
   var jenis = record.jenis || 'ST';
   var kepada = record.kepada || (record.jumlah_pegawai > 3 ? 'Daftar Terlampir' : (record.nama_pegawai || 'Terlampir'));
@@ -685,9 +692,11 @@ function appendNomorSurat(record) {
   var topikTim = record.topik_tim || record.unit_kerja || 'TU';
   var konseptor = record.konseptor || record.dibuat_oleh || '';
   var statusSurat = driveErrorMsg ? ('Err Drive: ' + driveErrorMsg.slice(0, 35)) : (record.status_surat || 'OK');
-  var linkWord = record.link_word || '-';
+  var linkTte = record.link_tte || record.link_word || '-';
 
   // Masukkan teks nama file biasa ke newRow agar setValues tidak pernah menghasilkan #ERROR!
+  // Kolom 10 (J): defaultPdfFileName
+  // Kolom 11 (K): linkTte
   var newRow = [
     nomorUrut,
     dateVal,
@@ -698,8 +707,8 @@ function appendNomorSurat(record) {
     topikTim,
     konseptor,
     statusSurat,
-    linkWord,
-    defaultPdfFileName,
+    defaultPdfFileName, // Kolom J (Kolom 10)
+    linkTte,            // Kolom K (Kolom 11)
   ];
 
   // Cari baris kosong berikutnya di kolom A
@@ -723,9 +732,9 @@ function appendNomorSurat(record) {
     Logger.log('Gagal set validasi/format tanggal: ' + errDate.message);
   }
 
-  // 2. Pasang Tautan PDF ke Kolom K (Kolom 11) - Aman dari error formula HYPERLINK
+  // 2. Pasang Tautan PDF ke Kolom J (Kolom 10) - Aman dari error formula HYPERLINK
   if (driveUploadInfo && driveUploadInfo.fileUrl) {
-    var pdfCell = sheet.getRange(targetRow, 11);
+    var pdfCell = sheet.getRange(targetRow, 10);
     try {
       // Pasang RichTextValue: Teks nama berkas langsung menjadi hyperlink aktif yang bisa diklik
       var richText = SpreadsheetApp.newRichTextValue()
@@ -764,6 +773,142 @@ function appendNomorSurat(record) {
 }
 
 // ════════════════════════════════════════════
+// 2b. UPDATE NOMOR SURAT YANG SUDAH ADA
+// ════════════════════════════════════════════
+
+function updateNomorSurat(record) {
+  if (!record) {
+    throw new Error('Data record surat untuk update kosong.');
+  }
+
+  ensureIndonesianLocale();
+  var sheet = getTargetSheet();
+  var headerInfo = findHeaderMapping(sheet);
+  var headerRow = headerInfo.headerRow;
+  var lastRow = sheet.getLastRow();
+
+  if (lastRow <= headerRow) {
+    return appendNomorSurat(record);
+  }
+
+  var nomorUrut = parseInt(record.nomor_urut, 10);
+  var targetRow = -1;
+
+  // Cari baris berdasarkan Nomor Urut di Kolom A
+  var numRows = lastRow - headerRow;
+  var colAValues = sheet.getRange(headerRow + 1, 1, numRows, 1).getValues();
+  for (var i = 0; i < colAValues.length; i++) {
+    var val = colAValues[i][0];
+    if (val !== '' && !isNaN(val) && parseInt(val, 10) === nomorUrut) {
+      targetRow = headerRow + 1 + i;
+      break;
+    }
+  }
+
+  // Jika tidak ditemukan barisnya, panggil appendNomorSurat
+  if (targetRow === -1) {
+    return appendNomorSurat(record);
+  }
+
+  // Parse tanggal
+  var dateVal = parseDateValue(record.tanggal || record.tanggal_surat || record.tanggal_dibuat);
+  var tanggalDisplayStr = formatTanggalIndoOutput(dateVal);
+
+  var year = record.tahun || dateVal.getFullYear();
+  var monthIndex = dateVal.getMonth();
+  var monthPad = (monthIndex + 1 < 10 ? '0' : '') + (monthIndex + 1);
+  var defaultPdfFileName = record.pdf_filename || (
+    'Surat_Tugas_' + nomorUrut + '_SJ.9_KP.01.06_' + monthPad + '_' + year + '.pdf'
+  );
+
+  // Upload/Perbarui PDF di Google Drive jika ada data Base64 baru
+  var driveUploadInfo = null;
+  var driveErrorMsg = null;
+  var targetMonthFolder = null;
+
+  try {
+    var parentFolder = getTargetDriveParentFolder();
+    targetMonthFolder = getOrCreateMonthFolder(parentFolder, year, monthIndex);
+
+    if (record.pdf_base64 && record.pdf_base64.length > 50) {
+      driveUploadInfo = uploadPdfToDrive(targetMonthFolder, record.pdf_base64, defaultPdfFileName);
+    }
+  } catch (driveErr) {
+    driveErrorMsg = driveErr.message || String(driveErr);
+    Logger.log('Gagal upload update PDF ke Google Drive: ' + driveErrorMsg);
+  }
+
+  var jenis = record.jenis || 'ST';
+  var kepada = record.kepada || (record.jumlah_pegawai > 3 ? 'Daftar Terlampir' : (record.nama_pegawai || 'Terlampir'));
+  var hal = record.perihal || record.hal || record.nama_acara || '';
+  var statusTtd = record.status_ttd || (record.penandatangan_nama ? 'Kapus' : 'Kapus');
+  var topikTim = record.topik_tim || record.unit_kerja || 'TU';
+  var konseptor = record.konseptor || record.dibuat_oleh || '';
+  var statusSurat = driveErrorMsg ? ('Err Drive: ' + driveErrorMsg.slice(0, 35)) : (record.status_surat || 'OK');
+  var linkTte = record.link_tte || record.link_word || '-';
+
+  var updatedRow = [
+    nomorUrut,
+    dateVal,
+    jenis,
+    kepada,
+    hal,
+    statusTtd,
+    topikTim,
+    konseptor,
+    statusSurat,
+    defaultPdfFileName, // Kolom J (Kolom 10)
+    linkTte,            // Kolom K (Kolom 11)
+  ];
+
+  sheet.getRange(targetRow, 1, 1, updatedRow.length).setValues([updatedRow]);
+
+  // Format kolom tanggal (Kolom B / index 2)
+  try {
+    var dateCell = sheet.getRange(targetRow, 2);
+    dateCell.setNumberFormat('d MMMM');
+    var dateValidation = SpreadsheetApp.newDataValidation().requireDate().build();
+    dateCell.setDataValidation(dateValidation);
+  } catch (errDate) {}
+
+  // Pasang Tautan PDF ke Kolom J (Kolom 10)
+  var fileUrlToUse = (driveUploadInfo && driveUploadInfo.fileUrl) || record.drive_url;
+  if (fileUrlToUse) {
+    var pdfCell = sheet.getRange(targetRow, 10);
+    try {
+      var richText = SpreadsheetApp.newRichTextValue()
+        .setText(defaultPdfFileName)
+        .setLinkUrl(fileUrlToUse)
+        .build();
+      pdfCell.setValue(defaultPdfFileName);
+      pdfCell.setRichTextValue(richText);
+    } catch (eRtv) {
+      try {
+        pdfCell.setFormula('=HYPERLINK("' + fileUrlToUse + '"; "' + defaultPdfFileName + '")');
+      } catch (e1) {
+        try {
+          pdfCell.setFormula('=HYPERLINK("' + fileUrlToUse + '", "' + defaultPdfFileName + '")');
+        } catch (e2) {}
+      }
+    }
+  }
+
+  return {
+    id: record.id || ('ns-' + nomorUrut),
+    nomor_urut: nomorUrut,
+    nomor_lengkap: record.nomor_lengkap || (nomorUrut + '/SJ.9/KP.01.06/' + monthPad + '/' + year),
+    tanggal_dibuat: tanggalDisplayStr,
+    perihal: hal,
+    status: 'Surat berhasil diperbarui di Spreadsheet & Google Drive',
+    row_number: targetRow,
+    drive_url: fileUrlToUse || (targetMonthFolder ? targetMonthFolder.getUrl() : null),
+    drive_file_id: driveUploadInfo ? driveUploadInfo.fileId : null,
+    drive_folder: (driveUploadInfo && driveUploadInfo.folderName) || (targetMonthFolder ? targetMonthFolder.getName() : null),
+    drive_error: driveErrorMsg,
+  };
+}
+
+// ════════════════════════════════════════════
 // 3. GET RIWAYAT SEMUA SURAT
 // ════════════════════════════════════════════
 
@@ -777,8 +922,11 @@ function getNomorSurat() {
 
   var numRows = lastRow - headerRow;
   var data = sheet.getRange(headerRow + 1, 1, numRows, 11).getValues();
-  var formulasPdf = sheet.getRange(headerRow + 1, 11, numRows, 1).getFormulas();
-  var richTextPdf = sheet.getRange(headerRow + 1, 11, numRows, 1).getRichTextValues();
+  // Ambil formula dan rich text dari Kolom J (10) dan Kolom K (11)
+  var formulasJ = sheet.getRange(headerRow + 1, 10, numRows, 1).getFormulas();
+  var richTextJ = sheet.getRange(headerRow + 1, 10, numRows, 1).getRichTextValues();
+  var formulasK = sheet.getRange(headerRow + 1, 11, numRows, 1).getFormulas();
+  var richTextK = sheet.getRange(headerRow + 1, 11, numRows, 1).getRichTextValues();
   var records = [];
 
   for (var i = 0; i < data.length; i++) {
@@ -787,31 +935,57 @@ function getNomorSurat() {
     if (noVal === '' || noVal === null || noVal === undefined) continue;
 
     var noUrut = parseInt(noVal, 10);
-    var rawLinkPdf = String(row[10] || '');
-    var pdfFormula = formulasPdf[i] ? formulasPdf[i][0] : '';
+    var rawLinkJ = String(row[9] || '');
+    var rawLinkK = String(row[10] || '');
+    var fJ = formulasJ[i] ? formulasJ[i][0] : '';
+    var fK = formulasK[i] ? formulasK[i][0] : '';
+    var rtJ = richTextJ[i] ? richTextJ[i][0] : null;
+    var rtK = richTextK[i] ? richTextK[i][0] : null;
+
     var driveUrl = '';
 
-    // Ekstrak URL dari formula =HYPERLINK("https://...", "...") jika ada
-    if (pdfFormula && pdfFormula.indexOf('HYPERLINK') !== -1) {
-      var matchUrl = pdfFormula.match(/HYPERLINK\("([^"]+)"/i);
-      if (matchUrl && matchUrl[1]) {
-        driveUrl = matchUrl[1];
-      }
+    // 1. Cek URL di Kolom J (Kolom 10) terlebih dahulu
+    if (fJ && fJ.indexOf('HYPERLINK') !== -1) {
+      var matchJ = fJ.match(/HYPERLINK\("([^"]+)"/i);
+      if (matchJ && matchJ[1]) driveUrl = matchJ[1];
     }
-    if (!driveUrl && pdfFormula) {
-      var matchDirect = pdfFormula.match(/https:\/\/[^\s"',;)]+/);
-      if (matchDirect) driveUrl = matchDirect[0];
+    if (!driveUrl && fJ) {
+      var matchDirectJ = fJ.match(/https:\/\/[^\s"',;)]+/);
+      if (matchDirectJ) driveUrl = matchDirectJ[0];
     }
-    if (!driveUrl && richTextPdf[i] && richTextPdf[i][0]) {
-      var rtvUrl = richTextPdf[i][0].getLinkUrl();
-      if (rtvUrl) driveUrl = rtvUrl;
+    if (!driveUrl && rtJ) {
+      var rtvUrlJ = rtJ.getLinkUrl();
+      if (rtvUrlJ) driveUrl = rtvUrlJ;
     }
-    if (!driveUrl && rawLinkPdf.indexOf('http') === 0) {
-      driveUrl = rawLinkPdf;
+    if (!driveUrl && rawLinkJ.indexOf('http') === 0) {
+      driveUrl = rawLinkJ;
     }
 
-    var cleanLinkPdf = rawLinkPdf;
-    if (cleanLinkPdf === '#ERROR!' || cleanLinkPdf.indexOf('ERROR') !== -1) {
+    // 2. Fallback cek URL di Kolom K (Kolom 11) jika di Kolom J belum ada
+    if (!driveUrl) {
+      if (fK && fK.indexOf('HYPERLINK') !== -1) {
+        var matchK = fK.match(/HYPERLINK\("([^"]+)"/i);
+        if (matchK && matchK[1]) driveUrl = matchK[1];
+      }
+      if (!driveUrl && fK) {
+        var matchDirectK = fK.match(/https:\/\/[^\s"',;)]+/);
+        if (matchDirectK) driveUrl = matchDirectK[0];
+      }
+      if (!driveUrl && rtK) {
+        var rtvUrlK = rtK.getLinkUrl();
+        if (rtvUrlK) driveUrl = rtvUrlK;
+      }
+      if (!driveUrl && rawLinkK.indexOf('http') === 0) {
+        driveUrl = rawLinkK;
+      }
+    }
+
+    // Tentukan nama berkas link PDF
+    var cleanLinkPdf = rawLinkJ;
+    if (!cleanLinkPdf || cleanLinkPdf === '-' || cleanLinkPdf.trim() === '') {
+      cleanLinkPdf = rawLinkK;
+    }
+    if (cleanLinkPdf === '#ERROR!' || cleanLinkPdf.indexOf('ERROR') !== -1 || !cleanLinkPdf || cleanLinkPdf === '-') {
       cleanLinkPdf = 'Surat_Tugas_' + (noUrut || i + 1) + '_SJ.9_KP.01.06_10_2026.pdf';
     }
 
@@ -828,7 +1002,7 @@ function getNomorSurat() {
       dibuat_oleh: String(row[7] || ''),
       konseptor: String(row[7] || ''),
       status_surat: String(row[8] || ''),
-      link_word: String(row[9] || ''),
+      link_word: String(row[10] || '-'),
       link_pdf: cleanLinkPdf,
       drive_url: driveUrl,
       tahun: 2026,
