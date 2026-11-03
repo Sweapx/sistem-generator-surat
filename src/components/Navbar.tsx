@@ -34,25 +34,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo & Brand */}
-          <div className="flex items-center space-x-3">
-            <img
-              src="/komdigi_logo.png"
-              alt="Logo Komdigi"
-              className="h-10 w-auto object-contain"
-            />
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-base font-bold text-slate-900 tracking-tight">
-                  Sistem Generator Surat Tugas
-                </span>
-                <span className="text-xs bg-teal-50 text-teal-800 px-2 py-0.5 rounded font-semibold border border-teal-200">
-                  PUSAKA
-                </span>
-              </div>
-              <div className="text-xs text-slate-500">
-                Pusat Kebijakan Strategis &middot; Komunikasi dan Digital RI
-              </div>
+          {/* Brand */}
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center space-x-2">
+              <span className="text-[15px] font-bold text-slate-900 tracking-tight leading-tight">
+                Sistem Generator Surat
+              </span>
+              <span className="text-[11px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded-full font-bold border border-teal-200 tracking-wide">
+                PUSAKA
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium leading-normal mt-0.5">
+              Pusat Kebijakan Strategis &middot; Komunikasi dan Digital RI
             </div>
           </div>
 
@@ -67,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <FileText className="w-3.5 h-3.5 text-teal-700" />
-              <span>Pembuatan Surat Tugas</span>
+              <span>Pembuatan Surat</span>
             </button>
 
             <button
@@ -83,15 +76,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right: Next Number Indicator, Sheets Status, & User Profile */}
+          {/* Right: Sheets Status, & User Profile */}
           <div className="flex items-center space-x-2.5">
-            <div className="hidden xl:flex items-center space-x-2 text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
-              <Hash className="w-3.5 h-3.5 text-teal-700" />
-              <span>Nomor Berikutnya:</span>
-              <span className="font-mono font-semibold text-slate-900">
-                {nextNomorLengkap}
-              </span>
-            </div>
 
             {/* Google Sheets Connection Status */}
             <button

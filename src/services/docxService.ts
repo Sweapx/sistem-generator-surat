@@ -12,7 +12,7 @@ import {
   PageBreak,
   UnderlineType,
 } from 'docx';
-import { SuratTugasFormState, Pegawai, Pejabat } from '../types';
+import { SuratTugasFormState, Pegawai, Pejabat, LampiranItem } from '../types';
 
 // Font default seluruh dokumen — Arial, sesuai format asli Komdigi
 const F = 'Arial';
@@ -371,4 +371,438 @@ export async function generateSuratTugasDocx(
   });
 
   return await Packer.toBlob(doc);
+}
+
+/**
+ * Generator Naskah Dinas untuk Surat Undangan
+ */
+export async function generateSuratUndanganDocx(
+  form: SuratTugasFormState,
+  pejabat: Pejabat
+): Promise<Blob> {
+  const tglSurat = formatTanggalIndonesia(form.tanggal_surat);
+  const jabatanTTD = pejabat.is_default ? `${pejabat.jabatan},` : `Plh. ${pejabat.jabatan},`;
+  const children: (Paragraph | Table)[] = [];
+
+  children.push(...buildKop());
+
+  // Header 2 Kolom (Nomor, Sifat, Lampiran, Hal di kiri; Jakarta, Tanggal di kanan)
+  const headerTable = new Table({
+    width: { size: 9600, type: WidthType.DXA },
+    borders: {
+      top: { style: BorderStyle.NONE },
+      bottom: { style: BorderStyle.NONE },
+      left: { style: BorderStyle.NONE },
+      right: { style: BorderStyle.NONE },
+      insideHorizontal: { style: BorderStyle.NONE },
+      insideVertical: { style: BorderStyle.NONE },
+    },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 6000, type: WidthType.DXA },
+            children: [
+              new Paragraph({ children: [t('Nomor\t: ' + form.nomor_lengkap)] }),
+              new Paragraph({ children: [t('Sifat\t: ' + (form.undangan_sifat || 'Biasa'))] }),
+              new Paragraph({ children: [t('Lampiran\t: ' + (form.undangan_lampiran || '1 (satu) berkas'))] }),
+              new Paragraph({ children: [t('Hal\t: ' + (form.undangan_hal || 'Undangan'))] }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 3600, type: WidthType.DXA },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                children: [t(`${form.kota_surat || 'Jakarta'}, ${tglSurat}`)],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+  children.push(headerTable);
+
+  children.push(spacer(8));
+  children.push(
+    new Paragraph({ spacing: { after: 40 }, children: [t('Kepada Yth.')] }),
+    new Paragraph({
+      spacing: { after: 140 },
+      children: [t(form.undangan_kepada || '-')],
+    })
+  );
+
+  // Paragraf Pembuka
+  if (form.undangan_pembuka && form.undangan_pembuka.trim()) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        indent: { firstLine: 720 },
+        spacing: { after: 120 },
+        children: [t(form.undangan_pembuka.trim())],
+      })
+    );
+  }
+
+  // Rincian Acara
+  const tempatVal =
+    form.undangan_tipe_tempat === 'online'
+      ? form.undangan_tempat_online || '-'
+      : form.undangan_tipe_tempat === 'hybrid'
+      ? `${form.undangan_tempat_offline || '-'} / Online: ${form.undangan_tempat_online || '-'}`
+      : form.undangan_tempat_offline || form.lokasi_kegiatan || '-';
+
+  [
+    ['Hari, Tanggal', form.undangan_hari_tanggal || form.hari_tanggal_pelaksanaan || tglSurat || '-'],
+    ['Waktu', form.undangan_waktu || form.waktu_kegiatan || '-'],
+    ['Tempat', tempatVal],
+    ['Agenda', form.undangan_agenda || form.nama_acara || '-'],
+  ].forEach(([label, val]) => {
+    children.push(
+      new Paragraph({
+        indent: { left: 720 },
+        spacing: { after: 60 },
+        tabStops: [{ type: 'left' as any, position: 2600 }],
+        children: [t(String(label)), t('\t: '), t(String(val))],
+      })
+    );
+  });
+
+  // Paragraf Penutup
+  if (form.undangan_penutup && form.undangan_penutup.trim()) {
+    children.push(
+      spacer(8),
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        indent: { firstLine: 720 },
+        spacing: { after: 240 },
+        children: [t(form.undangan_penutup.trim())],
+      })
+    );
+  }
+
+  // TTD
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 0 },
+      children: [t(jabatanTTD)],
+    }),
+    spacer(10),
+    spacer(10),
+    spacer(10),
+    spacer(10),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 0 },
+      children: [t(pejabat.nama, { bold: true })],
+    })
+  );
+
+  // Lampiran Tambahan (Undangan)
+  const undanganLampiranItems = form.undangan_lampiran_items || form.lampiran_items || [];
+  if (undanganLampiranItems.length > 0) {
+    children.push(...buildLampiranChildren(undanganLampiranItems, form.nomor_lengkap, tglSurat));
+  }
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: { top: 1440, bottom: 1440, left: 1700, right: 1134 },
+          },
+        },
+        children,
+      },
+    ],
+  });
+  return await Packer.toBlob(doc);
+}
+
+/**
+ * Helper untuk membangun halaman lampiran Word dengan penanda kanan atas
+ */
+function buildLampiranChildren(
+  items: LampiranItem[] | undefined,
+  nomorLengkap: string,
+  tanggalSuratFormatted: string
+): Paragraph[] {
+  if (!items || items.length === 0) return [];
+  const paragraphs: Paragraph[] = [];
+
+  items.forEach((item, idx) => {
+    // Page break untuk memisahkan setiap lampiran ke halaman baru
+    paragraphs.push(
+      new Paragraph({
+        children: [new PageBreak()],
+      })
+    );
+
+    // Penanda Kanan Atas Resmi (Sample Lampiran format):
+    // Lampiran [Label Mark]
+    // Nomor   : [Nomor]
+    // Tanggal : [Tanggal]
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { after: 40 },
+        children: [t(item.label_mark || `Lampiran ${idx + 1}`, { size: 10 })],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { after: 40 },
+        children: [t(`Nomor   : ${nomorLengkap || '-'}`, { size: 10 })],
+      }),
+      new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { after: 200 },
+        children: [t(`Tanggal : ${tanggalSuratFormatted || '-'}`, { size: 10 })],
+      })
+    );
+
+    // Judul Lampiran (Center, Bold, Uppercase)
+    if (item.judul) {
+      paragraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 180 },
+          children: [t(item.judul.toUpperCase(), { bold: true, size: 11 })],
+        })
+      );
+    }
+
+    // Isi Dokumen
+    const textContent = item.isi || item.extracted_text;
+    if (textContent) {
+      textContent.split('\n').forEach((line) => {
+        if (line.trim()) {
+          paragraphs.push(
+            new Paragraph({
+              alignment: AlignmentType.JUSTIFIED,
+              spacing: { after: 60 },
+              children: [t(line.trim(), { size: 10 })],
+            })
+          );
+        } else {
+          paragraphs.push(new Paragraph({ spacing: { after: 40 }, children: [] }));
+        }
+      });
+    } else if (item.tipe === 'upload') {
+      paragraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 80 },
+          children: [
+            t(`[Dokumen Lampiran Elektronik: ${item.file_name || 'Berkas Terlampir'}]`, {
+              italic: true,
+              size: 10,
+            }),
+          ],
+        })
+      );
+    }
+  });
+
+  return paragraphs;
+}
+
+/**
+ * Generator Naskah Dinas untuk Nota Dinas
+ */
+export async function generateNotaDinasDocx(
+  form: SuratTugasFormState,
+  pejabat: Pejabat
+): Promise<Blob> {
+  const tglSurat = formatTanggalIndonesia(form.tanggal_surat);
+  const jabatanTTD = pejabat.is_default ? `${pejabat.jabatan},` : `Plh. ${pejabat.jabatan},`;
+  const children: (Paragraph | Table)[] = [];
+
+  children.push(...buildKop());
+
+  // Judul NOTA DINAS
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 0 },
+      children: [t('NOTA DINAS', { bold: true, underline: true, size: 12 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 160 },
+      children: [t(`Nomor: ${form.nomor_lengkap}`, { size: 12 })],
+    })
+  );
+
+  // Header Attributes
+  const attrList = [
+    ['Kepada Yth.', form.nota_kepada || 'Kepala Bagian / Pimpinan Terkait'],
+    ['Dari', form.nota_dari || 'Kepala Pusat Kebijakan Strategis'],
+    ['Hal', form.nota_hal || form.nama_acara || 'Penyampaian Informasi'],
+    ['Sifat', form.nota_sifat || 'Biasa'],
+    ['Lampiran', form.nota_lampiran || '-'],
+    ['Tanggal', tglSurat],
+  ];
+
+  attrList.forEach(([label, val]) => {
+    children.push(
+      new Paragraph({
+        spacing: { after: 40 },
+        tabStops: [
+          { type: 'left' as any, position: 2000 },
+          { type: 'left' as any, position: 2200 },
+        ],
+        children: [t(label), t('\t:\t'), t(val)],
+      })
+    );
+  });
+
+  // Border pembatas bawah atribut
+  children.push(
+    new Paragraph({
+      border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000' } },
+      spacing: { before: 80, after: 140 },
+      children: [],
+    })
+  );
+
+  // Paragraf Pembuka (jika ada)
+  if (form.nota_pembuka && form.nota_pembuka.trim()) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        indent: { firstLine: 720 },
+        spacing: { after: 100 },
+        children: [t(form.nota_pembuka.trim())],
+      })
+    );
+  }
+
+  // Isi (Paragraf Narasi Penjelasan, Blok Atribut Identitas Pegawai, atau Poin-Poin)
+  const isi = form.nota_isi || '';
+  const isiLines = isi.split('\n');
+  isiLines.forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed) {
+      const isKv = /^(Nama(?:\s+Pegawai|\s+Lengkap)?|NIP|NIK|Pangkat(?:\s*\/\s*Gol(?:\.\s*Ruang|\s*Ruang)?|\s+saat\s+ini|\s+yang\s+dituju)?|Golongan(?:\s*\/\s*Ruang)?|Jabatan(?:\s+Baru|\s+Lama|\s+saat\s+ini|\s+yang\s+dituju)?|Kelas\s+Jabatan(?:\s+Semula|\s+Usulan)?|Unit\s+Kerja|Instansi|TMT(?:\s+Jabatan|\s+Pangkat)?|Pendidikan|Masa\s+Kerja|Alamat\s+Email|Akun\s+Pengguna|Nomor\s+SK|Tautan(?:\s+Berkas|\s+Data)?|Narahubung|PIC)\s*:\s*(.+)$/i.test(
+        trimmed
+      );
+      if (isKv) {
+        const colonIdx = trimmed.indexOf(':');
+        const keyStr = trimmed.slice(0, colonIdx).trim();
+        const valStr = trimmed.slice(colonIdx + 1).trim();
+        children.push(
+          new Paragraph({
+            indent: { left: 720 },
+            spacing: { after: 40 },
+            tabStops: [
+              { type: 'left' as any, position: 2800 },
+              { type: 'left' as any, position: 3000 },
+            ],
+            children: [t(keyStr), t('\t:\t'), t(valStr)],
+          })
+        );
+      } else {
+        const isPoint = /^\s*(\d+\.|[a-zA-Z]\.|[\-\*•])/i.test(trimmed);
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.JUSTIFIED,
+            indent: isPoint ? undefined : { firstLine: 720 },
+            spacing: { after: 80 },
+            children: [t(trimmed)],
+          })
+        );
+      }
+    }
+  });
+
+  // Paragraf Penutup (jika ada)
+  if (form.nota_penutup && form.nota_penutup.trim()) {
+    children.push(
+      spacer(8),
+      new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        indent: { firstLine: 720 },
+        spacing: { after: 200 },
+        children: [t(form.nota_penutup.trim())],
+      })
+    );
+  }
+
+  // TTD
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 0 },
+      children: [t(jabatanTTD)],
+    }),
+    spacer(10),
+    spacer(10),
+    spacer(10),
+    spacer(10),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 0 },
+      children: [t(pejabat.nama, { bold: true })],
+    })
+  );
+
+  // Tembusan jika ada
+  if (form.nota_tembusan) {
+    children.push(
+      spacer(10),
+      new Paragraph({
+        spacing: { after: 40 },
+        children: [t('Tembusan disampaikan kepada Yth.', { bold: true, size: 10 })],
+      })
+    );
+    form.nota_tembusan.split('\n').forEach((tmb) => {
+      if (tmb.trim()) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 20 },
+            children: [t(tmb.trim(), { size: 10 })],
+          })
+        );
+      }
+    });
+  }
+
+  // Lampiran Tambahan (Nota Dinas)
+  const notaLampiranItems = form.nota_lampiran_items || form.lampiran_items || [];
+  if (notaLampiranItems.length > 0) {
+    children.push(...buildLampiranChildren(notaLampiranItems, form.nomor_lengkap, tglSurat));
+  }
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: { top: 1440, bottom: 1440, left: 1700, right: 1134 },
+          },
+        },
+        children,
+      },
+    ],
+  });
+  return await Packer.toBlob(doc);
+}
+
+/**
+ * Universal export function yang otomatis mendistribusikan ke generator sesuai jenis_naskah
+ */
+export async function exportNaskahDinasDocx(
+  form: SuratTugasFormState,
+  pegawaiList: Pegawai[],
+  pejabat: Pejabat
+): Promise<Blob> {
+  if (form.jenis_naskah === 'UNDANGAN') {
+    return generateSuratUndanganDocx(form, pejabat);
+  }
+  if (form.jenis_naskah === 'NOTA_DINAS') {
+    return generateNotaDinasDocx(form, pejabat);
+  }
+  return generateSuratTugasDocx(form, pegawaiList, pejabat);
 }

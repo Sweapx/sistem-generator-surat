@@ -1,0 +1,132 @@
+KODE,,,URAIAN
+HURUF,ANGKA,SUB KODE,
+SP,,,SUMBER DAYA DAN PERANGKAT POS DAN INFORMATIKA
+,01,,PENATAAN SUMBER DAYA
+,,01,"Penataan Alokasi Spektrum Dinas Tetap, Bergerak Darat"
+,,02,"Penataan Alokasi Spektrum Non Dinas Tetap, Bergerak Darat"
+,,03,Pengelolaan Orbit Satelit
+,,04,Ekonomi Sumber Daya
+,,05,Harmonisasi Teknik Spektrum
+,02,,OPERASI SUMBER DAYA
+,,01,Pelayanan Spektrum Dinas Tetap  
+,,02,Pelayanan Spektrum Dinas Bergerak Darat
+,,03,Pelayanan Spektrum Dinas Penyiaran
+,,04,"Pelayanan Spektrum Dinas Penerbangan, Maritim dan Satelit"
+,,05,Pelayanan Amatir Radio dan Komunikasi Radio Antar Penduduk
+,,06,Pelayanan Operator Radio
+,,07,Penanganan Piutang Biaya Hak Penggunaan Frekuensi Radio
+,,08,Analisa dan Evaluasi Biaya Hak Penggunaan Frekuensi Radio
+,,09,Konsultasi dan Informasi Sumber Daya
+,,10,Pengelolaan Data Operasi Sumber Daya
+,03,,PENGENDALIAN SUMBER DAYA DAN PERANGKAT POS DAN INFORMATIKA
+,,01,Pengelolaan Sistem Monitoring Spektrum
+,,02,Pengelolaan Sistem Informasi Manajemen Spektrum
+,,03,Monitoring dan Penertiban Spektrum Frekuensi Radio
+,,04,Monitoring dan Penertiban Perangkat Pos Dan Informatika
+,,05,Penanganan Gangguan Spektrum Frekuensi Radio
+,04,,STANDARDISASI PERANGKAT POS DAN INFORMATIKA
+,,01,Standar Perangkat Telekomunikasi Radio
+,,02,Standar Infrastruktur Telekomunikasi Radio
+,,03,Standar Perangkat Pos dan Telekomunikasi Non Radio
+,,04,Standar Infrastruktur Pos dan Telekomunikasi Non Radio
+,,05,Standar Kualitas Layanan
+,,06,Harmonisasi Standar Perangkat
+,,07,Standardisasi Perangkat dan Infrastruktur Teknologi Informasi
+,,08,Standardisasi Manajemen dan Tata Kelola Teknologi Informasi
+,,09,"Sertifikasi perangkat Pos, Telekomukasi, dan Informatika"
+,,10,"Data dan Informasi Perangkat Pos, Telekomunikasi dan Informatika"
+,,11,Rekomendasi Alat dan Perangkat Telekomunikasi
+,,12,Penolakan Tidak Memenuhi Persyaratan Teknis
+,05,,PENGUJIAN PERANGKAT TELEKOMUNIKASI
+,,01,Pelayanan Pengujian Perangkat Telekomunikasi
+,,02,Pelayanan / Laporan Kalibrasi Alat ukur
+,,03,Dokumen Mutu
+,,04,Audit Internal dan Ekternal Pengujian
+,,05,Uji Banding Mandatory KAN
+,,06,Metode Penyusunan Pengujian
+,,07,Rekapitulasi Hasil Uji (RHU)
+,,08,Perbaikan dan Pemeliharaan Alat Ukur
+PI,,,PENYELENGGARAAN POS DAN INFORMATIKA
+,01,,POS
+,,01,Layanan Pos Universal
+,,02,Layanan Pos Komersial
+,,03,Pentarifan Pos
+,,04,Perangko dan Filateli
+,,05,Kerjasama dan Pengembangan Industri Pos
+,02,,TELEKOMUNIKASI
+,,01,Jaringan Telekomunikasi
+,,02,Jasa Telekomunikasi
+,,03,Penomoran Telekomunikasi dan Informatika
+,,04,"Tarif, Interkoneksi dan Iklim Usaha"
+,,05,Telekomunikasi Khusus dan Kelayakan Penyelenggaraan Telekomunikasi
+,03,,PENYIARAN
+,,01,Layanan Radio
+,,02,Layanan Televisi
+,,03,Verifikasi dan Uji Coba Siaran
+,,04,Iklim Usaha Penyiaran dan Kelayakan Teknologi
+,,05,Pengelolaan Sistem Informasi Manajemen Penyiaran dan Sarana Pendukung Pengelolaan Data Penyiaran
+,04,,PENGEMBANGAN PITALEBAR
+,,01,Infrastruktur Telekomunikasi Pitalebar
+,,02,Ekosistem Pitalebar 
+,,03,Infrastruktur Penyiaran Pitalebar
+,,04,Infrastruktur Keperluan Khusus Pitalebar
+,,05,Tata Kelola Pitalebar
+,05,,PENGENDALIAN POS DAN INFORMATIKA
+,,01,Monitoring dan Evaluasi Pos
+,,02,Monitoring dan Evaluasi Telekomunikasi Khusus dan Jaringan Telekomunikasi
+,,03,Monitoring dan Evaluasi Jasa Telekomunikasi
+,,04,Monitoring dan Evaluasi Penyiaran
+,,05,Pencegahan dan Penertiban
+AI,,,APLIKASI INFORMATIKA
+,01,,LAYANAN APLIKASI INFORMATIKA PEMERINTAHAN
+,,01,Layanan Infrastruktur dan Teknologi Interopabilitas Pemerintahan
+,,02,Layanan Aplikasi Informatika Pemerintahan Daerah
+,,03,"Layanan Aplikasi Informatika Politik, Hukum, dan Keamanan"
+,,04,Layanan Aplikasi Informatika Kemaritiman dan Pembangunan Manusia dan Kebudayaan
+,,05,Layanan Aplikasi Informatika Perekonomian
+,02,,TATA KELOLA APLIKASI INFORMATIKA
+,,01,Tata Kelola Sistem Elektronik dan Ekonomi Digital
+,,02,Tata Kelola Sistem Elektronik Pemerintahan
+,,03,Tata Kelola Perlindungan Data Pribadi
+,,04,Tata Kelola Sertifikasi Elektronik
+,03,,PEMBERDAYAAN INFORMATIKA
+,,01,Literasi Digital
+,,02,Pemberdayaan Komunitas TIK
+,,03,Pemberdayaan Kapasitas TIK
+,,04,Pemberdayaan Kreativitas TIK
+,04,,EKONOMI DIGITAL
+,,01,Pengembangan Ekonomi Digital pendidikan dan kesehatan
+,,02,Pengembangan Ekonomi Digital Pertanian dan Perikanan
+,,03,"Pengembangan Ekonomi Digital Pariwisata, transportasi dan perdagangan"
+,,04,Pengembangan Ekosistem Ekonomi Digital
+,05,,PENGENDALIAN APLIKASI INFORMATIKA
+,,01,"Sistem Elektronik, Ekonomi dan Perlindungan Data Pribadi"
+,,02,Pengendalian Konten Internet
+,,03,Pengendalian Penyelenggara Sertifikasi Elektronik
+,,04,Penyidikan Dan Penindakan
+IK,,,INFORMASI DAN KOMUNIKASI PUBLIK
+,01,,KOMUNIKASI PUBLIK
+,,01,Tata Kelola Komunikasi Publik
+,,02,Layanan Komunikasi Publik
+,,03,Pembinaan Profesi Komunikasi Publik
+,02,,PENGOLAHAN DAN PENYEDIAAN INFORMASI
+,,01,Pengolahan Isu Publik
+,,02,Pengolahan Informasi
+,,03,Penyediaan Informasi
+,03,,PENGELOLAAN MEDIA PUBLIK
+,,01,Media Cetak
+,,02,Media Online
+,,03,Media Luar Ruang dan Audio Visual
+,04,,KEMITRAAN KOMUNIKASI
+,,01,"Kemitraan Pemerintah, Lembaga Negara, dan Pemerintah Daerah"
+,,02,Kemitraan Lembaga Media
+,,03,Kemitraan Lembaga Komunikasi Sosial
+,05,,LAYANAN INFORMASI INTERNASIONAL
+,,01,Layanan Informasi Media Internasional
+,,02,Layanan Informasi Perwakilan Negara Asing dan Lembaga Internasional
+,,03,Layanan Informasi Masyarakat Internasional
+,06,,MUSEUM PENERANGAN DAN MONUMEN PERS
+,,01,Penataan Koleksi Benda-Benda Bersejarah
+,,02,Penambahan Koleksi Benda-Benda Bersejarah
+,,03,Pelestarian Koleksi Benda-Benda Bersejarah
+,,04,Promosi Museum Penerangan dan Monumen Pers

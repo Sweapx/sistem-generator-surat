@@ -1,0 +1,447 @@
+KODE,,,URAIAN
+HURUF,ANGKA,SUB KODE,
+PR,,,PERENCANAAN
+,01,,RENCANA DAN PROGRAM
+,,01,Rencana Strategis Kementerian
+,,02,Rencana Kerja Kementerian
+,,03,Pinjaman dan Hibah Luar Negeri
+,02,,PENYUSUNAN ANGGARAN
+,,01,Penyusunan RKA-K/L Kementerian
+,,02,Penyusunan Revisi RKA-K/L
+,03,,KERJASAMA LINTAS SEKTORAL DAN DAERAH
+,,01,Penyusunan Program Kerjasama Lintas Sektoral
+,,02,Penyusunan Program Kerjasama Lintas Daerah
+,04,,EVALUASI DAN PELAPORAN
+,,01,Kinerja Kementerian
+,,02,LAKIP Kementerian
+,,03,LAPTAH Kementerian
+,,04,Laporan Monitoring dan Evaluasi PP.39 Tahun 2006
+,,05,Laporan Monitoring dan Evaluasi Capaian Kantor Staf Presiden (KSP)
+,,06,Laporan Monitoring dan Evaluasi Pinjaman dan Hibah Luar Negeri (PHLN)
+,,07,Laporan Monitoring dan Evaluasi Kinerja (PK)
+,,08,Laporan Monitoring dan Evaluasi Capaian Rencana Kerja Pemerintah (RKP)
+,,09,Penyusunan Bahan DPR/DPD
+,,10,Penyusunan Bahan Sidang Kabinet
+,,11,Penyusunan Bahan Rapim/Rakorses
+KP,,,KEPEGAWAIAN
+,01,,TATA USAHA KEPEGAWAIAN
+,,01,Data Perorangan/DRH
+,,02,Database/Statistik
+,,03,NIP/Kartu Pegawai/Kartu PPNS
+,,04,KGB/Tunjangan Kinerja
+,,05,Pendaftaran/Keluarga/Perkawinan/Anak
+,,06,Penugasan / Penunjukan/ Surat Perintah / Pemanggilan / PLH / PLT / Surat Pernyataan/ Surat Keterangan / SPMT / SPMJ / SPP
+,,07,Penghargaan/Sertifikat/Piala/Piagam/Tanda Kehormatan
+,,08,Sumpah Pegawai
+,,09,Daftar Urut Kepangkatan (DUK)
+,,10,Cuti
+,,11,Izin Kerja / Izin Belajar / Izin Dispensasi / Izin Penelitian PKL / Izin PKL / Tugas Belajar
+,02,,PERENCANAAN PEGAWAI
+,,01,Analisis Jabatan /Analisis Beban Kerja / Evaluasi Jabatan / Kelas Jabatan / Peta Jabatan
+,,02,Formasi Pegawai / e-Formasi Pegawai
+,03,,PENGADAAN PEGAWAI
+,,01,Seleksi Pegawai / Penempatan Pegawai
+,,02,Pengangkatan dan Pengunduran Diri PNS / CPNS
+,,03,Non PNS
+,04,,MUTASI PEGAWAI
+,,01,Pemindahan PNS Antar Unit
+,,02,Pemindahan PNS Antar Instansi
+,,03,Pemindahan PNS Dengan Status Dipekerjakan/ Diperbantukan
+,,04,Kenaikan Pangkat Struktural dan Fungsional
+,,05,Peninjauan Masa Jabatan/Masa Kerja
+,,06,"Pengangkatan, Pemindahan, dan Pemberhentian dalam Jabatan Struktural"
+,,07,"Pengangkatan, Pemindahan, Pemberhentian dan Pembebasan Sementara dalam Jabatan Fungsional"
+,,08,Impassing / Mutasi Jabatan
+,,09,Baperjakat / Pelantikan /Serah Terima Jabatan
+,05,,PEMBINAAN KARIR PEGAWAI
+,,01,Analisis Kebutuhan Diklat (Perencanaan dan Monev)
+,,02,Pembinaan Mental Pegawai
+,06,,PENILAIAN PEGAWAI
+,,01,Assesment Pegawai / Kompetensi / Seleksi Jabatan
+,,02,"Ujian Dinas, Ujian Penyesuaian Ijazah"
+,,03,Disiplin / Teguran / Peringatan / Penundaan Gaji dan Pangkat / Penurunan Pangkat / Skorsing / Hukuman Jabatan
+,,04,Rehabilitasi / Permohonan Kerja Kembali
+,,05,Absensi / Jam Kerja
+,,06,SKP / DP3
+,,07,Angka Kredit Jabatan Fungsional
+,07,,KESEJAHTERAAN PEGAWAI
+,,01,Kesehatan / Uji Kesehatan / Medical Check Up/ Klinik
+,,02,Taspen / Askes / BPJS / Bapertarum / Kartu Pegawai / Kartu Istri / Kartu Suami
+,,03,Olahraga / Kesenian dan Budaya
+,08,,PEMBERHENTIAN DAN PENSIUN
+,,01,Pemberhentian Dengan Hormat / Pensiun Atas Permintaan Sendiri (APS) / Batas Usia Pensiun (BUP)
+,,02,Pemberhentian Dengan Tidak Hormat
+,,03,Pensiun Janda / Duda / Anak / Tewas
+,09,,PERKUMPULAN PEGAWAI / NON PEGAWAI
+,,01,KORPRI
+,,02,Dharma Wanita
+,,03,Koperasi
+,,04,Organisasi Lainnya
+OT,,,ORGANISASI DAN TATA LAKSANA
+,01,,ORGANISASI
+,,01,Struktur Organisasi
+,,02,Evaluasi Organisasi
+,,03,Penataan Organisasi
+,,04,Monitoring Organisasi
+,02,,TATA LAKSANA
+,,01,Proses Bisnis
+,,02,Standar Operational Procedure (SOP)
+,,03,Budaya Organisasi
+,,04,International Organization for Standardization (ISO)
+,03,,REFORMASI BIROKRASI (RB)
+,,01,Implementasi RB
+,,02,Monitoring dan Evaluasi RB
+KU,,,KEUANGAN
+,01,,ANGGARAN
+,,01,"RAPBN/ APBN (Rencana Kerja Pemerintah, Rencana Kerja Kementerian, Rencana Kerja Anggaran Kementerian, Rencana Anggaran Belanja, Rencana Penyerapan Anggaran, Rencana Penarikan Dana)"
+,,02,"DIPA (Rincian RKA-KL, Petunjuk Operasional Kegiatan (POK), Pergeseran/ Perubahan/ Revisi DIPA / POK DIPA, APBN, Pagu DIPA, Pagu Minus, Penyerapan/Realisasi Anggaran, UP, TUP, Dispensasi, Penyelesaian Tagihan, Penyelesaian Uang Muka, dan Pengembalian SPM)"
+,,03,ABT (Anggaran Belanja Tambahan)
+,,04,Berita Acara / Berita Acara Serah Terima
+,,05,Surat Perintah Perjalanan Dinas (SPPD)
+,,06,"SPP / Surat Permintaan Pembayaran (Belanja Pegawai, Belanja Barang, Belanja Modal, Belanja lain-lain)"
+,,07,"SPM / Surat Perintah Membayar (Belanja Pegawai, Belanja Barang, Belanja Modal, Belanja lain-lain)"
+,,08,SP2D (Surat Perintah Pencairan Dana)
+,,09,"Laporan Keuangan / Rekonsiliasi / Neraca (Triwulan, Semester, Tahunan)"
+,,10,Daftar Uang Makan/Uang Lembur/Honorarium/ Tunjangan Kinerja
+,,11,"Tanda Bukti Perjanjian (Bukti Pembelian, Kuitansi, SPK, Surat Perjanjian dan Surat Tagihan), Laporan Pertanggungjawaban Anggaran"
+,,12,Dana Operasional Menteri (DOM)
+,,13,SP3 (Surat Perintah Pengesahan Pendapatan)
+,,14,Laporan TEPRA (Tim Evaluasi dan Pengawasan Realisasi Anggaran)
+,,15,Sistem Perbendaharaan dan Anggaran Negara (SPAN)
+,,16,Monev Pelaksanaan Anggaran
+,02,,BANTUAN DAN PINJAMAN LUAR NEGERI
+,,01,Loan Agreement / Hibah Luar Negeri
+,,02,Ikhtisar Kegiatan
+,,03,Kerangka Acuan Kerja
+,,04,Studi Kelayakan
+,,05,Rincian Anggaran Biaya
+,,06,Dokumen Kontrak
+,,07,Reimburstment Kepada Negara / Badan Pemberian Bantuan
+,,08,SPP/SPM
+,,09,Pembukaan LC (Letter of Credit) / Valuta Asing / Penerbitan / Obligasi
+,03,,PENDAPATAN/PENERIMAAN
+,,01,Pajak
+,,02,Penerimaan Negara Bukan Pajak (PNBP)
+,,03,Sewa Pemanfaatan Aset / Barang Milik Negara
+,04,,PERBENDAHARAAN / Verifikasi
+,,01,Tuntutan Perbendaharaan/Tuntutan Ganti Rugi (TP/TGR)
+,,02,Rencana Kerja Anggaran (RKA)
+,,03,"Pertanggungjawaban Keuangan (SPP, SPM, SP2D, SP3, GU, LS, BKU, LPJ)"
+,05,,PENGELOLA KEUANGAN
+,,01,"Pejabat Perbendaharaan/Pengelola Anggaran (Kuasa Penggunaan Anggaran/ KPA, Pejabat Pembuat Komitmen/ PPK, Pejabat Penandatangan Surat Perintah Membayar / PPSPM, Pejabat Penguji, Bendahara Pengeluaran, Bendahara Penerima, Bendahara Pembantu Pengeluaran, Pejabat Pengadaan, Pajabat/Panitia Penerima Hasil Pekerjaan/ PPHP, Petugas Pengelola Administrasi Belanja Pegawai, Staf KPA, Staf PPK, dan Staf Bendahara)"
+HK,,,HUKUM
+,01,,PERATURAN PERUNDANG-UNDANGAN PRODUK KEMENTERIAN / LEMBAGA
+,,01,Undang-Undang Dasar
+,,02,Ketetapan MPR
+,,03,Undang-Undang
+,,04,Peraturan Pemerintah Pengganti Undang Undang
+,,05,Peraturan Pemerintah
+,,06,Peraturan Presiden
+,,07,Keputusan Presiden
+,,08,Instruksi Presiden
+,,09,Peraturan Daerah
+,,10,Keputusan / Peraturan Lembaga / Badan
+,,11,Peraturan Lainnya
+,02,,PERATURAN PERUNDANG-UNDANGAN PRODUK KEMENTERIAN KOMUNIKASI DAN INFORMATIKA
+,,01,Peraturan Menteri
+,,02,Keputusan Menteri
+,,03,Instruksi Menteri
+,,04,Keputusan Sekretaris Jenderal
+,,05,Keputusan Inspektur Jenderal
+,,06,Keputusan / Peraturan Direktur Jenderal
+,,07,Keputusan Kepala Badan
+,,08,Surat Edaran Menteri
+,,09,Surat Edaran Eselon I
+,,10,Pedoman
+,03,,PERATURAN PERUNDANG-UNDANGAN PRODUK DI LUAR KEMENTERIAN KOMUNIKASI DAN INFORMATIKA
+,,01,Peraturan Menteri
+,,02,Keputusan Menteri
+,,03,Instruksi Menteri
+,,04,Keputusan Sekretaris Jenderal
+,,05,Keputusan Inspektur Jenderal
+,,06,Keputusan / Peraturan Direktur Jenderal
+,,07,"Keputusan / Peraturan Gubernur, Perda, KPU"
+,,08,Keputusan Lembaga/Badan
+,,09,"Surat Edaran (Surat Edaran Menteri, Surat Edaran Eselon I)"
+,04,,PERATURAN BERSAMA / SURAT EDARAN BERSAMA DAN KESEPAKATAN BERSAMA (MoU) / KERJASAMA/ PERJANJIAN
+,,01,Luar Negeri
+,,02,Dalam Negeri
+,05,,PERDATA
+,,01,Perdata Umum (Tentang Orang / Pengaduan / Somasi / Sengketa / Perlindungan Hukum)
+,,02,Perdata Khusus (Niaga / Pajak)
+,,03,Berkas Proses Persidangan di Peradilan / Gugatan / Jawaban / Replik / Duplik / Kesimpulan / Putusan
+,,04,Pelaksanaan Putusan Peradilan
+,06,,PIDANA
+,,01,Pidana Umum
+,,02,Pidana Khusus
+,,03,Berkas Proses persidangan di Peradilan / Tuntutan / Jawaban / Saksi / Kesimpulan / Putusan
+,07,,TATA USAHA / ADMINISTRASI NEGARA
+,,01,Banding Administrasi
+,,02,Berkas Proses persidangan di Peradilan / Gugatan / Jawaban / Replik / Duplik / Kesimpulan / Putusan
+,08,,JUDISIAL REVIU PERUNDANG-UNDANGAN
+,,01,Judisial Reviu Undang-Undang terhadap Undang-Undang Dasar
+,,02,Judisial Reviu Perundang-Undangan di bawah Undang-Undang terhadap Undang-Undang
+,09,,PERIZINAN
+,,01,Pemberian / Persetujuan / Kewenangan / Rekomendasi
+,,02,Penolakan
+,,03,Peringatan
+,,04,Pencabutan
+,,05,Perpanjangan Izin
+,,06,Dispensasi
+,10,,SURAT KUASA
+,,01,Surat Kuasa Khusus
+,,02,Surat Kuasa Subtitusi
+,,03,Surat Kuasa Lainnya
+UM,,,UMUM
+,01,,TATA USAHA  
+,,01,Pendistribusian Surat
+,,02,Pengiriman Surat/Barang Tercetak dan Terekam
+,,03,Rapat Pimpinan
+,02,,RUMAH TANGGA
+,,01,"Kebersihan, Ketertiban dan Keamanan"
+,,02,"Izin peminjaman (Alat-alat, Ruangan, Lapangan, dll)"
+,,03,Rumah Dinas/Kendaraan Dinas
+,,04,Gedung/Perkantoran/Gudang
+,,05,Pakaian Dinas
+,,06,"Listrik/PAM/Telepon/AC/Lift, dll."
+,,07,Sumbangan / Bantuan
+,03,,KEARSIPAN
+,,01,Pembinaan Kearsipan
+,,02,Penyusunan Sistem Kearsipan
+,,03,Pemindahan
+,,04,Pemusnahan
+,,05,Penyerahan
+,,06,Pemeliharaan
+,,07,Berkas Proses Alih Media Arsip/Arsip Elektronik
+,,08,"Berita Acara (Pemusnahan, Pemindahan, dan Penyerahan)"
+,,09,Layanan Kearsipan (Peminjaman dan Penggunaan Arsip)
+,,10,Audit Kearsipan
+PL,,,PERLENGKAPAN
+,01,,PENGGUNAAN BARANG MILIK NEGARA
+,,01,Alih Status penggunaan Barang Milik Negara
+,,02,Penetapan status penggunaan Barang Milik Negara
+,,03,Penggunaan sementara Barang Milik Negara
+,,04,Laporan Penggunaan Barang Milik Negara
+,02,,PEMANFAATAN BARANG MILIK NEGARA (BMN)
+,,01,Sewa Barang Milik Negara
+,,02,Pinjam Pakai Barang Milik Negara
+,,03,Kerjasama Pemanfaatan Barang Milik Negara
+,,04,Bangun Guna Serah/Bangun Serah Guna
+,,05,Kerjasama Penyediaan Infrastruktur
+,,06,Laporan Pemanfaatan Barang Milik Negara
+,03,,PENGAMANAN DAN PEMELIHARAAN BARANG MILIK NEGARA
+,,01,Sertifikasi / Penyimpanan / Pergudangan Barang Milik Negara
+,,02,Pemeliharaan Barang Milik Negara
+,,03,Laporan Pengamanan dan/atau Pemeliharaan Barang Milik Negara
+,04,,PEMINDAHTANGANAN BARANG MILIK NEGARA
+,,01,Penjualan Barang Milik Negara 
+,,02,Tukar Menukar Barang Milik Negara
+,,03,Hibah Barang Milik Negara
+,,04,Penyertaan Modal Pemerintah Pusat/Daerah
+,,05,Laporan Pemindahtanganan Barang Milik Negara
+,05,,PENGHAPUSAN BARANG MILIK NEGARA
+,,01,Pemusnahan Barang Milik Negara
+,,02,Penghapusan Barang Milik Negara
+,,03,Laporan Penghapusan Barang Milik Negara
+,06,,INVENTARISASI DAN PELAPORAN BARANG MILIK NEGARA
+,,01,Inventarisasi Barang Milik Negara
+,,02,Tukar Menukar Barang Milik Negara
+,,03,Penilaian Barang Milik Negara
+,,04,Laporan Hasil Inventariasi Barang Milik Negara
+,,05,Pencatatan Barang Milik Negara
+,,06,Laporan Barang Milik Negara
+,,07,Barang Milik Negara Berupa Rumah Negara
+,07,,"PEMBINAAN, PENGAWASAN DAN PENGENDALIAN BARANG MILIK NEGARA"
+,,01,Pembinaan Pengelolaan Barang Milik Negara
+,,02,Pemantauan dan Penertiban Barang Milik Negara
+,,03,Laporan Pembinaan Pengelolaan Barang Milik Negara
+,,04,Laporan Pengawasan dan pengendalian Barang Milik Negara
+UP,,,UNIT PENGADAAN
+,01,,PENGADAAN
+,,01,Rencana Umum Pengadaan (RUP)
+,,02,Rekanan / Penawaran / Proposal / Brosur
+,,03,Swakelola
+,,04,Penyedia
+,,05,Monev
+,,06,Pembinaan Barang dan Jasa
+HM,,,INFORMASI DAN HUBUNGAN MASYARAKAT
+,01,,PELAYANAN MEDIA ONLINE
+,,01,Layanan Permohonan Informasi
+,,02,Layanan Keberatan Informasi
+,,03,Layanan Penyelesaian Sengketa Informasi
+,,04,Monitoring Layanan Informasi
+,,05,Laporan Layanan Informasi: Bulanan dan Tahunan
+,,06,Layanan Informasi Media Call Center
+,02,,PELAYANAN MEDIA KONVENSIONAL (PAMERAN)
+,,01,Layanan Informasi Media Tercetak
+,,02,Layanan Informasi Media Elektronik
+,,03,Layanan Informasi Media Langsung
+,03,,HUBUNGAN MASYARAKAT
+,,01,Dengar Pendapat/Hearing DPR
+,,02,Bakohumas
+,,03,"Ucapan: Terimakasih, Selamat, dll"
+,,04,Hubungan dengan Organisasi Kemasyarakatan: KIM
+,,05,Hubungan dengan Komunikasi Internal
+,,06,"Hubungan Komunikasi Eksternal: Dialog Interaktif TV, Radio, dan SMS Blast"
+,04,,KEPROTOKOLAN
+,,01,Upacara
+,,02,Acara Kedinasan
+,,03,Kunjungan
+,,04,Agenda Pimpinan
+,05,,PUBLIKASI
+,,01,Liputan/Pemberitaan
+,,02,Jumpa Pers
+,,03,Wawancara
+,,04,Kliping
+,,05,Majalah / Tabloid / Jurnal / Booklet / Leaflet
+,,06,Press Release
+,,07,Advetorial
+,,08,Televisi / Radio
+,06,,DOKUMENTASI
+,,01,Foto
+,,02,Cetak
+,,03,Audio Visual
+,,04,Audio Video
+,07,,PERPUSTAKAAN
+,,01,Layanan Pustaka
+,,02,Pengelolaan Pustaka
+,,03,Pengadaan Bahan Pustaka
+PW,,,PENGAWASAN
+,01,,PROGRAM
+,,01,Program Audit Kinerja
+,,02,Program Pemeriksaan dengan Tujuan Tertentu (Investigasi)
+,,03,Program Kegiatan Monitoring
+,,04,Program Kegiatan Reviu
+,,05,Program Kegiatan Evaluasi
+,,06,Program Kegiatan Pengawasan lainnya
+,02,,PELAKSANAAN
+,,01,Audit Kinerja
+,,02,Audit Investigasi
+,,03,Monitoring
+,,04,Pelaksanaan Reviu
+,,05,Pelaksanaan Evaluasi
+,,06,Pengawasan Lainnya
+,03,,PELAPORAN
+,,01,Gratifikasi
+,,02,LHKPN / LHK-ASN
+,,03,Benturan Kepentingan
+,,04,Zona Integritas
+,,05,Whistle Blowing System (WBS)
+,04,,PELAPORAN AUDIT
+,,01,Laporan Hasil Audit
+,,02,Laporan Hasil Pemeriksaan dengan Tujuan Tertentu (Audit Investigasi)
+,,03,Laporan Hasil Kegiatan Monitoring
+,,04,Laporan Hasil Reviu
+,,05,Laporan Hasil Kegiatan Evaluasi
+,,06,Laporan Hasil Pengawasan Lainnya
+,05,,TINDAK LANJUT HASIL PENGAWASAN
+,,01,Tindak Lanjut Pemeriksaan Internal
+,,02,Tindak Lanjut Pemeriksaan Eksternal
+,,03,Tindak Lanjut Pengaduan Masyarakat
+LT,,,PENELITIAN DAN PENGEMBANGAN SDM
+,01,,PENELITIAN KOMUNIKASI DAN INFORMATIKA
+,,01,Administrasi Penelitian
+,,02,Pengolahan/Pengumpulan Data Penelitian
+,,03,FGD / Seminar Penelitian
+,,04,Laporan Hasil Penelitian
+,,05,Penjaminan Mutu dan Pendayagunaan Hasil Penelitian
+,02,,PENGEMBANGAN SDM BIDANG KOMINFO
+,,01,"Penyusunan Bidang Teknis Standarisasi Kompetensi, Pengembangan Profesi dan Pengembagan Sistem Sertifikasi Kominfo"
+,,02,"Pelaksanaan Standarisasi Kompetensi, Pengembangan Profesi dan Pengembangan Sistem Sertifikasi Kominfo, Pelatihan dan Fasilitasi Sertifikasi SKKNI"
+,,03,Program Beasiswa S2/S3 Dalam Negeri dan Luar Negeri
+,03,,SEKOLAH TINGGI MULTI MEDIA
+,,01,Penyelenggaraan Pendidikan dan pengajaran
+,,02,Penelitian
+,,03,Pengabdian Masyarakat/Kerjasama
+,,04,Ujian Kompetensi / Lembaga Sertifikasi Profesi (LSP)
+DL,,,PENDIDIKAN DAN PELATIHAN
+,01,,PERENCANAAN PENDIDIKAN DAN PELATIHAN
+,,01,"Kurikulum, Modul, Metode, Standar / Mutu, Pedoman Diklat, Dokumen Akademik, Sertifikat/STTPL"
+,,02,Program Diklat
+,02,,PENYELENGGARAAN PENDIDIKAN DAN PELATIHAN
+,,01,Ikatan Dinas
+,,02,Kerjasama dengan Instansi Pemerintah/Non Pemerintah/Perguruan Tinggi
+,,03,Pra Jabatan
+,,04,Penjenjangan Struktural
+,,05,Fungsional
+,,06,Teknis
+,,07,Bimbingan Teknis
+,03,,EVALUASI DAN PELAPORAN PENYELENGGARAAN PENDIDIKAN DAN PELATIHAN
+,,01,Evaluasi Materi Penyelenggaraan
+,,02,Evaluasi Pengajar/Instruktur/Fasilitator
+,,03,Evaluasi Sarana dan Prasarana
+,,04,"Evaluasi Kurikulum, Metode, dan Standarisasi"
+,,05,Evaluasi dan Laporan Penyelenggaraan
+DT,,,DATA DAN SARANA INFORMATIKA
+,01,,"PERENCANAAN STRATEGIS, TATA KELOLA DAN KEBIJAKAN TI (PLAN"
+,,01,Pengelolaan Tata Kelola TI
+,,02,Pengelolaan Rencana Strategis TI
+,,03,Pengelolaan Arsitektur TI Kementerian
+,,04,Pengelolaan Inovasi-inovasi TI
+,,05,Pengelolaan Portofolio Strategis dan Investasi TI
+,,06,Pengelolaan SDM TI
+,,07,Pengelolaan Hubungan Antara Stakeholder Perusahaan dengan Stakeholder TI
+,,08,Pengelolaan Perjanjian/Kontrak Tingkat Layanan (SLA & KPI)
+,,09,Pengelolaan Pemasok Layanan TI
+,,10,Pengelolaan Kualitas Layanan dan Solusi (ISO 9001)
+,,11,Pengelolaan Risiko TI
+,,12,Pengelolaan Keamanan Informasi (ISO 27001)
+,02,,"PERANCANGAN, PEMBANGUNAN, PENGEMBANGAN, PENGUJIAN DAN PENJAMINAN KUALITAS LAYANAN TI"
+,,01,Pengelolaan Program dan Proyek
+,,02,Pengelolaan Permintaan Layanan dan Insiden Layanan
+,,03,Pengelolaan Permasalahan Layanan TI (Database permasalahan)
+,,04,Pengelola Ketersediaan dan Kapasitas Layanan
+,,05,Pengelolaan Perubahan Organisasi
+,,06,Pengelolaan Permintaan Perubahan
+,,07,Pengelolaan Permintaan Perubahan dan Transisi Penerimaan Hal yang Baru
+,,08,Pengelolaan Pengetahuan
+,,09,Pengelolaan Semua Aset TI
+,,10,Pengelolaan Konfigurasi Layanan
+,03,,"PERENCANAAN, PENGELOLAAN, PENGAWASAN, DAN PENGOPERASIAN LAYANAN TI SERTA LAYANAN HELPDESK ATAU PERMINTAAN LAYANAN TI"
+,,01,Pengelolaan Operasional Layanan TI
+,,02,Pengelolaan Permintaan Layanan dan Insiden Layanan
+,,03,Pengelolaan Permasalahan Layanan TI (Database permasalahan)
+,,04,Pengelolaan Kontinuitas / keberlangsungan Layanan
+,,05,Pengelolaan Layanan untuk Layanan TI
+,,06,Pengelolaan Pengontrolan Proses Bisnis (ISO 27001 : Keamanan Informasi)
+,04,,PENGELOLAAN KINERJA LAYANAN TI ATAS HASIL MONITOR DAN EVALUASI KINERJA LAYANAN TI
+,,01,"Monitor, Evaluasi dan Penilaian Kinerja dan Kesesuaian dengan Tujuan Pencapaian"
+,,02,"Monitor, Evaluasi dan Penilaian Sistem Pengontrolan Internal"
+,,03,"Monitor, Evaluasi dan Penilaian Kepatuhan dengan Persyaratan Eksternal"
+,05,,LPSE (LAYANAN PENGADAAN SECARA ELEKTRONIK)
+,,01,Administrasi LPSE
+,,02,Aplikasi SPSE (Sistem Pengadaan Secara Elektronik)
+,,03,Verifikasi Penyedia
+,,04,"Akun (Pejabat Pengadaan, Panitia Pengadaan / ULP, Penyedia, Auditor, Helpdesk)"
+,,05,Pelatihan SPSE (Sistem Pengadaan Secara Elektronik)
+,,06,Standard LPSE
+,,07,Laporan
+KI,,,KELEMBAGAAN INTERNASIONAL
+,01,,MULTILATERAL
+,,01,International Telecommunication Union (ITU)
+,,02,Universal Postal Union (UPU)
+,,03,World Summit On Information Society (WSIS)
+,,04,World Trade Organization (WTO)
+,,05,European Telecommunication Standardization Institute (ETSI)
+,,06,United Nations (UN)
+,,07,Organisasi Internasional Lainnya
+,02,,REGIONAL
+,,01,Asia Pasific Telecommunity (APT)
+,,02,Association of South East Asian Nation (ASEAN)
+,,03,Asia Pasific Economic Coorperation on Telecommunications (APECTEL)
+,,04,Asian Pasific Postal Union (APPU)
+,,05,Organisasi Regional lainnya
+,03,,BILATERAL
+,,01,Information And Communication Joint Committee (ICJC)
+,,02,Border Communication Coordination Meeting (BCCM)
+,,03,Joint Committee On Communication (JCC)
+,,04,Trilateral Meeting
+,,05,Brunei Indonesia Malaysia Phillipine East Asean Growth Area (BIMP-EAGA) ICT Cluster Meeting
+,,06,Indonesia Malaysia Thailand Growth Triangle (IMT-GT)
+,,07,Sidang Komisi Bersama (SKB) Dengan Negara Mitra
+,,08,Economic Partnership Agreement
+,,09,Expert
+,,10,Perjanjian Internasional
+,,11,Korean Agency
+,,12,Japan Agency
+,,13,Kerjasama Capacity Building dengan Negara Mitra

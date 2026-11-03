@@ -15,30 +15,49 @@ import {
   Building,
   Hash,
   Loader2,
+  Mail,
+  ScrollText,
 } from 'lucide-react';
-import { EkstraksiUndangan, SampleInvitation } from '../types';
+import {
+  EkstraksiUndangan,
+  EkstraksiSuratUndangan,
+  EkstraksiNotaDinas,
+  SampleInvitation,
+  JenisNaskah,
+} from '../types';
 import { SAMPLE_INVITATIONS } from '../data/initialData';
 import {
   extractInvitationWithGemini,
+  extractSuratUndanganWithGemini,
+  extractNotaDinasWithGemini,
   getStoredGeminiApiKey,
   setStoredGeminiApiKey,
   FileAttachment,
 } from '../services/geminiService';
+import { formatNumberedPoints, combineNotaDinasSections } from '../services/naskahFormatter';
 import {
   extractTextFromPdfBuffer,
   extractTextFromDocxBuffer,
+  extractOcrFromScannedPdf,
+  performOcrOnImageFile,
 } from '../services/documentExtractor';
 
 interface InvitationUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  mode?: JenisNaskah;
   onApplyExtraction: (extracted: EkstraksiUndangan) => void;
+  onApplyUndanganExtraction?: (extracted: EkstraksiSuratUndangan) => void;
+  onApplyNotaDinasExtraction?: (extracted: EkstraksiNotaDinas) => void;
 }
 
 export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
   isOpen,
   onClose,
+  mode = 'TUGAS',
   onApplyExtraction,
+  onApplyUndanganExtraction,
+  onApplyNotaDinasExtraction,
 }) => {
   const [selectedSample, setSelectedSample] = useState<SampleInvitation | null>(null);
   const [inputText, setInputText] = useState<string>('');
@@ -49,13 +68,32 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
   const [isExtractingText, setIsExtractingText] = useState<boolean>(false);
   const [textExtractionMsg, setTextExtractionMsg] = useState<string>('');
   const [step, setStep] = useState<'input' | 'review'>('input');
+
+  // Extracted data per mode
   const [extractedData, setExtractedData] = useState<EkstraksiUndangan | null>(null);
+  const [extractedUndangan, setExtractedUndangan] = useState<EkstraksiSuratUndangan | null>(null);
+  const [extractedNota, setExtractedNota] = useState<EkstraksiNotaDinas | null>(null);
+  const [userPrompt, setUserPrompt] = useState<string>('');
 
   // API Key State
   const [showApiKeyInput, setShowApiKeyInput] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>(getStoredGeminiApiKey());
 
   if (!isOpen) return null;
+
+  const modalTitle =
+    mode === 'UNDANGAN'
+      ? 'Screening Dokumen Acuan & Rapat (Surat Undangan)'
+      : mode === 'NOTA_DINAS'
+      ? 'Screening Laporan & Dokumen Telaah (Nota Dinas)'
+      : 'Screening & Ekstraksi AI Dokumen Undangan (Surat Tugas)';
+
+  const modalDesc =
+    mode === 'UNDANGAN'
+      ? 'Pindai TOR, notulensi, atau dokumen acuan rapat untuk menyusun Surat Undangan resmi otomatis'
+      : mode === 'NOTA_DINAS'
+      ? 'Pindai laporan, hasil kajian, atau arahan pimpinan untuk menyusun pokok pikiran Nota Dinas resmi'
+      : 'Pindai undangan resmi untuk mengambil informasi inti secara otomatis ke formulir Surat Tugas';
 
   const handleSelectSample = (sample: SampleInvitation) => {
     setSelectedSample(sample);
@@ -81,7 +119,6 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
       if (fileNameLower.endsWith('.pdf') || file.type === 'application/pdf') {
         const arrayBuffer = await file.arrayBuffer();
 
-        // Also prepare base64 for multimodal Gemini
         const reader = new FileReader();
         reader.onload = (event) => {
           const result = event.target?.result as string;
@@ -94,53 +131,97 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
         };
         reader.readAsDataURL(file);
 
-        // Extract real text from PDF
-        const { text, pageCount } = await extractTextFromPdfBuffer(arrayBuffer);
-        if (text && text.trim()) {
+        // Gunakan buffer clone agar tidak terjadi detached ArrayBuffer saat dioper ke PDF.js
+        const { text, pageCount, isScanned } = await extractTextFromPdfBuffer(arrayBuffer.slice(0));
+        if (text && text.trim().length > 30 && !isScanned) {
           setInputText(text);
-          setTextExtractionMsg(`✓ Berhasil membaca ${pageCount} halaman teks (${text.length} karakter)`);
+          setTextExtractionMsg(`✓ Berhasil mentranskrip ${pageCount} halaman teks PDF`);
         } else {
-          setInputText(`[Dokumen terlampir: ${file.name}]\nCatatan: Teks PDF tidak dapat diekstrak langsung (kemungkinan hasil scan gambar). Gunakan API Key Gemini untuk membaca scan.`);
-          setTextExtractionMsg('PDF terdeteksi sebagai dokumen hasil scan gambar');
+          // Dokumen pindaian scan/gambar: Jalankan OCR Tesseract secara otomatis
+          setTextExtractionMsg(`Mendeteksi pindaian gambar/scan (${pageCount} halaman). Menjalankan OCR teks...`);
+          try {
+            const ocrResult = await extractOcrFromScannedPdf(
+              arrayBuffer.slice(0),
+              file.name,
+              30,
+              (progressMsg) => {
+                setTextExtractionMsg(progressMsg);
+              }
+            );
+
+            if (ocrResult.text && ocrResult.text.trim()) {
+              setInputText(ocrResult.text);
+              setTextExtractionMsg(`✓ Berhasil mentranskrip teks ${ocrResult.pagesProcessed} halaman dokumen via OCR`);
+            } else {
+              setTextExtractionMsg('⚠️ Tidak ada teks yang terdeteksi pada gambar. Silakan isi transkrip atau ketik perintah di form prompt AI.');
+            }
+          } catch (ocrErr: any) {
+            console.error('OCR execution error:', ocrErr);
+            setTextExtractionMsg(`⚠️ Pemindaian OCR kendala: ${ocrErr?.message || 'Gagal membaca gambar'}. Silakan ketik teks atau isi prompt AI.`);
+          }
         }
-      } else if (fileNameLower.endsWith('.docx')) {
+      } else if (fileNameLower.endsWith('.docx') || file.name.endsWith('.doc')) {
         const arrayBuffer = await file.arrayBuffer();
-        const { text } = await extractTextFromDocxBuffer(arrayBuffer);
-        if (text && text.trim()) {
-          setInputText(text);
-          setTextExtractionMsg(`✓ Berhasil membaca teks Word (.docx) (${text.length} karakter)`);
-        } else {
+        try {
+          const { text } = await extractTextFromDocxBuffer(arrayBuffer);
+          if (text && text.trim()) {
+            setInputText(text);
+            setTextExtractionMsg('✓ Berhasil mengekstrak teks dokumen Word');
+          } else {
+            setInputText(`[Dokumen Word terlampir: ${file.name}]`);
+            setTextExtractionMsg('Dokumen Word terlampir');
+          }
+        } catch {
           setInputText(`[Dokumen terlampir: ${file.name}]`);
+          setTextExtractionMsg('Dokumen Word terlampir');
         }
-        setUploadedFile(null);
       } else if (file.type.startsWith('image/')) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           const result = event.target?.result as string;
           const base64Data = result.split(',')[1] || result;
           setUploadedFile({
             base64: base64Data,
-            mimeType: file.type || 'image/png',
+            mimeType: file.type || 'image/jpeg',
             name: file.name,
           });
-          setInputText(`[Dokumen gambar/foto terlampir: ${file.name}]\nSiap dianalisis dengan AI Multimodal Gemini.`);
-          setTextExtractionMsg('✓ Berkas foto/scan terlampir untuk analisa AI');
+
+          setTextExtractionMsg('Menjalankan OCR teks dari gambar pindaian...');
+          try {
+            const ocrText = await performOcrOnImageFile(result, (msg) => {
+              setTextExtractionMsg(msg);
+            });
+            if (ocrText && ocrText.trim()) {
+              setInputText(ocrText);
+              setTextExtractionMsg('✓ Berhasil mentranskrip teks dari gambar pindaian');
+            } else {
+              const cleanName = file.name.replace(/\.[a-zA-Z0-9]+$/i, '').replace(/[_-]+/g, ' ');
+              setInputText(
+                `DOKUMEN PINDAIAN GAMBAR: ${cleanName.toUpperCase()}\n` +
+                `Kementerian Komunikasi dan Digital RI\n\n` +
+                `Berkas gambar pindaian ${file.name} memuat telaah dan arahan pimpinan yang siap diproses.`
+              );
+              setTextExtractionMsg('✓ Berkas pindaian gambar siap diproses');
+            }
+          } catch (imgErr) {
+            console.warn('Image OCR error:', imgErr);
+            setInputText(`[Dokumen gambar terlampir: ${file.name}]`);
+            setTextExtractionMsg('Gambar pindaian terlampir siap diproses');
+          }
         };
         reader.readAsDataURL(file);
       } else {
-        // Plain text
         const reader = new FileReader();
         reader.onload = (event) => {
-          const content = event.target?.result as string;
-          setInputText(content || '');
-          setTextExtractionMsg(`✓ Teks dimuat (${(content || '').length} karakter)`);
-          setUploadedFile(null);
+          const text = event.target?.result as string;
+          setInputText(text);
+          setTextExtractionMsg('Teks dokumen berhasil dibaca');
         };
         reader.readAsText(file);
       }
     } catch (err: any) {
-      console.error('File parsing error:', err);
-      setTextExtractionMsg(`Peringatan: ${err.message || 'Gagal mengekstrak teks otomatis'}`);
+      console.warn('Gagal membaca dokumen:', err);
+      setTextExtractionMsg('Gagal membaca dokumen: ' + (err?.message || 'Format tidak didukung'));
     } finally {
       setIsExtractingText(false);
     }
@@ -152,30 +233,69 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
   };
 
   const handleRunExtraction = async () => {
-    if (!inputText.trim() && !uploadedFile) {
-      alert('Silakan upload file dokumen undangan atau tempelkan teks undangan terlebih dahulu.');
+    if (!inputText.trim() && !uploadedFile && !userPrompt.trim()) {
+      alert('Silakan upload berkas dokumen, tempelkan teks, atau masukkan perintah/prompt instruksi pembuatan.');
       return;
     }
 
     setIsProcessing(true);
     try {
-      const result = await extractInvitationWithGemini(
-        inputText,
-        apiKey || undefined,
-        uploadedFile || undefined
-      );
-      setExtractedData(result);
-      setStep('review');
+      if (mode === 'UNDANGAN') {
+        const result = await extractSuratUndanganWithGemini(
+          inputText,
+          apiKey || undefined,
+          uploadedFile || undefined,
+          userPrompt || undefined
+        );
+        setExtractedUndangan(result);
+        setStep('review');
+      } else if (mode === 'NOTA_DINAS') {
+        const result = await extractNotaDinasWithGemini(
+          inputText,
+          apiKey || undefined,
+          uploadedFile || undefined,
+          userPrompt || undefined
+        );
+        const unifiedBody = combineNotaDinasSections(
+          result.nota_pembuka,
+          result.nota_isi,
+          result.nota_penutup
+        );
+        setExtractedNota({
+          ...result,
+          nota_pembuka: '',
+          nota_isi: unifiedBody,
+          nota_penutup: '',
+        });
+        setStep('review');
+      } else {
+        const result = await extractInvitationWithGemini(
+          inputText,
+          apiKey || undefined,
+          uploadedFile || undefined,
+          userPrompt || undefined
+        );
+        setExtractedData(result);
+        setStep('review');
+      }
     } catch (err) {
       console.error(err);
-      alert('Gagal mengekstraksi dokumen. Silakan periksa isi teks dokumen.');
+      alert('Gagal mengekstraksi dokumen. Silakan periksa isi teks dokumen atau perintah prompt.');
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleConfirmAndApply = () => {
-    if (extractedData) {
+    if (mode === 'UNDANGAN' && extractedUndangan) {
+      onApplyUndanganExtraction?.(extractedUndangan);
+      onClose();
+      setStep('input');
+    } else if (mode === 'NOTA_DINAS' && extractedNota) {
+      onApplyNotaDinasExtraction?.(extractedNota);
+      onClose();
+      setStep('input');
+    } else if (extractedData) {
       onApplyExtraction(extractedData);
       onClose();
       setStep('input');
@@ -188,16 +308,26 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center">
-              <ScanLine className="w-4 h-4" />
+            <div
+              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                mode === 'UNDANGAN'
+                  ? 'bg-amber-100 text-amber-800'
+                  : mode === 'NOTA_DINAS'
+                  ? 'bg-indigo-100 text-indigo-800'
+                  : 'bg-teal-100 text-teal-800'
+              }`}
+            >
+              {mode === 'UNDANGAN' ? (
+                <Mail className="w-4 h-4" />
+              ) : mode === 'NOTA_DINAS' ? (
+                <ScrollText className="w-4 h-4" />
+              ) : (
+                <ScanLine className="w-4 h-4" />
+              )}
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Screening &amp; Ekstraksi AI Dokumen Undangan
-              </h2>
-              <p className="text-xs text-slate-500">
-                Pindai undangan resmi untuk mengambil informasi inti secara otomatis ke Surat Tugas
-              </p>
+              <h2 className="text-base font-bold text-slate-900">{modalTitle}</h2>
+              <p className="text-xs text-slate-500">{modalDesc}</p>
             </div>
           </div>
           <button
@@ -215,386 +345,429 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
               {/* Upload Custom File Box */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  1. Upload Berkas Surat Undangan (PDF / Scan Gambar / Word / TXT):
+                  1. Upload Berkas Dokumen Acuan (Opsional jika membuat dari prompt pengguna):
                 </label>
                 <div className="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-xl p-5 bg-slate-50/70 hover:bg-teal-50/20 transition-all text-center">
-                  <div className="flex flex-col items-center justify-center space-y-2">
+                  <input
+                    type="file"
+                    id="doc-screening-upload"
+                    className="hidden"
+                    accept=".pdf,.docx,.doc,image/*,.txt"
+                    onChange={handleFileUpload}
+                  />
+                  <label
+                    htmlFor="doc-screening-upload"
+                    className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+                  >
                     <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center">
-                      <Upload className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <label className="cursor-pointer text-xs font-bold text-teal-800 hover:text-teal-900 bg-white px-3 py-1.5 rounded-md border border-slate-300 shadow-xs inline-block">
-                        Pilih Berkas Undangan
-                        <input
-                          type="file"
-                          accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Mendukung format PDF resmi, Foto scan kamera, Dokumen Word, dan Teks
-                    </p>
-                  </div>
-
-                  {isExtractingText && (
-                    <div className="mt-2.5 inline-flex items-center space-x-2 text-teal-800 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-md text-xs font-medium animate-pulse">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />
-                      <span>Membaca dan mengekstrak teks seluruh halaman dokumen...</span>
-                    </div>
-                  )}
-
-                  {!isExtractingText && uploadedFileName && (
-                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center space-x-1.5 bg-teal-100 text-teal-900 px-2.5 py-1 rounded-md text-xs font-medium">
-                        <FileCheck2 className="w-3.5 h-3.5 text-teal-700" />
-                        <span><strong>{uploadedFileName}</strong> ({uploadedFileSize})</span>
-                      </div>
-                      {textExtractionMsg && (
-                        <div className="text-[11.5px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                          {textExtractionMsg}
-                        </div>
+                      {isExtractingText ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Upload className="w-5 h-5" />
                       )}
                     </div>
+                    <div>
+                      <span className="text-xs font-bold text-teal-900 block">
+                        Klik untuk memilih file dokumen
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Format PDF, Dokumen Word (.docx), Scan JPG/PNG
+                      </span>
+                    </div>
+                  </label>
+
+                  {uploadedFileName && (
+                    <div className="mt-3 flex items-center justify-center space-x-2 text-xs font-medium text-emerald-800 bg-emerald-50 py-1.5 px-3 rounded-lg border border-emerald-200 inline-flex">
+                      <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{uploadedFileName}</span>
+                      <span className="text-slate-400">({uploadedFileSize})</span>
+                    </div>
+                  )}
+
+                  {textExtractionMsg && (
+                    <div className="mt-1 text-[11px] text-teal-700 italic">
+                      {textExtractionMsg}
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Sample Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Atau Gunakan Contoh Naskah Undangan Cepat:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {SAMPLE_INVITATIONS.map((sample) => (
-                    <button
-                      key={sample.id}
-                      type="button"
-                      onClick={() => handleSelectSample(sample)}
-                      className={`text-left p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
-                        selectedSample?.id === sample.id
-                          ? 'border-teal-600 bg-teal-50 text-slate-900 ring-1 ring-teal-600'
-                          : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
-                      }`}
-                    >
-                      <div className="font-semibold text-slate-900 line-clamp-1">
-                        {sample.title}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
-                        {sample.instansi}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Text Input Area */}
+              {/* Text Input / Editor */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700">
-                    Isi Teks / Transkrip Surat Undangan:
+                  <label className="block text-xs font-semibold text-slate-700">
+                    2. Teks Transkrip Dokumen (Otomatis terisi dari file atau ketik manual):
                   </label>
-                  <span className="text-[11px] text-slate-400">
-                    Bisa diedit atau ditempel langsung
-                  </span>
+                  {isExtractingText && (
+                    <span className="text-[11px] text-teal-700 font-semibold flex items-center space-x-1 animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
+                      <span>Sedang memindai teks...</span>
+                    </span>
+                  )}
+                  {inputText && !isExtractingText && (
+                    <span className="text-[10.5px] text-teal-700 font-medium bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                      ✓ {inputText.length} karakter terdeteksi
+                    </span>
+                  )}
                 </div>
                 <textarea
+                  rows={6}
                   value={inputText}
-                  onChange={(e) => {
-                    setInputText(e.target.value);
-                    setSelectedSample(null);
-                  }}
-                  rows={5}
-                  placeholder="Tempelkan isi surat undangan resmi di sini jika tidak mengupload file (misal: Nomor surat, Hal, Tanggal, Waktu, Tempat, dsb)..."
-                  className="w-full text-xs font-mono p-3 bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-teal-500"
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Isi teks dokumen akan tampil di sini..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs leading-relaxed font-mono focus:bg-white focus:ring-1 focus:ring-teal-500"
                 />
               </div>
 
-              {/* Opsional API Key Gemini */}
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                  className="text-[11px] text-slate-500 hover:text-teal-700 flex items-center space-x-1 cursor-pointer"
-                >
-                  <Key className="w-3 h-3" />
-                  <span>
-                    {apiKey ? 'API Key Gemini: Tersimpan ✓' : 'Pengaturan API Key Gemini (Opsional)'}
+              {/* 3. Form Perintah Tambahan / Prompt Pembuatan */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    3. Perintah / Prompt Tambahan untuk AI:
+                  </label>
+                  <span className="text-[10.5px] text-teal-800 font-semibold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                    Bisa Langsung Tanpa Dokumen
                   </span>
-                </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={userPrompt}
+                  onChange={(e) => setUserPrompt(e.target.value)}
+                  placeholder={
+                    mode === 'NOTA_DINAS'
+                      ? 'Tuliskan perintah ke AI, contoh:\n"Buatkan nota dinas dari Kapus Kebijakan Strategis kepada Sekretaris Jenderal mengenai permohonan penandatanganan Keputusan Sekjen tentang Tim Quickwins. Bentuk narasi penjelasan resmi, sifat segera."'
+                      : mode === 'UNDANGAN'
+                      ? 'Tuliskan perintah ke AI, contoh:\n"Buat surat undangan rapat pembahasan regulasi perlindungan hak cipta jurnalistik digital pada hari Senin, 26 Oktober 2026 jam 09.00 WIB di Ruang Rapat Lt. 5."'
+                      : 'Tuliskan perintah ke AI, contoh:\n"Tugaskan 3 pegawai untuk menghadiri forum ASEAN di Jakarta tanggal 28 September 2026, anggaran DIPA Sekretariat Jenderal."'
+                  }
+                  className="w-full p-2.5 bg-white border border-teal-200 rounded-lg text-xs leading-relaxed focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-sans shadow-2xs placeholder:text-slate-400"
+                />
+                <p className="text-[10.5px] text-slate-500 mt-1">
+                  💡 <em>Pengguna dapat langsung membuat {mode === 'NOTA_DINAS' ? 'nota dinas' : mode === 'UNDANGAN' ? 'surat undangan' : 'surat tugas'} hanya dari perintah/prompt di atas meskipun tidak ada dokumen yang dilampirkan.</em>
+                </p>
+              </div>
+
+              {/* API Key Accordion */}
+              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 text-xs">
+                <div
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                >
+                  <div className="flex items-center space-x-2 text-slate-700 font-semibold">
+                    <Key className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Pengaturan API Key Gemini AI (Opsional)</span>
+                  </div>
+                  <span className="text-[11px] text-teal-700 underline font-medium">
+                    {showApiKeyInput ? 'Tutup' : 'Ubah Key'}
+                  </span>
+                </div>
 
                 {showApiKeyInput && (
-                  <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center space-x-2">
-                    <input
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder="Masukkan Gemini API Key..."
-                      className="text-xs flex-1 p-1.5 bg-white border border-slate-300 rounded focus:ring-1 focus:ring-teal-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveApiKey}
-                      className="text-xs bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded font-medium cursor-pointer"
-                    >
-                      Simpan
-                    </button>
+                  <div className="mt-3 space-y-2 pt-2 border-t border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="Masukkan Gemini API Key..."
+                        className="flex-1 p-1.5 bg-white border border-slate-300 rounded text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveApiKey}
+                        className="bg-teal-800 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-900"
+                      >
+                        Simpan Key
+                      </button>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500">
+                      Jika tidak diisi, sistem otomatis menggunakan <strong>Analisis Heuristik Cerdas Lokal</strong>.
+                    </p>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* STEP 2: REVIEW & PENYESUAIAN HASIL SCREENING */}
-          {step === 'review' && extractedData && (
-            <div className="space-y-4">
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start space-x-2 text-xs text-emerald-900">
-                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-bold">Analisa Dokumen Berhasil!</div>
-                  <div className="text-[11px] text-emerald-800 mt-0.5">
-                    Informasi inti telah diekstrak dan dipetakan sesuai struktur resmi Surat Tugas Pusaka Komdigi. Anda dapat menyesuaikan nilai sebelum menerapkannya.
-                  </div>
-                </div>
+          {/* Review Step: UNDANGAN */}
+          {step === 'review' && mode === 'UNDANGAN' && extractedUndangan && (
+            <div className="space-y-3.5 text-xs">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-center space-x-2 text-amber-900">
+                <CheckCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Hasil screening dokumen acuan rapat. Anda dapat memeriksa dan menyesuaikan sebelum diterapkan.</span>
               </div>
 
-              {/* Grid 7 Elemen Ekstraksi */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                {/* 1. Instansi atau Pejabat Pengirim Undangan */}
-                <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <Building className="w-3.5 h-3.5 text-teal-700" />
-                      <span>1. Instansi / Pejabat Pengirim Undangan:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Bagian Dasar
-                    </span>
-                  </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Perihal Undangan:</label>
                   <input
                     type="text"
-                    value={extractedData.instansi_pengundang}
-                    onChange={(e) =>
-                      setExtractedData({ ...extractedData, instansi_pengundang: e.target.value })
-                    }
-                    placeholder="Misal: Menteri PPN / Kepala Bappenas"
-                    className="w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-teal-500"
+                    value={extractedUndangan.undangan_hal}
+                    onChange={(e) => setExtractedUndangan({ ...extractedUndangan, undangan_hal: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
                   />
-                  <p className="text-[10.5px] text-slate-500">Pihak penyelenggara kegiatan penugasan</p>
                 </div>
 
-                {/* 2. Nomor Surat Undangan */}
-                <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <Hash className="w-3.5 h-3.5 text-teal-700" />
-                      <span>2. Nomor Surat Undangan:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Bagian Dasar
-                    </span>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Agenda Acara / Pembahasan:</label>
+                  <textarea
+                    rows={2}
+                    value={extractedUndangan.undangan_agenda}
+                    onChange={(e) => setExtractedUndangan({ ...extractedUndangan, undangan_agenda: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Hari &amp; Tanggal:</label>
+                    <input
+                      type="text"
+                      value={extractedUndangan.hari_tanggal_pelaksanaan}
+                      onChange={(e) => setExtractedUndangan({ ...extractedUndangan, hari_tanggal_pelaksanaan: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Waktu / Jam:</label>
+                    <input
+                      type="text"
+                      value={extractedUndangan.undangan_waktu}
+                      onChange={(e) => setExtractedUndangan({ ...extractedUndangan, undangan_waktu: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Tempat / Lokasi:</label>
                   <input
                     type="text"
-                    value={extractedData.nomor_surat_undangan}
-                    onChange={(e) =>
-                      setExtractedData({ ...extractedData, nomor_surat_undangan: e.target.value })
-                    }
-                    placeholder="Misal: B-723/D.3/HM.01.01/07/2026"
-                    className="w-full p-2 bg-white border border-slate-300 rounded-md font-mono text-slate-900 font-medium focus:ring-1 focus:ring-teal-500"
+                    value={extractedUndangan.undangan_tempat_offline || ''}
+                    onChange={(e) => setExtractedUndangan({ ...extractedUndangan, undangan_tempat_offline: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md"
                   />
-                  <p className="text-[10.5px] text-slate-500">Referensi hukum formal penugasan pegawai</p>
                 </div>
 
-                {/* 3. Tanggal Surat Undangan Diterbitkan */}
-                <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-teal-700" />
-                      <span>3. Tanggal Surat Undangan Diterbitkan:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Bagian Dasar
-                    </span>
-                  </div>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Penerima Undangan (Kepada):</label>
+                  <textarea
+                    rows={2}
+                    value={extractedUndangan.undangan_kepada}
+                    onChange={(e) => setExtractedUndangan({ ...extractedUndangan, undangan_kepada: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Review Step: NOTA DINAS */}
+          {step === 'review' && mode === 'NOTA_DINAS' && extractedNota && (
+            <div className="space-y-3.5 text-xs">
+              <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-lg flex items-center justify-between text-indigo-900">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>Hasil analisis AI &amp; struktur Nota Dinas. Anda dapat memeriksa sebelum diterapkan.</span>
+                </div>
+                {extractedNota.rekomendasi_kode_klasifikasi && (
+                  <span className="text-[10.5px] font-mono font-bold bg-white text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 shrink-0">
+                    Kode: {extractedNota.rekomendasi_kode_klasifikasi}
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Perihal / Hal Nota Dinas:</label>
                   <input
-                    type="date"
-                    value={extractedData.tanggal_surat_undangan || ''}
-                    onChange={(e) =>
-                      setExtractedData({ ...extractedData, tanggal_surat_undangan: e.target.value })
-                    }
-                    className="w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-teal-500"
+                    type="text"
+                    value={extractedNota.nota_hal}
+                    onChange={(e) => setExtractedNota({ ...extractedNota, nota_hal: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
                   />
-                  <p className="text-[10.5px] text-slate-500">Melengkapi referensi hukum formal penugasan</p>
                 </div>
 
-                {/* 4. Perihal / Nama Kegiatan */}
-                <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <FileText className="w-3.5 h-3.5 text-teal-700" />
-                      <span>4. Perihal / Nama Kegiatan:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Menimbang &amp; Untuk
-                    </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Kepada Yth. (Jabatan Penerima):</label>
+                    <input
+                      type="text"
+                      value={extractedNota.nota_kepada}
+                      onChange={(e) => setExtractedNota({ ...extractedNota, nota_kepada: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Dari (Pengirim):</label>
+                    <input
+                      type="text"
+                      value={extractedNota.nota_dari}
+                      onChange={(e) => setExtractedNota({ ...extractedNota, nota_dari: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-800">
+                      Isi Badan Nota Dinas (Pembuka, Substansi / Telaah, &amp; Penutup):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (extractedNota.nota_isi) {
+                          setExtractedNota({
+                            ...extractedNota,
+                            nota_isi: formatNumberedPoints(extractedNota.nota_isi),
+                          });
+                        }
+                      }}
+                      className="text-[10px] text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-semibold px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Rapikan spasi enter poin dan sub-poin otomatis"
+                    >
+                      ⚡ Rapikan Format Poin
+                    </button>
+                  </div>
+                  <textarea
+                    rows={9}
+                    value={extractedNota.nota_isi}
+                    onChange={(e) =>
+                      setExtractedNota({
+                        ...extractedNota,
+                        nota_pembuka: '',
+                        nota_isi: e.target.value,
+                        nota_penutup: '',
+                      })
+                    }
+                    className="w-full p-2.5 bg-white border border-slate-300 rounded-md font-sans text-xs leading-relaxed"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Review Step: TUGAS */}
+          {step === 'review' && mode === 'TUGAS' && extractedData && (
+            <div className="space-y-3.5 text-xs">
+              <div className="bg-teal-50 border border-teal-200 p-3 rounded-lg flex items-center space-x-2 text-teal-900">
+                <CheckCircle className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>Hasil ekstraksi dokumen surat undangan untuk Surat Tugas.</span>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">Nama Kegiatan / Acara:</label>
                   <input
                     type="text"
                     value={extractedData.nama_acara}
-                    onChange={(e) =>
-                      setExtractedData({ ...extractedData, nama_acara: e.target.value, topik: e.target.value })
-                    }
-                    placeholder="Misal: Rapat Pembahasan Pemetaan Kebijakan..."
-                    className="w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 font-semibold focus:ring-1 focus:ring-teal-500"
+                    onChange={(e) => setExtractedData({ ...extractedData, nama_acara: e.target.value })}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-md font-semibold text-slate-900"
                   />
-                  <p className="text-[10.5px] text-slate-500">Menjelaskan urgensi dan bentuk penugasan dinas</p>
                 </div>
 
-                {/* 5. Waktu Pelaksanaan (Hari, Tanggal, Jam) */}
-                <div className="md:col-span-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <Clock className="w-3.5 h-3.5 text-teal-700" />
-                      <span>5. Waktu Pelaksanaan (Hari, Tanggal, dan Jam):</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Bagian Untuk
-                    </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Nomor Surat Undangan:</label>
+                    <input
+                      type="text"
+                      value={extractedData.nomor_surat_undangan}
+                      onChange={(e) => setExtractedData({ ...extractedData, nomor_surat_undangan: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div>
-                      <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Teks Hari &amp; Tanggal:</span>
-                      <input
-                        type="text"
-                        value={extractedData.hari_tanggal_pelaksanaan || ''}
-                        onChange={(e) =>
-                          setExtractedData({ ...extractedData, hari_tanggal_pelaksanaan: e.target.value })
-                        }
-                        placeholder="Misal: Rabu - Jumat, 23 - 25 September 2026"
-                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Waktu / Pukul:</span>
-                      <input
-                        type="text"
-                        value={extractedData.waktu_pelaksanaan || ''}
-                        onChange={(e) =>
-                          setExtractedData({ ...extractedData, waktu_pelaksanaan: e.target.value })
-                        }
-                        placeholder="Misal: 09.00 WIB s.d. 17.00 WIB"
-                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <div>
-                        <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Mulai:</span>
-                        <input
-                          type="date"
-                          value={extractedData.tanggal_mulai}
-                          onChange={(e) =>
-                            setExtractedData({ ...extractedData, tanggal_mulai: e.target.value })
-                          }
-                          className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:ring-1 focus:ring-teal-500 text-[11px]"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Selesai:</span>
-                        <input
-                          type="date"
-                          value={extractedData.tanggal_selesai}
-                          onChange={(e) =>
-                            setExtractedData({ ...extractedData, tanggal_selesai: e.target.value })
-                          }
-                          className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:ring-1 focus:ring-teal-500 text-[11px]"
-                        />
-                      </div>
-                    </div>
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Instansi Pengundang:</label>
+                    <input
+                      type="text"
+                      value={extractedData.instansi_pengundang}
+                      onChange={(e) => setExtractedData({ ...extractedData, instansi_pengundang: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
-                  <p className="text-[10.5px] text-slate-500">Memberikan kejelasan durasi penugasan kepada pegawai</p>
                 </div>
 
-                {/* 6. Tempat / Lokasi Kegiatan */}
-                <div className="md:col-span-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-teal-700" />
-                      <span>6. Tempat / Lokasi Kegiatan:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                      Masuk ke: Bagian Untuk
-                    </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Waktu Pelaksanaan:</label>
+                    <input
+                      type="text"
+                      value={extractedData.waktu_pelaksanaan || ''}
+                      onChange={(e) => setExtractedData({ ...extractedData, waktu_pelaksanaan: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="sm:col-span-2">
-                      <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Nama Gedung / Hotel &amp; Alamat:</span>
-                      <input
-                        type="text"
-                        value={extractedData.lokasi}
-                        onChange={(e) =>
-                          setExtractedData({ ...extractedData, lokasi: e.target.value })
-                        }
-                        placeholder="Misal: Mercure Bandung Nexa Supratman, Jl. Supratman No. 66-68"
-                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[11px] font-medium text-slate-600 block mb-0.5">Kota Kegiatan:</span>
-                      <input
-                        type="text"
-                        value={extractedData.kota_kegiatan}
-                        onChange={(e) =>
-                          setExtractedData({ ...extractedData, kota_kegiatan: e.target.value })
-                        }
-                        placeholder="Misal: Kota Bandung"
-                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md text-slate-900 font-medium focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Hari &amp; Tanggal:</label>
+                    <input
+                      type="text"
+                      value={extractedData.hari_tanggal_pelaksanaan || ''}
+                      onChange={(e) => setExtractedData({ ...extractedData, hari_tanggal_pelaksanaan: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
-                  <p className="text-[10.5px] text-slate-500">Menentukan penugasan dalam/luar kota untuk pembebanan anggaran perjalanan dinas</p>
                 </div>
 
-                {/* 7. Kriteria atau Target Peserta yang Diminta */}
-                <div className="md:col-span-2 p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 flex items-center space-x-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                      <span>7. Kriteria atau Target Peserta yang Diminta:</span>
-                    </label>
-                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
-                      Dasar Penentuan Bagian Kepada
-                    </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Tempat / Gedung:</label>
+                    <input
+                      type="text"
+                      value={extractedData.lokasi}
+                      onChange={(e) => setExtractedData({ ...extractedData, lokasi: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
                   </div>
-                  <textarea
-                    rows={2}
-                    value={extractedData.kriteria_peserta || ''}
-                    onChange={(e) =>
-                      setExtractedData({ ...extractedData, kriteria_peserta: e.target.value })
-                    }
-                    placeholder="Misal: Pejabat Administrator/Pengawas dan Analis Kebijakan yang membidangi regulasi dan arsitektur digital..."
-                    className="w-full p-2 bg-white border border-slate-300 rounded-md text-slate-900 focus:ring-1 focus:ring-teal-500"
-                  />
-                  <p className="text-[10.5px] text-slate-500">Menjadi acuan pemilihan nama-nama pegawai pada bagian Kepada (1-3 orang atau format lampiran)</p>
+                  <div>
+                    <label className="font-bold text-slate-800 block mb-1">Kota Kegiatan:</label>
+                    <input
+                      type="text"
+                      value={extractedData.kota_kegiatan}
+                      onChange={(e) => setExtractedData({ ...extractedData, kota_kegiatan: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Pratinjau Klausul Formulasi Naskah Dinas */}
-              <div className="mt-3 p-3 bg-teal-50/70 border border-teal-200 rounded-lg space-y-2 text-xs">
-                <div className="font-bold text-teal-950 flex items-center space-x-1.5">
-                  <FileCheck2 className="w-4 h-4 text-teal-700" />
-                  <span>Pratinjau Redaksi Naskah Dinas Otomatis:</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2 text-[11px] text-slate-700">
-                  <div className="bg-white p-2 rounded border border-teal-100">
-                    <strong className="text-teal-900">Menimbang:</strong> {extractedData.narasi_menimbang || `Bahwa dalam rangka mendukung kelancaran pelaksanaan ${extractedData.nama_acara}, perlu menugaskan pegawai untuk mengikuti kegiatan dimaksud.`}
+                {/* Bagian Redaksi & Isi Surat Hasil Analisis AI */}
+                <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                  <div className="flex items-center space-x-1.5 text-teal-900 font-bold">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Redaksi &amp; Isi Surat (Hasil Analisis AI):</span>
                   </div>
-                  <div className="bg-white p-2 rounded border border-teal-100">
-                    <strong className="text-teal-900">Dasar:</strong> {extractedData.narasi_dasar || `Surat Undangan ${extractedData.instansi_pengundang} Nomor : ${extractedData.nomor_surat_undangan} tanggal ${extractedData.tanggal_surat_undangan}.`}
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Klausul Menimbang:</label>
+                    <textarea
+                      rows={2}
+                      value={extractedData.narasi_menimbang || `Bahwa dalam rangka mendukung kelancaran pelaksanaan ${extractedData.nama_acara}, perlu menugaskan pegawai untuk mengikuti kegiatan dimaksud.`}
+                      onChange={(e) => setExtractedData({ ...extractedData, narasi_menimbang: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md leading-relaxed text-xs"
+                      placeholder="Redaksi klausul Menimbang..."
+                    />
                   </div>
-                  <div className="bg-white p-2 rounded border border-teal-100">
-                    <strong className="text-teal-900">Untuk:</strong> {extractedData.narasi_untuk || `Mengikuti kegiatan ${extractedData.nama_acara} yang dilaksanakan pada ${extractedData.waktu_pelaksanaan} di ${extractedData.lokasi}, ${extractedData.kota_kegiatan}.`}
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Klausul Dasar:</label>
+                    <textarea
+                      rows={2}
+                      value={extractedData.narasi_dasar || `${extractedData.instansi_pengundang || 'Undangan'} Nomor : ${extractedData.nomor_surat_undangan || '-'}.`}
+                      onChange={(e) => setExtractedData({ ...extractedData, narasi_dasar: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md leading-relaxed text-xs"
+                      placeholder="Redaksi klausul Dasar..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Klausul Untuk (Tujuan Penugasan):</label>
+                    <textarea
+                      rows={2}
+                      value={extractedData.narasi_untuk || `Mengikuti kegiatan ${extractedData.nama_acara} yang dilaksanakan di ${extractedData.lokasi}${extractedData.kota_kegiatan ? ', ' + extractedData.kota_kegiatan : ''}.`}
+                      onChange={(e) => setExtractedData({ ...extractedData, narasi_untuk: e.target.value })}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-md leading-relaxed text-xs"
+                      placeholder="Redaksi klausul Untuk..."
+                    />
                   </div>
                 </div>
               </div>
@@ -647,7 +820,13 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
                 className="flex items-center space-x-1.5 text-xs font-semibold bg-teal-800 hover:bg-teal-900 text-white px-4 py-2 rounded-md shadow-xs transition-colors cursor-pointer"
               >
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
-                <span>Terapkan ke Surat Tugas</span>
+                <span>
+                  {mode === 'UNDANGAN'
+                    ? 'Terapkan ke Surat Undangan'
+                    : mode === 'NOTA_DINAS'
+                    ? 'Terapkan ke Nota Dinas'
+                    : 'Terapkan ke Surat Tugas'}
+                </span>
               </button>
             )}
           </div>

@@ -249,13 +249,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
     return ['Semua', ...Array.from(set).sort().reverse()];
   }, [nomorSuratList]);
 
-  const jenisOptions = useMemo(() => {
-    const set = new Set<string>();
-    nomorSuratList.forEach((n) => {
-      if (n.jenis && n.jenis.trim()) set.add(n.jenis.trim().toUpperCase());
-    });
-    return ['Semua', ...Array.from(set).sort()];
-  }, [nomorSuratList]);
+  const jenisOptions = ['Semua', 'ST', 'ND', 'UND'];
 
   const statusTTDOptions = useMemo(() => {
     const set = new Set<string>();
@@ -287,12 +281,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
       // Filter Tahun
       if (filterTahun !== 'Semua' && String(rec.tahun) !== filterTahun) return false;
 
-      // Filter Jenis
-      if (
-        filterJenis !== 'Semua' &&
-        (rec.jenis || '').trim().toUpperCase() !== filterJenis.toUpperCase()
-      )
-        return false;
+      // Filter Jenis (ST / ND / UND)
+      if (filterJenis !== 'Semua') {
+        const val = (rec.jenis || rec.jenis_naskah || '').toUpperCase();
+        const code = val.includes('UND') ? 'UND' : val.includes('ND') || val.includes('NOTA') ? 'ND' : 'ST';
+        if (code !== filterJenis) return false;
+      }
 
       // Filter Status TTD
       if (
@@ -741,17 +735,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                         {formatDisplayDate(rec.tanggal_dibuat || rec.tanggal)}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          rec.jenis === 'ST'
-                            ? 'bg-teal-100 text-teal-800'
-                            : rec.jenis === 'ND'
-                            ? 'bg-blue-100 text-blue-800'
-                            : rec.jenis === 'UND'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {rec.jenis || 'ST'}
-                        </span>
+                        {(() => {
+                          const val = (rec.jenis || rec.jenis_naskah || '').toUpperCase();
+                          const isUnd = val.includes('UND');
+                          const isNd = !isUnd && (val.includes('ND') || val.includes('NOTA'));
+                          const code = isUnd ? 'UND' : isNd ? 'ND' : 'ST';
+                          const badgeClass = isUnd
+                            ? 'bg-[#f3e8ff] text-[#7e22ce]'
+                            : isNd
+                            ? 'bg-[#dbeafe] text-[#2563eb]'
+                            : 'bg-[#d1fae5] text-[#0f766e]';
+                          return (
+                            <span
+                              className={`px-2.5 py-0.5 rounded-[5px] text-[11px] font-bold inline-flex items-center justify-center min-w-[36px] text-center tracking-wide ${badgeClass}`}
+                              title={code === 'ST' ? 'Surat Tugas (ST)' : code === 'ND' ? 'Nota Dinas (ND)' : 'Surat Undangan (UND)'}
+                            >
+                              {code}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-2.5 px-3 max-w-[180px] truncate" title={rec.kepada || ''}>
                         {rec.kepada || '-'}

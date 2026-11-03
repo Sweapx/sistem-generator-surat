@@ -34,3 +34,5 @@ dist-ssr
 
 # Temp / OS
 Thumbs.db
+scratch/
+*.traineddata

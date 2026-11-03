@@ -15,6 +15,44 @@
   }
 }
 
+/* ─── Panel Kiri Form: scroll independen ─────────────────── */
+.lg\:col-span-5[style*="overflow-y: auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar {
+  width: 5px;
+}
+.lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* ─── Panel Kanan Preview: scroll independen ─────────────── */
+.preview-scroll-container,
+.lg\:col-span-7[style*="overflow-y: auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+.preview-scroll-container::-webkit-scrollbar,
+.lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.preview-scroll-container::-webkit-scrollbar-track,
+.lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+.preview-scroll-container::-webkit-scrollbar-thumb,
+.lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+.preview-scroll-container::-webkit-scrollbar-thumb:hover,
+.lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Styling untuk field yang dapat diedit langsung di lembar surat */
 .editable-text-field {
   border-radius: 3px;
@@ -69,6 +107,32 @@
     padding: 0 !important;
   }
 
+  .preview-scroll-container {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+  }
+
+  .preview-doc-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 auto !important;
+    position: static !important;
+    display: block !important;
+  }
+
+  .preview-doc-inner {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    display: block !important;
+  }
+
   /* Tampilkan area dokumen surat tugas secara bersih di aliran dokumen utama */
   #surat-tugas-document {
     visibility: visible !important;
@@ -106,3 +170,18 @@
   }
 }
 
+
+/* --- Format teks ringan (RichEditable / pratinjau) --- */
+.rt-line { min-height: 1em; }
+.rt-line[data-list='b'] { position: relative; padding-left: 20px; }
+.rt-line[data-list='b']::before { content: '\2022'; position: absolute; left: 6px; }
+.rt-h1 { font-weight: 700; font-size: 1.17em; text-indent: 0 !important; margin: 5px 0 3px; }
+.rt-h2 { font-weight: 700; font-size: 1.08em; text-indent: 0 !important; margin: 4px 0 3px; }
+.rt-nota .rt-p { text-indent: 32px; margin: 4px 0; line-height: 1.42; text-align: justify; }
+.rt-nota .rt-num { padding-left: 24px; text-indent: -24px; margin: 5px 0 3px; line-height: 1.42; text-align: justify; }
+.rt-nota .rt-sub { padding-left: 38px; text-indent: -18px; margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
+.rt-nota .rt-b { margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
+.rt-nota .rt-kv { display: flex; align-items: flex-start; padding-left: 32px; text-indent: 0 !important; margin: 2px 0; line-height: 1.4; text-align: left; }
+.rt-nota .rt-kv-key { width: 155px; flex-shrink: 0; }
+.rt-nota .rt-kv-sep { width: 16px; flex-shrink: 0; text-align: center; }
+.rt-nota .rt-kv-val { flex: 1; min-width: 0; }

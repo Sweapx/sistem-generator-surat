@@ -1,5 +1,10 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { EkstraksiUndangan } from '../types';
+import { EkstraksiUndangan, EkstraksiSuratUndangan, EkstraksiNotaDinas } from '../types';
+import {
+  smartLocalExtractSuratTugas,
+  smartLocalExtractSuratUndangan,
+  smartLocalExtractNotaDinas,
+} from './localDocumentIntelligence';
 
 const STORAGE_KEY_GEMINI_KEY = 'pusaka_gemini_api_key';
 
@@ -88,7 +93,8 @@ export function parseIndonesianDate(text: string): string | null {
 export async function extractInvitationWithGemini(
   textOrPrompt: string,
   apiKeyOverride?: string,
-  fileAttachment?: FileAttachment
+  fileAttachment?: FileAttachment,
+  userPrompt?: string
 ): Promise<EkstraksiUndangan> {
   const apiKey =
     apiKeyOverride?.trim() ||
@@ -97,16 +103,18 @@ export async function extractInvitationWithGemini(
 
   const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
 
-  // If no Gemini API key or set to placeholder, use deep heuristic extraction
+  // If no Gemini API key or set to placeholder, use deep heuristic extraction with prompt support
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    return deepHeuristicExtract(cleanText || textOrPrompt, fileAttachment?.name);
+    return smartLocalExtractSuratTugas(cleanText || textOrPrompt, fileAttachment?.name, userPrompt);
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
 
     const promptText = `Anda adalah Analis Tata Usaha (TU) Senior Kementerian Komunikasi dan Digital RI (Komdigi).
-Tugas Anda adalah menelaah, men-screening, dan menganalisa dokumen surat undangan resmi kedinasan secara SANGAT MENDALAM, RINCI, DAN PRESISI untuk pembuatan Surat Tugas resmi.
+Tugas Anda adalah menelaah, men-screening, dan menganalisa dokumen surat undangan resmi kedinasan dan/atau perintah pengguna secara SANGAT MENDALAM, RINCI, DAN PRESISI untuk pembuatan Surat Tugas resmi.
+
+${userPrompt ? `INSTRUKSI/PERINTAH TAMBAHAN DARI PENGGUNA (PRIORITASKAN & PATUHI INI):\n"""\n${userPrompt}\n"""\n` : ''}
 
 BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
 1. Instansi atau Pejabat Pengirim Undangan:
@@ -256,8 +264,8 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
 
     throw lastError || new Error('Semua model Gemini gagal merespons');
   } catch (err) {
-    console.warn('Gemini AI extraction unavailable, performing deep heuristic parsing:', err);
-    return deepHeuristicExtract(cleanText || textOrPrompt, fileAttachment?.name);
+    console.warn('Gemini AI extraction unavailable, performing smart local document intelligence:', err);
+    return smartLocalExtractSuratTugas(cleanText || textOrPrompt, fileAttachment?.name);
   }
 }
 
@@ -491,4 +499,248 @@ export function deepHeuristicExtract(text: string, fileName?: string): Ekstraksi
     narasi_untuk: narasiUntuk,
     keterangan_tambahan: 'Dianalisis secara mendalam melalui Modul Ekstraksi Dokumen Dinas Pusaka Komdigi',
   };
+}
+
+/**
+ * Service to extract structured Surat Undangan data using Gemini AI or heuristic fallback
+ */
+/**
+ * Service to extract structured Surat Undangan data using Gemini AI or heuristic fallback
+ */
+export async function extractSuratUndanganWithGemini(
+  textOrPrompt: string,
+  apiKeyOverride?: string,
+  fileAttachment?: FileAttachment,
+  userPrompt?: string
+): Promise<EkstraksiSuratUndangan> {
+  const apiKey = apiKeyOverride?.trim() || getStoredGeminiApiKey()?.trim() || '';
+  const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
+
+  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Anda adalah Analis Tata Naskah Dinas Kementerian Komunikasi dan Digital RI (PUSAKA).
+Telaah dokumen acuan berikut dan/atau perintah pengguna untuk menyusun SURAT UNDANGAN RESMI:
+
+${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI INI):\n"""\n${userPrompt}\n"""\n` : ''}
+
+1. Perihal / Hal Undangan: Judul/perihal surat undangan yang ringkas dan jelas.
+2. Agenda Pembahasan: Poin-poin atau uraian agenda rapat yang akan dibahas.
+3. Hari dan Tanggal Pelaksanaan: Contoh "Senin, 27 Oktober 2026"
+4. Waktu Pelaksanaan: Contoh "09.00 WIB s.d. selesai"
+5. Tipe Tempat: "hybrid", "offline", atau "online"
+6. Tempat Fisik (Offline): Ruang rapat, nama gedung, dan alamat jika ada.
+7. Tempat Daring (Online): Link video conference jika ada.
+8. Paragraf Pengantar/Pembuka: Paragraf pengantar yang sopan sesuai tata naskah dinas Komdigi.
+9. Daftar Pihak yang Diundang (undangan_kepada): Daftar nama pejabat/satker yang diundang (format: "(Daftar Terlampir)\\ndi Tempat" atau rincian pejabat).
+10. Sifat Surat: "Biasa", "Segera", atau "Penting"`;
+
+      const parts: any[] = [{ text: prompt }];
+      if (fileAttachment && fileAttachment.base64) {
+        parts.push({
+          inlineData: {
+            mimeType: fileAttachment.mimeType || 'application/pdf',
+            data: fileAttachment.base64,
+          },
+        });
+      }
+      if (cleanText) {
+        parts.push({ text: `Dokumen Acuan:\n"""\n${cleanText}\n"""` });
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              undangan_hal: { type: Type.STRING },
+              undangan_agenda: { type: Type.STRING },
+              hari_tanggal_pelaksanaan: { type: Type.STRING },
+              undangan_waktu: { type: Type.STRING },
+              undangan_tipe_tempat: { type: Type.STRING },
+              undangan_tempat_offline: { type: Type.STRING },
+              undangan_tempat_online: { type: Type.STRING },
+              undangan_pembuka: { type: Type.STRING },
+              undangan_kepada: { type: Type.STRING },
+              undangan_sifat: { type: Type.STRING },
+            },
+            required: ['undangan_hal', 'undangan_agenda', 'hari_tanggal_pelaksanaan', 'undangan_waktu'],
+          },
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      return {
+        undangan_hal: parsed.undangan_hal || 'Undangan Rapat Pembahasan',
+        undangan_agenda: parsed.undangan_agenda || 'Pembahasan agenda strategis dan asistensi substansi kebijakan.',
+        hari_tanggal_pelaksanaan: parsed.hari_tanggal_pelaksanaan || 'Senin, 27 Oktober 2026',
+        undangan_waktu: parsed.undangan_waktu || '09.00 WIB s.d. selesai',
+        undangan_tipe_tempat: (parsed.undangan_tipe_tempat === 'online' || parsed.undangan_tipe_tempat === 'offline') ? parsed.undangan_tipe_tempat : 'hybrid',
+        undangan_tempat_offline: parsed.undangan_tempat_offline || 'Ruang Rapat Pusat Kebijakan Strategis, Gd Sapta Pesona Lt. 5, Jl. Medan Merdeka Barat No. 17-19, Jakarta Pusat',
+        undangan_tempat_online: parsed.undangan_tempat_online || 'https://s.komdigi.go.id/zoom-rapat',
+        undangan_pembuka: parsed.undangan_pembuka || 'Dalam rangka mendukung pelaksanaan tugas dan fungsi Pusat Kebijakan Strategis, bersama ini kami bermaksud menyelenggarakan rapat yang akan diselenggarakan pada:',
+        undangan_kepada: parsed.undangan_kepada || '(Daftar Terlampir)\ndi Jakarta',
+        undangan_sifat: parsed.undangan_sifat || 'Biasa',
+      };
+    } catch (err) {
+      console.warn('Gemini screening Undangan failed, using heuristic fallback:', err);
+    }
+  }
+
+  // Smart Local NLP Fallback (Tanpa API Key)
+  return smartLocalExtractSuratUndangan(cleanText || textOrPrompt, fileAttachment?.name, userPrompt);
+}
+
+import { formatNumberedPoints } from './naskahFormatter';
+
+/**
+ * Service to extract structured Nota Dinas data using Gemini AI or heuristic fallback.
+ * Mendukung format paragraf penjelasan mengalir (resmi Komdigi) serta format poin-poin.
+ */
+export async function extractNotaDinasWithGemini(
+  textOrPrompt: string,
+  apiKeyOverride?: string,
+  fileAttachment?: FileAttachment,
+  userPrompt?: string
+): Promise<EkstraksiNotaDinas> {
+  const apiKey = apiKeyOverride?.trim() || getStoredGeminiApiKey()?.trim() || '';
+  const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
+
+  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Anda adalah Analis Tata Naskah Dinas Pusat Kebijakan Strategis (PUSAKA), Sekretariat Jenderal Kementerian Komunikasi dan Digital RI.
+Tugas Anda adalah menelaah dokumen acuan dan/atau perintah pengguna untuk menyusun NOTA DINAS RESMI sesuai "Panduan Struktur dan Otomatisasi Nota Dinas PUSAKA Komdigi":
+
+${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI INI):\n"""\n${userPrompt}\n"""\n` : ''}
+
+ATURAN BAKU METADATA & TIPOLOGI NOTA DINAS PUSAKA:
+1. Yth. (nota_kepada): WAJIB HANYA MENULISKAN NAMA JABATAN (tanpa nama pejabat), dipetakan berdasarkan 5 Tipologi Master:
+   - Tipologi 1 (ND_SDM - Kepegawaian: KGB, Kenaikan Pangkat, Uji Kompetensi/Kenaikan Jenjang JF, SPMT, Kelas Jabatan, SIMPEG, Cuti, Tugas Belajar) -> "Kepala Biro Sumber Daya Manusia dan Organisasi" (rekomendasi_kode_klasifikasi: "KP.01.01", "KP.03.03", atau "KP.05.01").
+   - Tipologi 2 (ND_KEBIJAKAN - Substansi & Kajian: Policy Brief, Laporan Kajian, Bahan Rapim, Keynote Speech, SK Tim Quickwins, Arahan Pimpinan) -> "Sekretaris Jenderal" atau "Direktur Jenderal Komunikasi Publik dan Media" bila terkait GPR/Narasi Tunggal (rekomendasi_kode_klasifikasi: "PR.01.01", "HK.01.06", atau "HM.01.01").
+   - Tipologi 3 (ND_ANGGARAN - Perencanaan, Anggaran, Akuntabilitas & Pajak):
+     * Revisi Anggaran DIPA / Pokok-Pokok Revisi / Bukti Potong Pajak 1721-A2 -> "Kepala Biro Keuangan dan Barang Milik Negara" ("PR.02.02" atau "KU.03.01")
+     * Usulan Kegiatan Prioritas / Renja / Perjanjian Kinerja -> "Kepala Biro Perencanaan" ("PR.01.02")
+     * Tindak Lanjut Reviu APIP / LHP Pengawasan -> "Inspektur IV" ("PW.01.01")
+   - Tipologi 4 (ND_KOORDINASI - Permintaan PIC / Data Lintas Unit) -> "(Daftar Terlampir)" ("OT.01.01").
+   - Tipologi 5 (ND_FASILITAS - Fasilitasi Umum, BMN & TI):
+     * Fasilitasi Medical Check Up (MCU) / Kerumahtanggaan -> "Kepala Biro Umum" ("RT.01.01")
+     * Penetapan Status Penggunaan (PSP) / Pemindahan BMN -> "Kepala Biro Keuangan dan Barang Milik Negara" ("PL.02.01")
+     * Reset Akun / Layanan TI / Email Dinas -> "Kepala Pusat Data dan Sarana Informatika" ("TI.01.01")
+2. Dari (nota_dari): Selalu "Kepala Pusat Kebijakan Strategis".
+3. Hal (nota_hal): Diawali kata benda verbal baku: "Penyampaian ...", "Permohonan ...", "Pengajuan ...", atau "Usulan ..." (Title Case, lugas dan komprehensif).
+4. Sifat (nota_sifat): "Biasa", "Segera", atau "Rahasia".
+5. Lampiran (nota_lampiran): "Satu berkas" atau "-".
+
+ATURAN 6 FORMULA PARAGRAF PEMBUKA (nota_pembuka):
+Pilih 1 formula yang paling tepat sesuai konteks:
+- Formula 1 (Tindak Lanjut ND/Surat Masuk): "Menindaklanjuti Nota Dinas {Jabatan_Pengirim_Asal} Nomor: {Nomor_ND_Asal} tanggal {Tanggal_ND_Asal} perihal {Perihal_ND_Asal}, bersama ini kami sampaikan/mengajukan permohonan {Inti_Tindak_Lanjut} sebagai berikut:"
+- Formula 2 (Tindak Lanjut SK Menteri/Regulasi): "Menindaklanjuti Keputusan Menteri Komunikasi dan Digital Republik Indonesia Nomor {Nomor_SK} tanggal {Tanggal_SK} tentang {Judul_SK}, bersama ini kami mengajukan permohonan untuk dilakukan {Nama_Tindakan} TMT {Tanggal_TMT} bagi pegawai yang telah ditetapkan dalam jabatan {Nama_Jabatan}, dengan informasi pegawai sebagai berikut:"
+- Formula 3 (Mandat Arahan Pimpinan / Rapim / Kajian Strategis): "Berdasarkan {arahan Ibu Menteri / hasil Rapat Pimpinan (RAPIM) / pelaksanaan telaah strategis} terkait {Topik}, bersama ini dengan hormat kami sampaikan {Dokumen_Output} sebagai berikut:"
+- Formula 4 (Syarat Administratif Berkala):
+  * KGB: "Dengan telah terpenuhinya syarat kenaikan gaji berkala yaitu telah mencapai masa kerja golongan yang ditentukan, maka bersama ini kami sampaikan pengajuan kenaikan gaji berkala atas nama:"
+  * Kenaikan Pangkat / Jenjang JF: "Sehubungan dengan telah dipenuhinya persyaratan administratif dan kinerja pegawai dalam rangka pengusulan {Jenis_Kenaikan} pada Pusat Kebijakan Strategis Sekretariat Jenderal, bersama ini kami mengusulkan {Jenis_Kenaikan} bagi pegawai sebagai berikut:"
+  * Revisi Anggaran DIPA: "Sehubungan dengan adanya penyesuaian belanja dalam rangka pemenuhan kebutuhan kegiatan prioritas Pusat Kebijakan Strategis Tahun Anggaran {Tahun}, bersama ini kami mengajukan permohonan Revisi Anggaran pada DIPA Pusat Kebijakan Strategis."
+- Formula 5 (Tujuan Fungsional & Tata Kelola): "Dalam rangka {Tujuan_Kedinasan}, bersama ini kami mengajukan permohonan / mengusulkan {Bentuk_Permohonan} dengan rincian sebagai berikut:"
+- Formula 6 (Permohonan Teknis Langsung): "Bersama ini kami mengajukan permohonan {Bentuk_Permohonan_Teknis} dikarenakan {Alasan_Teknis} bagi pegawai atas nama:"
+
+ATURAN 5 FORMAT PENYAJIAN SUBSTANSI ISI (nota_isi):
+Pilih format isi yang sesuai dengan tipologi naskah (JANGAN mengulang kalimat pembuka atau penutup di dalam nota_isi):
+- Format 1 (Blok Atribut Identitas Pegawai - Khusus 1 Orang Pegawai pada KGB/KP/Ujikom/SPMT/SIMPEG/Pajak/Reset Akun):
+  Tulis setiap atribut pada baris tersendiri dengan format "Label : Nilai":
+  Nama : {Nama Lengkap beserta Gelar}
+  NIP : {18 Digit NIP}
+  Pangkat/Gol : {Pangkat / Golongan Ruang} (atau Pangkat saat ini & Pangkat yang dituju untuk KP)
+  Jabatan : {Nama Jabatan} (atau Jabatan Baru untuk SPMT; atau Jabatan saat ini & Jabatan yang dituju untuk Ujikom)
+  Unit Kerja : Pusat Kebijakan Strategis
+
+  Sebagai kelengkapan administrasi pengajuan {Jenis_Urusan} dimaksud, turut kami lampirkan berkas persyaratan yang dibutuhkan.
+- Format 2 (Narasi Rekapitulasi Multi-Pegawai / Rincian Anggaran & Aset): Rincian terstruktur disertai kalimat pengantar lampiran berkas/matriks.
+- Format 3 (Poin-Poin Narasi Eksekutif - Khusus Policy Brief / Laporan Kajian / Evaluasi / Hasil Reviu):
+  Gunakan penomoran angka Arab (1., 2., 3.) dengan sub-judul aspek diikuti titik dua dan narasi analitis:
+  1. {Judul Aspek Pertama}: {Narasi ringkasan temuan, angka kuantitatif, dan analisis kebijakan}.
+  2. {Judul Aspek Kedua}: {Narasi ringkasan temuan dan sinkronisasi kebijakan}.
+  3. {Judul Aspek Ketiga / Rekomendasi}: {Narasi rekomendasi strategis dan arah tindak lanjut}.
+- Format 4 (Klausul Tautan Digital / Email): Jika ada link cloud atau email, tambahkan: "Seluruh data dukung dan kelengkapan berkas sebagaimana dimaksud dapat diakses/diunduh melalui tautan berikut: {URL_Link}."
+- Format 5 (Narasi Permohonan Koordinasi Lintas Unit / PIC): Memuat mekanisme penyampaian usulan nama PIC/perwakilan unit kerja.
+
+ATURAN 4 VARIASI PARAGRAF PENUTUP (nota_penutup):
+Pilih variasi yang sesuai dengan hirarki penerima:
+- Variasi 1 (Horizontal Eselon II: Kepala Biro / Inspektur / Sesditjen / Kapusdatin): "Demikian kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih."
+- Variasi 2 (Vertikal ke Atas: Sekretaris Jenderal): "Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih." (Atau khusus permohonan tanda tangan Keputusan Sekjen: "Demikian kami sampaikan. Apabila Bapak Sekretaris Jenderal tidak berpendapat lain, mohon perkenan Bapak Sekretaris Jenderal untuk menandatangani Keputusan Sekretaris Jenderal dimaksud. Atas perhatian dan perkenan Bapak Sekretaris Jenderal, kami ucapkan terima kasih.")
+- Variasi 3 (Permohonan Persetujuan / Fasilitasi MCU & PSP BMN): "Demikian permohonan ini kami sampaikan. Atas perkenan dan arahan Bapak/Ibu, kami ucapkan terima kasih."
+- Variasi 4 (Permohonan Mendesak / Distribusi Cepat Bukti Potong Pajak): "Kami mohon agar dokumen tersebut dapat segera disampaikan kepada kami untuk selanjutnya didistribusikan kepada pegawai yang bersangkutan. Demikian kami sampaikan, atas perhatian dan kerja samanya kami ucapkan terima kasih."`;
+
+      const parts: any[] = [{ text: prompt }];
+      if (fileAttachment && fileAttachment.base64) {
+        parts.push({
+          inlineData: {
+            mimeType: fileAttachment.mimeType || 'application/pdf',
+            data: fileAttachment.base64,
+          },
+        });
+      }
+      if (cleanText) {
+        parts.push({ text: `Dokumen Acuan:\n"""\n${cleanText}\n"""` });
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              nota_hal: { type: Type.STRING },
+              nota_kepada: { type: Type.STRING },
+              nota_dari: { type: Type.STRING },
+              nota_sifat: { type: Type.STRING },
+              nota_lampiran: { type: Type.STRING },
+              nota_pembuka: { type: Type.STRING },
+              nota_isi: { type: Type.STRING },
+              nota_penutup: { type: Type.STRING },
+              rekomendasi_kode_klasifikasi: { type: Type.STRING },
+            },
+            required: ['nota_hal', 'nota_kepada', 'nota_pembuka', 'nota_isi', 'nota_penutup'],
+          },
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      const rawNotaIsi = parsed.nota_isi || '';
+      const isBulletOrNumbered = /^\s*(\d+\.|[a-zA-Z]\.|[\-\*•])/m.test(rawNotaIsi);
+      const cleanNotaIsi = isBulletOrNumbered ? formatNumberedPoints(rawNotaIsi) : rawNotaIsi.trim();
+
+      return {
+        nota_hal: parsed.nota_hal || 'Penyampaian Laporan dan Rekomendasi Kebijakan',
+        nota_kepada: parsed.nota_kepada || 'Sekretaris Jenderal',
+        nota_dari: parsed.nota_dari || 'Kepala Pusat Kebijakan Strategis',
+        nota_sifat: parsed.nota_sifat || 'Biasa',
+        nota_lampiran: parsed.nota_lampiran || 'Satu berkas',
+        nota_pembuka: (parsed.nota_pembuka || '').trim(),
+        nota_isi: cleanNotaIsi,
+        nota_penutup:
+          (parsed.nota_penutup || '').trim() ||
+          'Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih.',
+        rekomendasi_kode_klasifikasi: parsed.rekomendasi_kode_klasifikasi || 'PR.01.01',
+      };
+    } catch (err) {
+      console.warn('Gemini screening Nota Dinas failed, using heuristic fallback:', err);
+    }
+  }
+
+  // Smart Local NLP Fallback (Tanpa API Key)
+  return smartLocalExtractNotaDinas(cleanText || textOrPrompt, fileAttachment?.name, userPrompt);
+}
+
+/**
+ * Smart Heuristic & NLP Extractor for Indonesian Official Nota Dinas (Pusaka Komdigi).
+ * Delegasikan langsung ke smartLocalExtractNotaDinas agar 100% mengikuti Panduan Struktur Nota Dinas.
+ */
+export function deepHeuristicExtractNotaDinas(text: string, fileName?: string): EkstraksiNotaDinas {
+  return smartLocalExtractNotaDinas(text, fileName);
 }

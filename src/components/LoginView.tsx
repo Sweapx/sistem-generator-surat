@@ -8,7 +8,6 @@ import {
   AlertCircle,
   ArrowRight,
   Sparkles,
-  KeyRound,
 } from 'lucide-react';
 import { User } from '../types';
 import { login } from '../services/authService';
@@ -49,12 +48,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
     }
   };
 
-  const fillQuickAccount = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setErrorMessage(null);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 flex flex-col justify-center items-center p-4 sm:p-6 font-sans relative overflow-hidden">
       {/* Background Decorative Glow Elements */}
@@ -64,32 +57,14 @@ export const LoginView: React.FC<LoginViewProps> = ({
       {/* Main Login Card */}
       <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 p-7 sm:p-8 relative z-10">
         {/* Header Identitas Resmi */}
-        <div className="text-center space-y-3 mb-6">
-          <div className="flex items-center justify-center space-x-3 mb-2">
-            <img
-              src="/Logo_Kementerian_Komunikasi_dan_Digital_Republik_Indonesia_(2024).svg"
-              alt="Logo Komdigi"
-              className="h-12 w-auto object-contain drop-shadow-sm"
-              onError={(e) => {
-                // Fallback jika path SVG berbeda
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-            <div className="w-9 h-9 rounded-full bg-teal-800 text-amber-300 flex items-center justify-center shadow-sm">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-          </div>
-
+        <div className="text-center space-y-2 mb-6">
           <div>
             <span className="text-[10px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 inline-block">
               PUSAT KEBIJAKAN STRATEGIS
             </span>
-            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight mt-1.5">
-              Sistem Generator Surat Tugas
+            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight mt-2">
+              Sistem Generator Surat
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
-              Kementerian Komunikasi dan Digital Republik Indonesia
-            </p>
           </div>
         </div>
 
@@ -190,39 +165,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
             )}
           </button>
         </form>
-
-        {/* Quick Demo Credentials Box */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <div className="flex items-center space-x-1.5 text-[11px] font-semibold text-slate-500 mb-2.5">
-            <KeyRound className="w-3.5 h-3.5 text-teal-600" />
-            <span>Pilihan Akun Cepat (Klik untuk Mengisi):</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => fillQuickAccount('admin_tu', 'pusaka2026')}
-              className="p-2 text-left bg-slate-50 hover:bg-teal-50/70 border border-slate-200 hover:border-teal-300 rounded-lg transition-colors cursor-pointer"
-            >
-              <div className="font-bold text-[11px] text-teal-900">Admin TU</div>
-              <div className="text-[10px] text-slate-500 font-mono">admin_tu / pusaka2026</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => fillQuickAccount('staf_pusaka', 'pusaka2026')}
-              className="p-2 text-left bg-slate-50 hover:bg-teal-50/70 border border-slate-200 hover:border-teal-300 rounded-lg transition-colors cursor-pointer"
-            >
-              <div className="font-bold text-[11px] text-teal-900">Staf Konseptor</div>
-              <div className="text-[10px] text-slate-500 font-mono">staf_pusaka / pusaka2026</div>
-            </button>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="text-center mt-6 text-[10.5px] text-slate-400">
-          Dilindungi Sistem Autentikasi Internal PUSAKA Kemkomdigi RI
-        </div>
       </div>
     </div>
   );

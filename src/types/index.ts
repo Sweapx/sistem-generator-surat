@@ -37,6 +37,9 @@ export interface NomorSuratRecord {
   dasar_surat: string;
   // Kolom register spreadsheet kantor:
   jenis?: string;
+  jenis_naskah?: JenisNaskah;
+  kode_klasifikasi?: string;
+  kategori_klasifikasi?: 'FASILITATIF' | 'SUBSTANTIF';
   kepada?: string;
   status_ttd?: string;
   topik_tim?: string;
@@ -73,7 +76,54 @@ export interface EkstraksiUndangan {
   keterangan_tambahan?: string;
 }
 
+export interface EkstraksiSuratUndangan {
+  undangan_hal: string;
+  undangan_agenda: string;
+  hari_tanggal_pelaksanaan: string;
+  undangan_waktu: string;
+  undangan_tipe_tempat: 'hybrid' | 'offline' | 'online';
+  undangan_tempat_offline?: string;
+  undangan_tempat_online?: string;
+  undangan_pembuka: string;
+  undangan_kepada: string;
+  undangan_sifat?: string;
+}
+
+export interface EkstraksiNotaDinas {
+  nota_hal: string;
+  nota_kepada: string;
+  nota_dari: string;
+  nota_sifat: string;
+  nota_lampiran?: string;
+  nota_pembuka: string;
+  nota_isi: string;
+  nota_penutup: string;
+  rekomendasi_kode_klasifikasi?: string;
+  tipologi?: 'ND_SDM' | 'ND_KEBIJAKAN' | 'ND_ANGGARAN' | 'ND_KOORDINASI' | 'ND_FASILITAS';
+}
+
+export type JenisNaskah = 'TUGAS' | 'UNDANGAN' | 'NOTA_DINAS';
+
+export interface KlasifikasiItem {
+  kategori_utama: 'FASILITATIF' | 'SUBSTANTIF';
+  kode_huruf: string;
+  nama_kategori: string;
+  kode_angka: string;
+  nama_sub: string;
+  sub_kode: string;
+  kode_lengkap: string;
+  uraian: string;
+}
+
 export interface SuratTugasFormState {
+  // Jenis Naskah
+  jenis_naskah?: JenisNaskah;
+
+  // Klasifikasi Nomor Surat
+  kode_klasifikasi?: string;
+  kategori_klasifikasi?: 'FASILITATIF' | 'SUBSTANTIF';
+  uraian_klasifikasi?: string;
+
   // Nomor & Tanggal
   nomor_urut?: number;
   tahun: number;
@@ -82,7 +132,7 @@ export interface SuratTugasFormState {
   tanggal_surat: string;
   kota_surat: string;
 
-  // Dasar Acara
+  // ─── Bidang Khusus SURAT TUGAS ─────────────────────────────────────────
   nama_acara: string;
   nomor_surat_undangan: string;
   tanggal_surat_undangan: string;
@@ -98,21 +148,71 @@ export interface SuratTugasFormState {
   kota_kegiatan: string;
   tujuan_tugas: string;
   pembebanan_anggaran: string;
+  sertakan_beban_anggaran?: boolean; // opsi mencantumkan klausul pembebanan anggaran
 
   // Personil & Pejabat
   selectedPegawaiIds: string[];
   selectedPejabatId: string;
   kriteria_peserta?: string;
 
-  // Konseptor & Tanda Tangan
-  konseptor: string;
-  ttd_image?: string;
-
-  // Narasi Surat Langsung Diedit (Custom Narration)
+  // Narasi Surat Langsung Diedit (Custom Narration Surat Tugas)
   menimbang_custom?: string;
   dasar_custom?: string;
   untuk_custom?: string;
   penutup_custom?: string;
+
+  // ─── Bidang Khusus SURAT UNDANGAN ──────────────────────────────────────
+  undangan_sifat?: string; // 'Biasa' | 'Segera' | 'Penting'
+  undangan_lampiran?: string; // '1 (satu) berkas' | '-'
+  undangan_hal?: string; // 'Undangan'
+  undangan_kepada?: string; // '(Daftar Terlampir)\ndi Jakarta'
+  undangan_pembuka?: string; // Paragraf pembuka
+  undangan_hari_tanggal?: string; // 'Rabu, 18 Februari 2026'
+  undangan_waktu?: string; // '09.30 WIB s.d. selesai'
+  undangan_tipe_tempat?: 'offline' | 'online' | 'hybrid';
+  undangan_tempat_offline?: string; // 'Ruang Rapat Pusat Kebijakan Strategis...'
+  undangan_tempat_online?: string; // 'https://s.komdigi.go.id/...'
+  undangan_agenda?: string; // 'Pembahasan dan Asistensi...'
+  undangan_penutup?: string; // Paragraf penutup
+  undangan_meeting_id?: string; // '890 1234 5678'
+  undangan_passcode?: string; // 'KOMDIGI2026'
+  undangan_tembusan?: string; // Tembusan jika ada
+
+  // ─── Bidang Khusus NOTA DINAS ──────────────────────────────────────────
+  nota_kepada?: string; // 'Sekretaris Jenderal'
+  nota_dari?: string; // 'Kepala Pusat Kebijakan Strategis'
+  nota_hal?: string; // 'Penyampaian Usulan ...'
+  nota_sifat?: string; // 'Biasa' | 'Segera'
+  nota_lampiran?: string; // '-' | '1 Berkas'
+  nota_pembuka?: string; // Paragraf pembuka tindak lanjut
+  nota_isi?: string; // Substansi poin / narasi
+  nota_penutup?: string; // Paragraf penutup ucapan terima kasih
+  nota_tembusan?: string; // Catatan tembusan jika ada
+
+  // Konseptor & Tanda Tangan
+  konseptor: string;
+  ttd_image?: string;
+
+  // Lampiran Tambahan per jenis naskah (terpisah agar tidak saling kontaminasi antar tab)
+  lampiran_items?: LampiranItem[];          // backward compat / Surat Tugas
+  undangan_lampiran_items?: LampiranItem[]; // khusus Surat Undangan
+  nota_lampiran_items?: LampiranItem[];     // khusus Nota Dinas
+}
+
+export interface LampiranItem {
+  id: string;
+  tipe: 'buat' | 'upload';
+  label_mark?: string; // e.g. "Lampiran I", "Lampiran II", "Lampiran III", dst.
+  judul?: string; // e.g. "DAFTAR UNDANGAN", "SUSUNAN ACARA / RUNDOWN"
+  sub_judul?: string; // Sub judul persis di bawah judul lampiran
+  isi?: string; // Isi lampiran (daftar nama, tabel, atau narasi)
+  file_name?: string;
+  file_size?: number;
+  file_type?: string;
+  file_data?: string; // Base64 data URL
+  pdf_pages_images?: string[]; // rendered PDF page images (Data URL)
+  extracted_text?: string; // extracted text from docx/pdf
+  tanpa_mark?: boolean; // opsi tanpa watermark / mark lampiran (khusus upload dokumen)
 }
 
 export interface SampleInvitation {
