@@ -33,15 +33,11 @@ export function setStoredGeminiApiKey(key: string): void {
 }
 
 /**
- * Inisialisasi client GoogleGenAI yang mendukung baik Gemini Developer API Key (AIza...)
- * maupun Google Cloud Vertex AI Express Mode API Key (AQ....) dari file .env.
+ * Inisialisasi client GoogleGenAI menggunakan API Key dari file .env.
+ * Mendukung baik Gemini API Key standar (AIza...) maupun Google AI / Cloud key (AQ....).
  */
 function createGeminiClient(apiKey: string): GoogleGenAI {
-  const cleanKey = apiKey.trim();
-  if (cleanKey.startsWith('AQ.')) {
-    return new GoogleGenAI({ vertexai: true, apiKey: cleanKey });
-  }
-  return new GoogleGenAI({ apiKey: cleanKey });
+  return new GoogleGenAI({ apiKey: apiKey.trim() });
 }
 
 export interface FileAttachment {
@@ -630,69 +626,78 @@ export async function extractNotaDinasWithGemini(
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {
       const ai = createGeminiClient(apiKey);
-      const prompt = `Anda adalah Analis Tata Naskah Dinas Pusat Kebijakan Strategis (PUSAKA), Sekretariat Jenderal Kementerian Komunikasi dan Digital RI.
-Tugas Anda adalah menelaah dokumen acuan dan/atau perintah pengguna untuk menyusun NOTA DINAS RESMI sesuai "Panduan Struktur dan Otomatisasi Nota Dinas PUSAKA Komdigi":
+      const prompt = `Anda adalah Asisten Pembuat Naskah Dinas Resmi pada Pusat Kebijakan Strategis (Kode Unit: SJ.9), Sekretariat Jenderal, Kementerian Komunikasi dan Digital RI.
+Tugas Anda adalah menelaah dokumen acuan (laporan, kajian, policy brief, surat masuk, atau nota dinas) dan/atau perintah pengguna secara SANGAT MENDALAM, AKURAT, dan menyusun draf **NOTA DINAS** yang 100% patuh pada "Panduan Lengkap Struktur, Pola Kalimat, Tipologi, dan Otomatisasi Dokumen Nota Dinas PUSAKA Komdigi".
 
 ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI INI):\n"""\n${userPrompt}\n"""\n` : ''}
 
-ATURAN BAKU METADATA & TIPOLOGI NOTA DINAS PUSAKA:
-1. Yth. (nota_kepada): WAJIB HANYA MENULISKAN NAMA JABATAN (tanpa nama pejabat), dipetakan berdasarkan 5 Tipologi Master:
-   - Tipologi 1 (ND_SDM - Kepegawaian: KGB, Kenaikan Pangkat, Uji Kompetensi/Kenaikan Jenjang JF, SPMT, Kelas Jabatan, SIMPEG, Cuti, Tugas Belajar) -> "Kepala Biro Sumber Daya Manusia dan Organisasi" (rekomendasi_kode_klasifikasi: "KP.01.01", "KP.03.03", atau "KP.05.01").
-   - Tipologi 2 (ND_KEBIJAKAN - Substansi & Kajian: Policy Brief, Laporan Kajian, Bahan Rapim, Keynote Speech, SK Tim Quickwins, Arahan Pimpinan) -> "Sekretaris Jenderal" atau "Direktur Jenderal Komunikasi Publik dan Media" bila terkait GPR/Narasi Tunggal (rekomendasi_kode_klasifikasi: "PR.01.01", "HK.01.06", atau "HM.01.01").
-   - Tipologi 3 (ND_ANGGARAN - Perencanaan, Anggaran, Akuntabilitas & Pajak):
-     * Revisi Anggaran DIPA / Pokok-Pokok Revisi / Bukti Potong Pajak 1721-A2 -> "Kepala Biro Keuangan dan Barang Milik Negara" ("PR.02.02" atau "KU.03.01")
-     * Usulan Kegiatan Prioritas / Renja / Perjanjian Kinerja -> "Kepala Biro Perencanaan" ("PR.01.02")
-     * Tindak Lanjut Reviu APIP / LHP Pengawasan -> "Inspektur IV" ("PW.01.01")
-   - Tipologi 4 (ND_KOORDINASI - Permintaan PIC / Data Lintas Unit) -> "(Daftar Terlampir)" ("OT.01.01").
-   - Tipologi 5 (ND_FASILITAS - Fasilitasi Umum, BMN & TI):
-     * Fasilitasi Medical Check Up (MCU) / Kerumahtanggaan -> "Kepala Biro Umum" ("RT.01.01")
-     * Penetapan Status Penggunaan (PSP) / Pemindahan BMN -> "Kepala Biro Keuangan dan Barang Milik Negara" ("PL.02.01")
-     * Reset Akun / Layanan TI / Email Dinas -> "Kepala Pusat Data dan Sarana Informatika" ("TI.01.01")
-2. Dari (nota_dari): Selalu "Kepala Pusat Kebijakan Strategis".
-3. Hal (nota_hal): Diawali kata benda verbal baku: "Penyampaian ...", "Permohonan ...", "Pengajuan ...", atau "Usulan ..." (Title Case, lugas dan komprehensif).
-4. Sifat (nota_sifat): "Biasa", "Segera", atau "Rahasia".
-5. Lampiran (nota_lampiran): "Satu berkas" atau "-".
+ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
+- Gunakan sudut pandang institusional kata ganti jamak ("kami"), DILARANG menggunakan kata "saya".
+- Bahasa baku tata naskah dinas pemerintah: lugas, objektif, santun, dan selalu diawali dasar pijakan hukum/administratif.
+- JANGAN mengulang paragraf pembuka atau penutup di dalam field nota_isi.
 
-ATURAN 6 FORMULA PARAGRAF PEMBUKA (nota_pembuka):
-Pilih 1 formula yang paling tepat sesuai konteks:
-- Formula 1 (Tindak Lanjut ND/Surat Masuk): "Menindaklanjuti Nota Dinas {Jabatan_Pengirim_Asal} Nomor: {Nomor_ND_Asal} tanggal {Tanggal_ND_Asal} perihal {Perihal_ND_Asal}, bersama ini kami sampaikan/mengajukan permohonan {Inti_Tindak_Lanjut} sebagai berikut:"
-- Formula 2 (Tindak Lanjut SK Menteri/Regulasi): "Menindaklanjuti Keputusan Menteri Komunikasi dan Digital Republik Indonesia Nomor {Nomor_SK} tanggal {Tanggal_SK} tentang {Judul_SK}, bersama ini kami mengajukan permohonan untuk dilakukan {Nama_Tindakan} TMT {Tanggal_TMT} bagi pegawai yang telah ditetapkan dalam jabatan {Nama_Jabatan}, dengan informasi pegawai sebagai berikut:"
-- Formula 3 (Mandat Arahan Pimpinan / Rapim / Kajian Strategis): "Berdasarkan {arahan Ibu Menteri / hasil Rapat Pimpinan (RAPIM) / pelaksanaan telaah strategis} terkait {Topik}, bersama ini dengan hormat kami sampaikan {Dokumen_Output} sebagai berikut:"
-- Formula 4 (Syarat Administratif Berkala):
-  * KGB: "Dengan telah terpenuhinya syarat kenaikan gaji berkala yaitu telah mencapai masa kerja golongan yang ditentukan, maka bersama ini kami sampaikan pengajuan kenaikan gaji berkala atas nama:"
-  * Kenaikan Pangkat / Jenjang JF: "Sehubungan dengan telah dipenuhinya persyaratan administratif dan kinerja pegawai dalam rangka pengusulan {Jenis_Kenaikan} pada Pusat Kebijakan Strategis Sekretariat Jenderal, bersama ini kami mengusulkan {Jenis_Kenaikan} bagi pegawai sebagai berikut:"
-  * Revisi Anggaran DIPA: "Sehubungan dengan adanya penyesuaian belanja dalam rangka pemenuhan kebutuhan kegiatan prioritas Pusat Kebijakan Strategis Tahun Anggaran {Tahun}, bersama ini kami mengajukan permohonan Revisi Anggaran pada DIPA Pusat Kebijakan Strategis."
-- Formula 5 (Tujuan Fungsional & Tata Kelola): "Dalam rangka {Tujuan_Kedinasan}, bersama ini kami mengajukan permohonan / mengusulkan {Bentuk_Permohonan} dengan rincian sebagai berikut:"
-- Formula 6 (Permohonan Teknis Langsung): "Bersama ini kami mengajukan permohonan {Bentuk_Permohonan_Teknis} dikarenakan {Alasan_Teknis} bagi pegawai atas nama:"
+1. PEMETAAN 5 TIPOLOGI MASTER, PENERIMA (nota_kepada), & KODE KLASIFIKASI:
+   ATURAN MUTLAK nota_kepada: Selalu tulis NAMA JABATAN RESMI penerima (TANPA nama orang pribadi). Jika >3 jabatan, tulis "(Daftar Terlampir)".
+   - TIPOLOGI 1 (ND_SDM - Administrasi & Mutasi Kepegawaian):
+     * Kenaikan Gaji Berkala / KGB, Penyesuaian Gaji Pokok & Tukin -> nota_kepada: "Kepala Biro Keuangan dan Barang Milik Negara", kode: "KP.01.03" atau "KP.01.04".
+     * Usulan Kenaikan Pangkat -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi", kode: "KP.04.04".
+     * Uji Kompetensi & Fasilitasi Pembiayaan Ujikom JF -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi", kode: "KP.06.01".
+     * Pemberhentian JF karena Tugas Belajar -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi", kode: "KP.04.07".
+     * Pembukaan Akses E-Kinerja SKP -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi", kode: "KP.06.06".
+     * Usulan Beasiswa LPDP / Diklat / Pembaruan SK / SPMT -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi", kode: "KP.01.06" atau "KP.01.01".
+   - TIPOLOGI 2 (ND_KEBIJAKAN - Laporan Eksekutif, Telaah Kebijakan, Policy Brief, Hasil Kajian/Reviu Regulasi):
+     * Laporan Progres Quickwin, Konsep Jawaban/Matriks Tanya Jawab Menteri, Policy Brief, Reviu Rancangan Peraturan (RPM/PP/UU) -> nota_kepada: "Sekretaris Jenderal", kode: "PR.01.02" atau "PR.02.01".
+     * Telaah Analisis Isu Strategis / Reviu Singkat Isu Publik -> nota_kepada: "Sekretaris Jenderal" (atau "Direktur Jenderal Komunikasi Publik dan Media" jika terkait Narasi Tunggal/GPR), kode: "PR.01.01" atau "PR.02.01".
+     * Permohonan Penandatanganan Keputusan Sekjen -> nota_kepada: "Sekretaris Jenderal", kode: "HK.01.06".
+   - TIPOLOGI 3 (ND_ANGGARAN - Perencanaan, Revisi & Pengawasan Anggaran):
+     * Usulan Rincian Output (RO) / Revisi POK/DIPA / Pergeseran Belanja -> nota_kepada: "Kepala Biro Perencanaan", kode: "KU.01.01" atau "KU.01.02".
+     * Permohonan Reviu Anggaran & Tindak Lanjut Hasil Reviu Itjen -> nota_kepada: "Inspektur IV", kode: "PW.01.04" atau "PW.04.04".
+     * Persetujuan Tambahan Pagu Setjen -> nota_kepada: "Sekretaris Jenderal", kode: "PW.01.04".
+     * Tanggapan Temuan BPK & Bukti Potong Pajak PPh 21 (1721-A2) -> nota_kepada: "Kepala Biro Keuangan dan Barang Milik Negara", kode: "KU.01.01".
+   - TIPOLOGI 4 (ND_KOORDINASI - Koordinasi Tim & Kepatuhan Organisasi):
+     * Usulan Nama PIC Tim / Anggota Tim -> nota_kepada: "(Daftar Terlampir)" atau unit pengundang, kode: "PR.01.02" atau "PW.02.01".
+     * IDP Satker / Pakta Integritas ASN / Sertifikat PPK -> nota_kepada: "Kepala Biro Sumber Daya Manusia dan Organisasi" / "Kepala Biro Umum", kode: "KP.05.01" / "KP.01.06" / "KP.01.01".
+   - TIPOLOGI 5 (ND_FASILITAS - Fasilitas Kerja, TI & BMN):
+     * Akun Email Official / Layanan TI -> nota_kepada: "Kepala Pusat Data dan Sarana Informatika", kode: "DT.01.01".
+     * Pemanfaatan Anggaran Medical Check-Up (MCU) -> nota_kepada: "Sekretaris Jenderal", kode: "KP.07.01".
+     * Penetapan Status Penggunaan (PSP) BMN -> nota_kepada: "Kepala Biro Umum", kode: "PL.01.02".
 
-ATURAN 5 FORMAT PENYAJIAN SUBSTANSI ISI (nota_isi):
-Pilih format isi yang sesuai dengan tipologi naskah (JANGAN mengulang kalimat pembuka atau penutup di dalam nota_isi):
-- Format 1 (Blok Atribut Identitas Pegawai - Khusus 1 Orang Pegawai pada KGB/KP/Ujikom/SPMT/SIMPEG/Pajak/Reset Akun):
-  Tulis setiap atribut pada baris tersendiri dengan format "Label : Nilai":
-  Nama : {Nama Lengkap beserta Gelar}
-  NIP : {18 Digit NIP}
-  Pangkat/Gol : {Pangkat / Golongan Ruang} (atau Pangkat saat ini & Pangkat yang dituju untuk KP)
-  Jabatan : {Nama Jabatan} (atau Jabatan Baru untuk SPMT; atau Jabatan saat ini & Jabatan yang dituju untuk Ujikom)
-  Unit Kerja : Pusat Kebijakan Strategis
+2. ATURAN METADATA LAINNYA:
+   - nota_dari: Selalu "Kepala Pusat Kebijakan Strategis".
+   - nota_hal: Ringkas, padat, Title Case, WAJIB diawali kata benda verbal baku: "Penyampaian ...", "Permohonan ...", "Pengajuan ...", atau "Usulan ...".
+   - nota_sifat: "Biasa" (default), "Segera" (tanggapan BPK/reviu mendesak/pajak), atau "Rahasia" (laporan strategis tertentu/IDP).
+   - nota_lampiran: "Satu berkas" (jika ada lampiran/mengutip berkas laporan) atau "-".
 
-  Sebagai kelengkapan administrasi pengajuan {Jenis_Urusan} dimaksud, turut kami lampirkan berkas persyaratan yang dibutuhkan.
-- Format 2 (Narasi Rekapitulasi Multi-Pegawai / Rincian Anggaran & Aset): Rincian terstruktur disertai kalimat pengantar lampiran berkas/matriks.
-- Format 3 (Poin-Poin Narasi Eksekutif - Khusus Laporan Hasil Telaah / Policy Brief / Laporan Kajian / Evaluasi / Hasil Reviu Regulasi):
-   Analisis secara mendalam seluruh isi laporan/dokumen yang diunggah (termasuk permasalahan utama, kerangka regulasi/hukum seperti UU/PP/Permen, data capaian, dan rekomendasi kebijakan).
-  Sajikan dalam 3 s.d. 4 poin bernomor angka Arab (1., 2., 3., 4.) di mana kalimat/frasa utama di awal setiap poin ditebalkan dengan **...** seperti standar Nota Dinas Komdigi:
-  1. **{Frasa/Judul Inti Poin Pertama}**: {Narasi analitis mendalam mengenai temuan pertama, konteks regulasi, dan rincian operasional}.
-  2. **{Frasa/Judul Inti Poin Kedua}**: {Narasi analitis mendalam mengenai temuan kedua, mekanisme pelaksanaan, atau evaluasi substansi}.
-  3. **{Frasa/Judul Inti Poin Ketiga}**: {Narasi analitis mendalam mengenai prinsip tata kelola, pelindungan data/mitigasi risiko, atau sinkronisasi lintas sektor}.
-  4. **{Frasa/Judul Inti Poin Keempat / Rekomendasi Strategis}**: {Narasi penguatan strategi pelaksanaan, rekomendasi tindak lanjut, dan kolaborasi pemangku kepentingan}.
-- Format 4 (Klausul Tautan Digital / Email): Jika ada link cloud atau email, tambahkan: "Seluruh data dukung dan kelengkapan berkas sebagaimana dimaksud dapat diakses/diunduh melalui tautan berikut: {URL_Link}."
-- Format 5 (Narasi Permohonan Koordinasi Lintas Unit / PIC): Memuat mekanisme penyampaian usulan nama PIC/perwakilan unit kerja.
+3. 6 POLA BAKU PARAGRAF PEMBUKA (nota_pembuka) — Satu kalimat majemuk lengkap (Anak Kalimat Dasar/Alasan + ", " + Induk Kalimat Tindakan Utama):
+   - Pola 1 (Tindak Lanjut ND/Surat Masuk): "Menindaklanjuti Nota Dinas {Jabatan_Pengirim_Asal} Nomor: {Nomor_ND_Asal} tanggal {Tanggal_ND_Asal} perihal {Perihal_ND_Asal}, bersama ini kami sampaikan/mengajukan permohonan {Objek_Utama}..."
+   - Pola 2 (Tindak Lanjut SK Menteri/Regulasi): "Menindaklanjuti Keputusan Menteri Komunikasi dan Digital Republik Indonesia Nomor {Nomor_SK} tanggal {Tanggal_SK} tentang {Judul_SK}, bersama ini kami mengajukan permohonan untuk dilakukan {Nama_Tindakan} TMT {Tanggal_TMT} bagi pegawai yang telah ditetapkan dalam jabatan {Nama_Jabatan}, dengan informasi pegawai sebagai berikut:"
+   - Pola 3 (Mandat Arahan Pimpinan / Rapim / Telaah Laporan/Kajian): "Berdasarkan {arahan Ibu Menteri / hasil Rapat Pimpinan (RAPIM) / pelaksanaan telaah strategis} terkait {Topik_Bahasan}, bersama ini dengan hormat kami sampaikan {Dokumen_Output} sebagai berikut:"
+   - Pola 4 (Syarat Administratif Berkala - KGB/KP/Revisi): "Dengan telah terpenuhinya syarat kenaikan gaji berkala, bersama ini kami sampaikan informasi untuk dilakukan proses Kenaikan Gaji Berkala (KGB) TMT {TMT} untuk pegawai atas nama sebagai berikut:" / "Sehubungan dengan telah dipenuhinya persyaratan administratif dan kinerja pegawai..., bersama ini kami mengusulkan..."
+   - Pola 5 (Tujuan Fungsional & Tata Kelola): "Dalam rangka {Tujuan_Kedinasan}, bersama ini kami mengajukan permohonan / mengusulkan {Bentuk_Permohonan} dengan rincian sebagai berikut:"
+   - Pola 6 (Permohonan Teknis Langsung): "Bersama ini kami mengajukan permohonan {Bentuk_Permohonan_Teknis} dikarenakan {Alasan_Teknis} bagi pegawai atas nama:"
 
-ATURAN 4 VARIASI PARAGRAF PENUTUP (nota_penutup):
-Pilih variasi yang sesuai dengan hirarki penerima:
-- Variasi 1 (Horizontal Eselon II: Kepala Biro / Inspektur / Sesditjen / Kapusdatin): "Demikian kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih."
-- Variasi 2 (Vertikal ke Atas: Sekretaris Jenderal): "Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih." (Atau khusus permohonan tanda tangan Keputusan Sekjen: "Demikian kami sampaikan. Apabila Bapak Sekretaris Jenderal tidak berpendapat lain, mohon perkenan Bapak Sekretaris Jenderal untuk menandatangani Keputusan Sekretaris Jenderal dimaksud. Atas perhatian dan perkenan Bapak Sekretaris Jenderal, kami ucapkan terima kasih.")
-- Variasi 3 (Permohonan Persetujuan / Fasilitasi MCU & PSP BMN): "Demikian permohonan ini kami sampaikan. Atas perkenan dan arahan Bapak/Ibu, kami ucapkan terima kasih."
-- Variasi 4 (Permohonan Mendesak / Distribusi Cepat Bukti Potong Pajak): "Kami mohon agar dokumen tersebut dapat segera disampaikan kepada kami untuk selanjutnya didistribusikan kepada pegawai yang bersangkutan. Demikian kami sampaikan, atas perhatian dan kerja samanya kami ucapkan terima kasih."`;
+4. 5 FORMAT PENYAJIAN SUBSTANSI ISI (nota_isi):
+   - Format 1 (Blok Atribut Identitas Pegawai - Khusus 1 orang pegawai pada KGB/KP/Ujikom/Tukin/E-Kinerja):
+     Tulis tiap field pada baris tersendiri:
+     Nama : {Nama Lengkap}
+     NIP : {NIP}
+     Pangkat/Gol : {Pangkat/Golongan} (atau "Pangkat saat ini" & "Pangkat yang dituju" untuk KP)
+     Jabatan : {Jabatan} (atau "Jabatan Baru" untuk Tukin/SPMT; atau "Jabatan saat ini" & "Jabatan yang dituju" untuk Ujikom)
+     Unit Kerja : Pusat Kebijakan Strategis
+   - Format 2 (Rekapitulasi Kolektif / Rincian Anggaran & Matriks Reviu): Jika >1 pegawai atau rincian angka anggaran/RO.
+   - Format 3 (Poin Narasi Eksekutif — WAJIB untuk Dokumen Laporan, Kajian, Policy Brief, Evaluasi, Reviu Regulasi):
+     Ekstrak secara MENDALAM seluruh temuan nyata, angka statistik/kuantitatif, pasal/regulasi yang dibahas, kendala, dan rekomendasi spesifik dari dokumen! JANGAN menulis kalimat umum/klise.
+     Sajikan dalam 3 s.d. 5 poin bernomor angka Arab (1., 2., 3., ...) dengan format persis:
+     1. **{Judul_Aspek_Kajian_atau_Temuan}**: {Narasi temuan utama, angka capaian kuantitatif/fakta spesifik dari dokumen, serta dampak/rekomendasi tindak lanjut}.
+     2. **{Judul_Aspek_Kedua}**: {Narasi temuan spesifik dari dokumen...}.
+   - Format 4 (Klausul Tautan Digital / Email): Jika dokumen memuat URL Google Drive/shortlink atau email, tambahkan di akhir: "Seluruh data dukung dan kelengkapan berkas sebagaimana dimaksud dapat diakses/diunduh melalui tautan berikut: {URL}."
+   - Format 5 (Permintaan PIC Koordinasi Lintas Unit): Sertakan mekanisme penyampaian usulan nama PIC dan batas waktu.
+
+5. 4 VARIASI BAKU PARAGRAF PENUTUP (nota_penutup):
+   - Tipe 1 (Horizontal ke Kepala Biro / Inspektur / Sesditjen / Kapusdatin): "Demikian kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih."
+   - Tipe 2 (Vertikal ke Sekretaris Jenderal — laporan/telaah/policy brief): "Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih." (Khusus tanda tangan SK Sekjen: "Demikian kami sampaikan. Apabila Bapak Sekretaris Jenderal tidak berpendapat lain, mohon perkenan Bapak Sekretaris Jenderal untuk menandatangani Keputusan Sekretaris Jenderal dimaksud. Atas perhatian dan perkenan Bapak Sekretaris Jenderal, kami ucapkan terima kasih.")
+   - Tipe 3 (Permohonan Persetujuan Anggaran / MCU ke Sekjen / PSP BMN): "Demikian permohonan ini kami sampaikan. Atas perkenan dan arahan Bapak/Ibu, kami ucapkan terima kasih."
+   - Tipe 4 (Mendesak / Distribusi Cepat Bukti Potong Pajak): "Kami mohon agar dokumen tersebut dapat segera disampaikan kepada kami untuk selanjutnya didistribusikan kepada pegawai yang bersangkutan. Demikian kami sampaikan, atas perhatian dan kerja samanya kami ucapkan terima kasih."`;
 
       const parts: any[] = [{ text: prompt }];
       if (fileAttachment && fileAttachment.base64) {
@@ -707,48 +712,61 @@ Pilih variasi yang sesuai dengan hirarki penerima:
         parts.push({ text: `Dokumen Acuan:\n"""\n${cleanText}\n"""` });
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }],
-        config: {
-          thinkingConfig: { thinkingBudget: 0 },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              nota_hal: { type: Type.STRING },
-              nota_kepada: { type: Type.STRING },
-              nota_dari: { type: Type.STRING },
-              nota_sifat: { type: Type.STRING },
-              nota_lampiran: { type: Type.STRING },
-              nota_pembuka: { type: Type.STRING },
-              nota_isi: { type: Type.STRING },
-              nota_penutup: { type: Type.STRING },
-              rekomendasi_kode_klasifikasi: { type: Type.STRING },
+      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      let parsed: any = null;
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: [{ role: 'user', parts }],
+            config: {
+              ...(modelName.includes('2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  nota_hal: { type: Type.STRING },
+                  nota_kepada: { type: Type.STRING },
+                  nota_dari: { type: Type.STRING },
+                  nota_sifat: { type: Type.STRING },
+                  nota_lampiran: { type: Type.STRING },
+                  nota_pembuka: { type: Type.STRING },
+                  nota_isi: { type: Type.STRING },
+                  nota_penutup: { type: Type.STRING },
+                  rekomendasi_kode_klasifikasi: { type: Type.STRING },
+                },
+                required: ['nota_hal', 'nota_kepada', 'nota_pembuka', 'nota_isi', 'nota_penutup'],
+              },
             },
-            required: ['nota_hal', 'nota_kepada', 'nota_pembuka', 'nota_isi', 'nota_penutup'],
-          },
-        },
-      });
+          });
+          if (response.text) {
+            parsed = JSON.parse(response.text);
+            break;
+          }
+        } catch (modelErr) {
+          console.warn(`Nota Dinas Gemini model ${modelName} failed, trying fallback...`, modelErr);
+        }
+      }
 
-      const parsed = JSON.parse(response.text || '{}');
-      const rawNotaIsi = parsed.nota_isi || '';
-      const isBulletOrNumbered = /^\s*(\d+\.|[a-zA-Z]\.|[\-\*•])/m.test(rawNotaIsi);
-      const cleanNotaIsi = isBulletOrNumbered ? formatNumberedPoints(rawNotaIsi) : rawNotaIsi.trim();
+      if (parsed) {
+        const rawNotaIsi = parsed.nota_isi || '';
+        const isBulletOrNumbered = /^\s*(\d+\.|[a-zA-Z]\.|[\-\*•])/m.test(rawNotaIsi);
+        const cleanNotaIsi = isBulletOrNumbered ? formatNumberedPoints(rawNotaIsi) : rawNotaIsi.trim();
 
-      return {
-        nota_hal: parsed.nota_hal || 'Penyampaian Laporan dan Rekomendasi Kebijakan',
-        nota_kepada: parsed.nota_kepada || 'Sekretaris Jenderal',
-        nota_dari: parsed.nota_dari || 'Kepala Pusat Kebijakan Strategis',
-        nota_sifat: parsed.nota_sifat || 'Biasa',
-        nota_lampiran: parsed.nota_lampiran || 'Satu berkas',
-        nota_pembuka: (parsed.nota_pembuka || '').trim(),
-        nota_isi: cleanNotaIsi,
-        nota_penutup:
-          (parsed.nota_penutup || '').trim() ||
-          'Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih.',
-        rekomendasi_kode_klasifikasi: parsed.rekomendasi_kode_klasifikasi || 'PR.01.01',
-      };
+        return {
+          nota_hal: parsed.nota_hal || 'Penyampaian Laporan dan Rekomendasi Kebijakan',
+          nota_kepada: parsed.nota_kepada || 'Sekretaris Jenderal',
+          nota_dari: parsed.nota_dari || 'Kepala Pusat Kebijakan Strategis',
+          nota_sifat: parsed.nota_sifat || 'Biasa',
+          nota_lampiran: parsed.nota_lampiran || 'Satu berkas',
+          nota_pembuka: (parsed.nota_pembuka || '').trim(),
+          nota_isi: cleanNotaIsi,
+          nota_penutup:
+            (parsed.nota_penutup || '').trim() ||
+            'Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih.',
+          rekomendasi_kode_klasifikasi: parsed.rekomendasi_kode_klasifikasi || 'PR.01.02',
+        };
+      }
     } catch (err) {
       console.warn('Gemini screening Nota Dinas failed, using heuristic fallback:', err);
     }
