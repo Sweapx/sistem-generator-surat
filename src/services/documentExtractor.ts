@@ -37,44 +37,49 @@ export async function extractTextFromPdfBuffer(
 
     const pdf = await loadingTask.promise;
     const numPages = pdf.numPages;
-    const pageTexts: string[] = [];
+    const pageNumbers = Array.from({ length: numPages }, (_, i) => i + 1);
 
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
+    // Proses ekstraksi teks seluruh halaman secara paralel (batch 8 halaman sekaligus) agar sangat cepat
+    const pageTexts: string[] = new Array(numPages).fill('');
+    const batchSize = 8;
+    for (let i = 0; i < pageNumbers.length; i += batchSize) {
+      const batch = pageNumbers.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (pageNum) => {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
 
-      const pageLines: string[] = [];
-      let lastY: number | null = null;
-      let currentLine = '';
+          const pageLines: string[] = [];
+          let lastY: number | null = null;
+          let currentLine = '';
 
-      for (const item of textContent.items as any[]) {
-        if (!item || (!item.str && item.str !== ' ')) continue;
-        const currentY = Array.isArray(item.transform) ? item.transform[5] : null;
+          for (const item of textContent.items as any[]) {
+            if (!item || (!item.str && item.str !== ' ')) continue;
+            const currentY = Array.isArray(item.transform) ? item.transform[5] : null;
 
-        if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 3) {
+            if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 3) {
+              if (currentLine.trim()) {
+                pageLines.push(currentLine.trim());
+              }
+              currentLine = '';
+            } else if (currentLine && !currentLine.endsWith(' ') && !item.str.startsWith(' ')) {
+              currentLine += ' ';
+            }
+            currentLine += item.str;
+            if (currentY !== null) {
+              lastY = currentY;
+            }
+          }
           if (currentLine.trim()) {
             pageLines.push(currentLine.trim());
           }
-          currentLine = '';
-        } else if (currentLine && !currentLine.endsWith(' ') && !item.str.startsWith(' ')) {
-          currentLine += ' ';
-        }
-        currentLine += item.str;
-        if (currentY !== null) {
-          lastY = currentY;
-        }
-      }
-      if (currentLine.trim()) {
-        pageLines.push(currentLine.trim());
-      }
 
-      const pageStr = pageLines.join('\n').trim();
-      if (pageStr) {
-        pageTexts.push(pageStr);
-      }
+          pageTexts[pageNum - 1] = pageLines.join('\n').trim();
+        })
+      );
     }
 
-    const fullText = pageTexts.join('\n\n').trim();
+    const fullText = pageTexts.filter(Boolean).join('\n\n').trim();
     // Dokumen dianggap scan hanya jika tidak ada teks sama sekali atau di bawah 25 karakter
     const isScanned = numPages > 0 && fullText.length < 25;
 
@@ -94,7 +99,7 @@ export async function extractTextFromPdfBuffer(
 }
 
 /**
- * Extract plain text from Word .docx ArrayBuffer using JSZip
+ * Extract plain text from Word .docx ArrayBuffer using JSZip (termasuk teks di dalam Kop/Header & Tabel)
  */
 export async function extractTextFromDocxBuffer(arrayBuffer: ArrayBuffer): Promise<{ text: string }> {
   try {
@@ -104,24 +109,37 @@ export async function extractTextFromDocxBuffer(arrayBuffer: ArrayBuffer): Promi
       throw new Error('Format DOCX tidak valid (word/document.xml tidak ditemukan).');
     }
 
-    const xmlContent = await documentXmlFile.async('text');
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
-    
-    // Extract paragraphs <w:p>
-    const paragraphs = xmlDoc.getElementsByTagName('w:p');
-    const lines: string[] = [];
-
-    for (let i = 0; i < paragraphs.length; i++) {
-      const textNodes = paragraphs[i].getElementsByTagName('w:t');
-      let pText = '';
-      for (let j = 0; j < textNodes.length; j++) {
-        pText += textNodes[j].textContent || '';
+    const extractFromXml = (xmlStr: string): string[] => {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlStr, 'text/xml');
+      const paragraphs = xmlDoc.getElementsByTagName('w:p');
+      const out: string[] = [];
+      for (let i = 0; i < paragraphs.length; i++) {
+        const textNodes = paragraphs[i].getElementsByTagName('w:t');
+        let pText = '';
+        for (let j = 0; j < textNodes.length; j++) {
+          pText += textNodes[j].textContent || '';
+        }
+        if (pText.trim()) {
+          out.push(pText.trim());
+        }
       }
-      if (pText.trim()) {
-        lines.push(pText.trim());
+      return out;
+    };
+
+    const lines: string[] = [];
+    // Baca juga header1.xml / header2.xml jika ada Kop Surat di bagian header Word
+    const headerFiles = Object.keys(zip.files).filter((k) => /^word\/header\d*\.xml$/i.test(k));
+    for (const hf of headerFiles) {
+      const hFile = zip.file(hf);
+      if (hFile) {
+        const hXml = await hFile.async('text');
+        lines.push(...extractFromXml(hXml));
       }
     }
+
+    const xmlContent = await documentXmlFile.async('text');
+    lines.push(...extractFromXml(xmlContent));
 
     return { text: lines.join('\n') };
   } catch (err) {
@@ -131,38 +149,55 @@ export async function extractTextFromDocxBuffer(arrayBuffer: ArrayBuffer): Promi
 }
 
 /**
- * Render all pages of a PDF ArrayBuffer as image Data URLs (PNG)
+ * Render all pages of a PDF ArrayBuffer as high-clarity JPEG Data URLs
+ * (Menggunakan background putih bersih dan kompresi JPEG 0.86 beresolusi tajam
+ * agar ukuran ringan, tidak melebihi kuota penyimpanan, dan 3x lebih cepat dirender)
  */
 export async function renderPdfPagesToImages(
   arrayBuffer: ArrayBuffer,
-  maxPages = 10
+  scale = 1.6,
+  maxPages = 100
 ): Promise<string[]> {
   try {
+    const bufferClone = arrayBuffer.slice(0);
     const loadingTask = pdfjsLib.getDocument({
-      data: new Uint8Array(arrayBuffer),
+      data: new Uint8Array(bufferClone),
       useWorkerFetch: false,
       isEvalSupported: false,
       useSystemFonts: true,
     });
     const pdf = await loadingTask.promise;
+    const effectiveScale = scale > 0 && scale <= 4 ? scale : 1.6;
     const numPages = Math.min(pdf.numPages, maxPages);
-    const images: string[] = [];
+    const images: string[] = new Array(numPages).fill('');
 
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.5 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) continue;
+    // Render secara paralel dalam batch 4 halaman agar jauh lebih cepat
+    const pageNumbers = Array.from({ length: numPages }, (_, i) => i + 1);
+    const batchSize = 4;
+    for (let i = 0; i < pageNumbers.length; i += batchSize) {
+      const batch = pageNumbers.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (pageNum) => {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: effectiveScale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          if (!context) return;
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+          canvas.width = Math.round(viewport.width);
+          canvas.height = Math.round(viewport.height);
 
-      // @ts-ignore
-      await page.render({ canvasContext: context, viewport }).promise;
-      images.push(canvas.toDataURL('image/png'));
+          // Isi background putih bersih agar tidak transparan saat dikonversi ke JPEG / Word
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+
+          // @ts-ignore
+          await page.render({ canvasContext: context, viewport }).promise;
+          images[pageNum - 1] = canvas.toDataURL('image/jpeg', 0.86);
+        })
+      );
     }
-    return images;
+    return images.filter(Boolean);
   } catch (err) {
     console.error('Error rendering PDF pages to images:', err);
     return [];

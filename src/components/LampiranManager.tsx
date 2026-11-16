@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Paperclip,
   Plus,
@@ -17,6 +17,9 @@ import {
   Columns,
   Rows,
   X,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { LampiranItem, JenisNaskah, Pegawai } from '../types';
 import {
@@ -39,6 +42,7 @@ interface LampiranManagerProps {
   nomorSurat: string;
   tanggalSurat: string;
   pegawaiList?: Pegawai[];
+  romanOffset?: number;
 }
 
 export function toRoman(num: number): string {
@@ -202,11 +206,35 @@ export const INITIAL_SPREADSHEET_ROWS: SpreadsheetRow[] = [
   },
 ];
 
+export function getInternalPusakaJabatanKhusus(nama: string): string | null {
+  const n = (nama || '').toLowerCase().trim();
+  if (n.includes('oki suryowahono') || n.includes('oki suryowano')) {
+    return 'Kepala Pusat Kebijakan Strategis';
+  }
+  if (n.includes('septa dewi anggraeni')) {
+    return 'Ketua Tim Harmonisasi';
+  }
+  if (n.includes('dyah purwaningrum')) {
+    return 'Ketua Tim Analisis Kebijakan';
+  }
+  if (n.includes('asriani sri wahyuni')) {
+    return 'Ketua Tim Kualitas Kebijakan';
+  }
+  if (n.includes('achmad yansyuru')) {
+    return 'Ketua Tim DTO';
+  }
+  if (n.includes('anna christina')) {
+    return 'Kepala Subbagian Tata Usaha';
+  }
+  return null;
+}
+
 export const LampiranManager: React.FC<LampiranManagerProps> = ({
   jenisNaskah,
   items = [],
   onChange,
   pegawaiList = [],
+  romanOffset = 0,
 }) => {
   const [activeTab, setActiveTab] = useState<'buat' | 'upload'>('buat');
   const [buatSubTab, setBuatSubTab] = useState<'daftar_undangan' | 'rundown' | 'teks_bebas'>('daftar_undangan');
@@ -215,6 +243,8 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
   const [processingMsg, setProcessingMsg] = useState<string>('');
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   // Form Fields State
   const [newJudul, setNewJudul] = useState<string>('');
@@ -229,6 +259,15 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     type: string;
     data: string;
   } | null>(null);
+
+  const lastLocalEmitRef = useRef<{ judul: string; sub_judul: string; isi: string }>({
+    judul: '',
+    sub_judul: '',
+    isi: '',
+  });
+  const savedUndanganTextRef = useRef<string>('');
+  const savedManualTextRef = useRef<string>('');
+  const savedTableHtmlRef = useRef<string>('');
 
   // ─── STATE DAFTAR UNDANGAN INTERAKTIF ──────────────────────────────────────
   const [searchSatker, setSearchSatker] = useState<string>('');
@@ -246,9 +285,9 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
   const [tableColumns, setTableColumns] = useState<SpreadsheetColumn[]>(INITIAL_SPREADSHEET_COLUMNS);
   const [tableRows, setTableRows] = useState<SpreadsheetRow[]>(INITIAL_SPREADSHEET_ROWS);
 
-  // Label mark otomatis menggunakan Romawi murni
+  // Label mark otomatis menggunakan Romawi murni (menyesuaikan urutan dan offset)
   const getAutoLabelMark = (index: number) => {
-    return `Lampiran ${toRoman(index + 1)}`;
+    return `Lampiran ${toRoman(Math.max(0, index) + 1 + romanOffset)}`;
   };
 
   const getDefaultJudul = () => {
@@ -257,14 +296,20 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     return 'DAFTAR LAMPIRAN';
   };
 
-  // Pastikan Nota Dinas tidak pernah berada di tab daftar undangan
+  // Pastikan saat berpindah tab utama (jenisNaskah berubah), editor lampiran dari tab sebelumnya ditutup dengan bersih
+  const prevJenisNaskahRef = useRef<string>(jenisNaskah);
   useEffect(() => {
-    if (jenisNaskah === 'NOTA_DINAS' && buatSubTab === 'daftar_undangan') {
+    if (prevJenisNaskahRef.current !== jenisNaskah) {
+      prevJenisNaskahRef.current = jenisNaskah;
+      setIsAdding(false);
+      setEditingItemId(null);
+      setBuatSubTab(jenisNaskah === 'UNDANGAN' ? 'daftar_undangan' : 'rundown');
+    } else if (jenisNaskah !== 'UNDANGAN' && buatSubTab === 'daftar_undangan') {
       setBuatSubTab('rundown');
     }
   }, [jenisNaskah, buatSubTab]);
 
-  // Compile teks Daftar Undangan (Prioritaskan Eksternal di atas A, B, ... lalu Internal di akhir)
+  // Compile teks Daftar Undangan (Nama Satker bold, nama anggota tidak bold, Internal Pusaka hanya 6 nama yang diberi jabatan)
   const generateDaftarUndanganText = useMemo(() => {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const lines: string[] = [];
@@ -274,7 +319,11 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     externalSatkersList.forEach((satker) => {
       if (selectedSatkerIds[satker.id]) {
         const letter = letters[sectionIdx % letters.length];
-        lines.push(`${letter}. ${satker.namaSatker}`);
+        const cleanSatkerName =
+          satker.kode && satker.kode !== 'LAINNYA' && satker.namaSatker.startsWith(`${satker.kode} - `)
+            ? satker.namaSatker.slice(`${satker.kode} - `.length)
+            : satker.namaSatker;
+        lines.push(`**${letter}. ${cleanSatkerName}**`);
 
         const activeMembers = satker.members.filter(
           (m) => selectedExternalMembers[satker.id]?.[m.id] !== false
@@ -282,11 +331,11 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
 
         if (activeMembers.length > 0) {
           activeMembers.forEach((m, mIdx) => {
-            lines.push(`   ${mIdx + 1}. ${m.nama}`);
+            lines.push(`  ${mIdx + 1}. ${m.nama}`);
           });
         } else {
-          lines.push(`   1. Kepala / Pimpinan Satuan Kerja`);
-          lines.push(`   2. Staf terkait`);
+          lines.push(`  1. Kepala / Pimpinan Satuan Kerja`);
+          lines.push(`  2. Staf terkait`);
         }
         lines.push('');
         sectionIdx++;
@@ -297,10 +346,11 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     const activeInternal = pegawaiList.filter((p) => selectedInternalIds[p.id]);
     if (activeInternal.length > 0) {
       const letter = letters[sectionIdx % letters.length];
-      lines.push(`${letter}. Pusat Kebijakan Strategis`);
+      lines.push(`**${letter}. Pusat Kebijakan Strategis**`);
       activeInternal.forEach((p, pIdx) => {
-        const detail = p.jabatan && p.jabatan !== '-' ? `${p.nama}, ${p.jabatan}` : p.nama;
-        lines.push(`   ${pIdx + 1}. ${detail}`);
+        const jabatanKhusus = getInternalPusakaJabatanKhusus(p.nama);
+        const detail = jabatanKhusus ? `${p.nama}, ${jabatanKhusus}` : p.nama;
+        lines.push(`  ${pIdx + 1}. ${detail}`);
       });
       lines.push('');
     }
@@ -318,20 +368,17 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
   const generateTableHtml = useMemo(() => {
     let html = '<table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9.5pt; margin-top: 10px; border: 1px solid #000;">\n';
     html += '  <thead>\n    <tr style="background-color: #f8fafc;">\n';
-    tableColumns.forEach((col, idx) => {
-      html += `      <th style="border: 1px solid #000; padding: 6px 8px; font-weight: bold; text-align: ${
-        idx === 0 ? 'center' : 'left'
-      };">${col.label}</th>\n`;
+    tableColumns.forEach((col) => {
+      html += `      <th style="border: 1px solid #000; padding: 6px 8px; font-weight: bold; text-align: center;">${col.label}</th>\n`;
     });
     html += '  </thead>\n  <tbody>\n';
     tableRows.forEach((row) => {
       html += '    <tr>\n';
-      row.cells.forEach((cell, cIdx) => {
+      row.cells.forEach((cell) => {
         if (cell.isHidden) return;
         const colSpanAttr = cell.colSpan && cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : '';
         const rowSpanAttr = cell.rowSpan && cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : '';
-        const align = cIdx === 0 && (!cell.colSpan || cell.colSpan === 1) ? 'center' : 'left';
-        html += `      <td${colSpanAttr}${rowSpanAttr} style="border: 1px solid #000; padding: 5px 8px; text-align: ${align}; vertical-align: top;">${
+        html += `      <td${colSpanAttr}${rowSpanAttr} style="border: 1px solid #000; padding: 5px 8px; text-align: center; vertical-align: middle;">${
           cell.value || ''
         }</td>\n`;
       });
@@ -341,46 +388,149 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     return html;
   }, [tableColumns, tableRows]);
 
-  // Sync saat user beralih mode di "Buat Lembar Teks"
+  const itemsRef = useRef<LampiranItem[]>(items);
+  itemsRef.current = items;
+
+  const syncToParent = (patch: Partial<LampiranItem>, targetId = editingItemId) => {
+    if (!targetId) return;
+    const curItems = itemsRef.current;
+    const currentIdx = curItems.findIndex((it) => it.id === targetId);
+    if (currentIdx < 0) return;
+
+    const existing = curItems[currentIdx];
+    const updatedItem: LampiranItem = {
+      ...existing,
+      ...patch,
+      label_mark: getAutoLabelMark(currentIdx),
+    };
+
+    lastLocalEmitRef.current = {
+      judul: updatedItem.judul || '',
+      sub_judul: updatedItem.sub_judul || '',
+      isi: updatedItem.isi || '',
+    };
+
+    const isSame =
+      existing.tipe === updatedItem.tipe &&
+      existing.label_mark === updatedItem.label_mark &&
+      existing.judul === updatedItem.judul &&
+      existing.sub_judul === updatedItem.sub_judul &&
+      existing.isi === updatedItem.isi &&
+      existing.tanpa_mark === updatedItem.tanpa_mark &&
+      existing.file_name === updatedItem.file_name &&
+      existing.file_data === updatedItem.file_data &&
+      existing.pdf_pages_images === updatedItem.pdf_pages_images;
+
+    if (!isSame) {
+      const next = [...curItems];
+      next[currentIdx] = updatedItem;
+      itemsRef.current = next;
+      onChange(next);
+    }
+  };
+
+  // Sync hanya ketika pilihan checklist satker/internal berubah saat berada di sub-tab "daftar_undangan"
+  const prevGeneratedUndanganRef = useRef<string>(generateDaftarUndanganText);
   useEffect(() => {
-    if (activeTab === 'buat') {
-      if (buatSubTab === 'daftar_undangan') {
-        if (!newJudul || newJudul.includes('RUNDOWN')) setNewJudul('DAFTAR UNDANGAN');
+    if (prevGeneratedUndanganRef.current !== generateDaftarUndanganText) {
+      prevGeneratedUndanganRef.current = generateDaftarUndanganText;
+      if (activeTab === 'buat' && isAdding && buatSubTab === 'daftar_undangan') {
+        savedUndanganTextRef.current = generateDaftarUndanganText;
         setNewIsi(generateDaftarUndanganText);
-      } else if (buatSubTab === 'rundown') {
-        if (!newJudul || newJudul.includes('UNDANGAN')) setNewJudul('SUSUNAN ACARA / RUNDOWN KEGIATAN');
-        setNewIsi(generateTableHtml);
+        syncToParent({ isi: generateDaftarUndanganText });
       }
     }
-  }, [buatSubTab, generateDaftarUndanganText, generateTableHtml, activeTab]);
+  }, [generateDaftarUndanganText, activeTab, isAdding, buatSubTab]);
+
+  // Sinkronisasi 1 arah dari Panel Kanan (ketika pengguna mengetik langsung di kertas Lampiran pada SuratPreview) -> update state lokal LampiranManager
+  useEffect(() => {
+    if (!isAdding || !editingItemId) return;
+    const ext = items.find((it) => it.id === editingItemId);
+    if (!ext) return;
+
+    if ((ext.isi || '') !== lastLocalEmitRef.current.isi) {
+      const nextIsi = ext.isi || '';
+      lastLocalEmitRef.current.isi = nextIsi;
+      if (nextIsi.includes('<table')) {
+        savedTableHtmlRef.current = nextIsi;
+      } else if (buatSubTab === 'teks_bebas') {
+        savedManualTextRef.current = nextIsi;
+      } else if (buatSubTab === 'daftar_undangan') {
+        savedUndanganTextRef.current = nextIsi;
+      }
+      setNewIsi((prev) => (prev === nextIsi ? prev : nextIsi));
+    }
+    if ((ext.judul || '') !== lastLocalEmitRef.current.judul) {
+      const nextJudul = ext.judul || '';
+      lastLocalEmitRef.current.judul = nextJudul;
+      setNewJudul((prev) => (prev === nextJudul ? prev : nextJudul));
+    }
+    if ((ext.sub_judul || '') !== lastLocalEmitRef.current.sub_judul) {
+      const nextSub = ext.sub_judul || '';
+      lastLocalEmitRef.current.sub_judul = nextSub;
+      setNewSubJudul((prev) => (prev === nextSub ? prev : nextSub));
+    }
+  }, [items, isAdding, editingItemId]);
 
   const handleStartAdd = () => {
-    setEditingItemId(null);
-    setNewJudul(getDefaultJudul());
-    setNewSubJudul('');
+    const newId = `lamp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const defaultJudul = getDefaultJudul();
     const defaultSub = jenisNaskah === 'UNDANGAN' ? 'daftar_undangan' : 'rundown';
+    const initialIsi = defaultSub === 'daftar_undangan' ? generateDaftarUndanganText : generateTableHtml;
+
+    savedUndanganTextRef.current = defaultSub === 'daftar_undangan' ? initialIsi : '';
+    savedManualTextRef.current = '';
+    savedTableHtmlRef.current = defaultSub === 'rundown' ? initialIsi : '';
+
+    setEditingItemId(newId);
+    setActiveTab('buat');
+    setNewJudul(defaultJudul);
+    setNewSubJudul('');
     setBuatSubTab(defaultSub);
-    setNewIsi(defaultSub === 'daftar_undangan' ? generateDaftarUndanganText : generateTableHtml);
+    setNewIsi(initialIsi);
     setTanpaMark(false);
     setPdfPageImages([]);
     setExtractedDocText('');
     setUploadedFile(null);
     setIsAdding(true);
+
+    const newItem: LampiranItem = {
+      id: newId,
+      tipe: 'buat',
+      label_mark: getAutoLabelMark(items.length),
+      judul: defaultJudul,
+      isi: initialIsi,
+    };
+    lastLocalEmitRef.current = { judul: defaultJudul, sub_judul: '', isi: initialIsi };
+    onChange([...items, newItem]);
   };
 
   const handleStartEdit = (item: LampiranItem) => {
+    const rawContent = item.isi || item.extracted_text || '';
+    const isTableContent = rawContent.includes('<table') || !!item.isi?.includes('| Waktu');
+    const isUndanganContent = !isTableContent && !!item.judul?.toUpperCase().includes('UNDANGAN');
+
+    savedTableHtmlRef.current = isTableContent ? rawContent : '';
+    savedUndanganTextRef.current = isUndanganContent ? rawContent : '';
+    savedManualTextRef.current = !isTableContent && !isUndanganContent ? rawContent : '';
+
     setEditingItemId(item.id);
     setActiveTab(item.tipe);
     setNewJudul(item.judul || '');
     setNewSubJudul(item.sub_judul || '');
-    setNewIsi(item.isi || item.extracted_text || '');
+    setNewIsi(rawContent);
     setTanpaMark(!!item.tanpa_mark);
     setPdfPageImages(item.pdf_pages_images || []);
     setExtractedDocText(item.extracted_text || '');
+    lastLocalEmitRef.current = {
+      judul: item.judul || '',
+      sub_judul: item.sub_judul || '',
+      isi: rawContent,
+    };
     setBuatSubTab(
-      item.judul?.toUpperCase().includes('RUNDOWN') || item.isi?.includes('<table') || item.isi?.includes('| Waktu')
+      isTableContent
         ? 'rundown'
-        : item.judul?.toUpperCase().includes('UNDANGAN')
+        : isUndanganContent
         ? 'daftar_undangan'
         : 'teks_bebas'
     );
@@ -661,56 +811,72 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
     });
   };
 
-  // File Upload Handler
+  // File Upload Handler (Mendukung Seluruh Halaman PDF/Dokumen Tanpa Batas 1 Halaman)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert('Ukuran file maksimal 15MB.');
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Ukuran file maksimal 25MB.');
       return;
     }
 
     setIsProcessingFile(true);
-    setProcessingMsg(`Membaca file "${file.name}"...`);
+    setProcessingMsg(`Membaca seluruh halaman "${file.name}"...`);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+
+      let extractedText = '';
+      let renderedImages: string[] = [];
 
       if (file.name.toLowerCase().endsWith('.docx')) {
         setProcessingMsg('Mengekstrak teks dari Word (.docx)...');
         const res = await extractTextFromDocxBuffer(arrayBuffer);
         const text = typeof res === 'string' ? res : res.text;
+        extractedText = text;
         setExtractedDocText(text);
         setNewIsi(text);
-        if (!newJudul) setNewJudul(file.name.replace(/\.[^/.]+$/, '').toUpperCase());
+        setNewJudul('');
       } else if (file.name.toLowerCase().endsWith('.pdf')) {
-        setProcessingMsg('Mengekstrak teks & merender visual halaman PDF...');
+        setProcessingMsg('Merender seluruh halaman PDF ke lembar lampiran...');
         try {
-          const res = await extractTextFromPdfBuffer(arrayBuffer);
-          const text = typeof res === 'string' ? res : res.text;
-          setExtractedDocText(text);
-          if (!newIsi) setNewIsi(text);
-        } catch (e) {
-          console.warn('PDF text extract fallback:', e);
-        }
-
-        try {
-          const images = await renderPdfPagesToImages(arrayBuffer, 1.25);
+          const images = await renderPdfPagesToImages(arrayBuffer, 1.6, 100);
+          renderedImages = images;
           setPdfPageImages(images);
         } catch (e) {
           console.warn('PDF render to image fallback:', e);
         }
-        if (!newJudul) setNewJudul(file.name.replace(/\.[^/.]+$/, '').toUpperCase());
+        setExtractedDocText('');
+        setNewIsi('');
+        setNewJudul('');
+      } else {
+        setNewIsi('');
+        setNewJudul('');
       }
 
       const reader = new FileReader();
       reader.onload = () => {
-        setUploadedFile({
+        const fileDataUrl = reader.result as string;
+        const fileObj = {
           name: file.name,
           size: file.size,
           type: file.type || 'application/octet-stream',
-          data: reader.result as string,
+          data: fileDataUrl,
+        };
+        setUploadedFile(fileObj);
+        syncToParent({
+          tipe: 'upload',
+          judul: '',
+          sub_judul: undefined,
+          isi: extractedText,
+          file_name: fileObj.name,
+          file_size: fileObj.size,
+          file_type: fileObj.type,
+          file_data: fileObj.data,
+          pdf_pages_images: renderedImages.length > 0 ? renderedImages : undefined,
+          extracted_text: extractedText || undefined,
+          tanpa_mark: tanpaMark,
         });
       };
       reader.readAsDataURL(file);
@@ -724,40 +890,6 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
   };
 
   const handleSaveItem = () => {
-    if (activeTab === 'buat' && !newIsi.trim() && !newJudul.trim()) {
-      alert('Isi judul atau substansi lampiran terlebih dahulu.');
-      return;
-    }
-    if (activeTab === 'upload' && !uploadedFile) {
-      alert('Silakan pilih file dokumen untuk diunggah terlebih dahulu.');
-      return;
-    }
-
-    const currentIdx = editingItemId ? items.findIndex((it) => it.id === editingItemId) : items.length;
-    const autoLabel = getAutoLabelMark(currentIdx >= 0 ? currentIdx : items.length);
-
-    const itemData: LampiranItem = {
-      id: editingItemId || `lamp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      tipe: activeTab,
-      label_mark: autoLabel,
-      judul: newJudul.trim() || getDefaultJudul(),
-      sub_judul: newSubJudul.trim() || undefined,
-      isi: activeTab === 'buat' ? newIsi.trim() : (newIsi.trim() || extractedDocText),
-      file_name: activeTab === 'upload' && uploadedFile ? uploadedFile.name : undefined,
-      file_size: activeTab === 'upload' && uploadedFile ? uploadedFile.size : undefined,
-      file_type: activeTab === 'upload' && uploadedFile ? uploadedFile.type : undefined,
-      file_data: activeTab === 'upload' && uploadedFile ? uploadedFile.data : undefined,
-      pdf_pages_images: activeTab === 'upload' && pdfPageImages.length > 0 ? pdfPageImages : undefined,
-      extracted_text: activeTab === 'upload' ? extractedDocText : undefined,
-      tanpa_mark: activeTab === 'upload' ? tanpaMark : undefined,
-    };
-
-    if (editingItemId) {
-      onChange(items.map((it) => (it.id === editingItemId ? itemData : it)));
-    } else {
-      onChange([...items, itemData]);
-    }
-
     setIsAdding(false);
     setEditingItemId(null);
   };
@@ -768,7 +900,7 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
       // Re-assign Romawi otomatis agar urutan I, II, III selalu konsisten
       const renumbered = remaining.map((item, idx) => ({
         ...item,
-        label_mark: `Lampiran ${toRoman(idx + 1)}`,
+        label_mark: getAutoLabelMark(idx),
       }));
       onChange(renumbered);
       if (editingItemId === id) {
@@ -776,6 +908,27 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
         setEditingItemId(null);
       }
     }
+  };
+
+  // Ubah urutan lampiran (via Grab Drag-and-Drop maupun tombol Geser Naik/Turun) & otomatis sesuaikan mark kanan atas
+  const handleReorderItems = (fromIdx: number, toIdx: number) => {
+    if (
+      fromIdx === toIdx ||
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= items.length ||
+      toIdx >= items.length
+    ) {
+      return;
+    }
+    const reordered = [...items];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const renumbered = reordered.map((item, idx) => ({
+      ...item,
+      label_mark: getAutoLabelMark(idx),
+    }));
+    onChange(renumbered);
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -853,19 +1006,71 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
         )}
       </div>
 
-      {/* List Existing Lampiran */}
+      {/* List Existing Lampiran (Dapat Di-Grab / Drag-and-Drop Pindah Barisan) */}
       {items.length > 0 && (
         <div className="space-y-2">
+          {items.length > 1 && (
+            <div className="flex items-center justify-between px-1 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1">
+                <GripVertical className="w-3.5 h-3.5 text-slate-400" />
+                <span>Tahan &amp; geser (grab) barisan untuk mengubah urutan lampiran</span>
+              </span>
+              <span className="font-medium text-slate-400">Penanda otomatis menyesuaikan urutan</span>
+            </div>
+          )}
           {items.map((item, idx) => {
             const isExpanded = expandedId === item.id;
             const isCurrentlyEditing = editingItemId === item.id;
-            const romanLabel = `Lampiran ${toRoman(idx + 1)}`;
+            const romanLabel = getAutoLabelMark(idx);
+            const isDragged = draggedIdx === idx;
+            const isDragOver = dragOverIdx === idx && draggedIdx !== null && draggedIdx !== idx;
 
             return (
               <div
                 key={item.id}
+                draggable
+                onDragStart={(e) => {
+                  setDraggedIdx(idx);
+                  e.dataTransfer.effectAllowed = 'move';
+                  try {
+                    e.dataTransfer.setData('text/plain', String(idx));
+                  } catch {}
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dragOverIdx !== idx) {
+                    setDragOverIdx(idx);
+                  }
+                }}
+                onDragLeave={() => {
+                  if (dragOverIdx === idx) {
+                    setDragOverIdx(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = draggedIdx !== null ? draggedIdx : parseInt(e.dataTransfer.getData('text/plain'), 10);
+                  setDraggedIdx(null);
+                  setDragOverIdx(null);
+                  if (!isNaN(from) && from !== idx) {
+                    handleReorderItems(from, idx);
+                  }
+                }}
+                onDragEnd={() => {
+                  setDraggedIdx(null);
+                  setDragOverIdx(null);
+                }}
                 className={`border rounded-lg overflow-hidden transition-all ${
-                  isCurrentlyEditing
+                  isDragged
+                    ? 'opacity-50 scale-[0.99] border-dashed border-slate-400 bg-slate-100'
+                    : isDragOver
+                    ? activeColor === 'amber'
+                      ? 'border-2 border-amber-500 bg-amber-50/60 shadow-sm'
+                      : activeColor === 'indigo'
+                      ? 'border-2 border-indigo-500 bg-indigo-50/60 shadow-sm'
+                      : 'border-2 border-teal-500 bg-teal-50/60 shadow-sm'
+                    : isCurrentlyEditing
                     ? activeColor === 'amber'
                       ? 'border-amber-500 bg-amber-50/30'
                       : activeColor === 'indigo'
@@ -874,51 +1079,83 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                     : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
                 }`}
               >
-                <div className="p-3 flex items-center justify-between">
-                  <div
-                    className="flex items-center space-x-2.5 flex-1 cursor-pointer select-none"
-                    onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                  >
-                    <span className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 shadow-2xs">
-                      {idx + 1}
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                          {item.label_mark || romanLabel}
-                        </span>
-                        <span
-                          className={`text-[10px] font-medium px-2 py-0.2 rounded-full border ${
-                            item.tipe === 'buat'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          }`}
-                        >
-                          {item.tipe === 'buat' ? 'Teks Dokumen' : 'File Terunggah'}
-                        </span>
-                        {item.pdf_pages_images && item.pdf_pages_images.length > 0 && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-red-50 text-red-700 border border-red-200">
-                            PDF ({item.pdf_pages_images.length} Hal)
+                <div className="p-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2 flex-1 min-w-0">
+                    {/* Handle Grab Drag-and-Drop */}
+                    <div
+                      className="p-1 -ml-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing rounded hover:bg-slate-200/60 shrink-0 transition-colors"
+                      title="Tahan dan geser (drag) untuk memindahkan urutan lampiran"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </div>
+
+                    <div
+                      className="flex items-center space-x-2.5 flex-1 min-w-0 cursor-pointer select-none"
+                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                    >
+                      <span className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 shadow-2xs shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center flex-wrap gap-1.5">
+                          <span className="font-bold text-xs text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {romanLabel}
                           </span>
-                        )}
-                        {item.tanpa_mark && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                            Tanpa Mark
+                          <span
+                            className={`text-[10px] font-medium px-2 py-0.2 rounded-full border ${
+                              item.tipe === 'buat'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}
+                          >
+                            {item.tipe === 'buat' ? 'Teks Dokumen' : 'File Terunggah'}
                           </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-700 font-semibold truncate max-w-[240px] sm:max-w-md mt-0.5">
-                        {item.judul || (item.file_name ? item.file_name : 'Tanpa Judul')}
-                      </div>
-                      {item.sub_judul && (
-                        <div className="text-[10.5px] text-slate-500 italic truncate max-w-[240px] sm:max-w-md">
-                          {item.sub_judul}
+                          {item.pdf_pages_images && item.pdf_pages_images.length > 0 && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-red-50 text-red-700 border border-red-200">
+                              PDF ({item.pdf_pages_images.length} Hal)
+                            </span>
+                          )}
+                          {item.tanpa_mark && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                              Tanpa Mark
+                            </span>
+                          )}
                         </div>
-                      )}
+                        <div className="text-[11px] text-slate-700 font-semibold truncate max-w-[240px] sm:max-w-md mt-0.5">
+                          {item.judul || (item.file_name ? item.file_name : 'Tanpa Judul')}
+                        </div>
+                        {item.sub_judul && (
+                          <div className="text-[10.5px] text-slate-500 italic truncate max-w-[240px] sm:max-w-md">
+                            {item.sub_judul}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-1.5">
+                  <div className="flex items-center space-x-1 shrink-0">
+                    {items.length > 1 && (
+                      <div className="flex items-center mr-1 bg-white border border-slate-200 rounded-md overflow-hidden shadow-2xs">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => handleReorderItems(idx, idx - 1)}
+                          className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none cursor-pointer transition-colors"
+                          title="Geser urutan ke atas"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === items.length - 1}
+                          onClick={() => handleReorderItems(idx, idx + 1)}
+                          className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none border-l border-slate-200 cursor-pointer transition-colors"
+                          title="Geser urutan ke bawah"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleStartEdit(item)}
@@ -949,7 +1186,7 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 border-t border-slate-200/60 bg-white text-xs space-y-2">
                     <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                      <span>Penanda Resmi: <strong>{item.label_mark || romanLabel}</strong></span>
+                      <span>Penanda Resmi: <strong>{romanLabel}</strong></span>
                       <span>Jenis: {item.tipe === 'buat' ? 'Teks Dokumen' : 'File Terunggah'}</span>
                     </div>
                     {item.sub_judul && (
@@ -957,7 +1194,7 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                         Sub Judul: <strong>{item.sub_judul}</strong>
                       </div>
                     )}
-                    {item.isi && (
+                    {item.isi && !item.isi.includes('<table') && (
                       <div className="p-2 bg-slate-50 rounded border border-slate-200 max-h-36 overflow-y-auto text-[11px] font-mono whitespace-pre-wrap">
                         {item.isi.slice(0, 300)}
                         {item.isi.length > 300 && '...'}
@@ -994,7 +1231,18 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
             <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
               <button
                 type="button"
-                onClick={() => setActiveTab('buat')}
+                onClick={() => {
+                  setActiveTab('buat');
+                  const effJudul = newJudul.trim() || getDefaultJudul();
+                  if (!newJudul.trim()) setNewJudul(effJudul);
+                  syncToParent({
+                    tipe: 'buat',
+                    judul: effJudul,
+                    sub_judul: newSubJudul.trim() || undefined,
+                    isi: newIsi,
+                    tanpa_mark: undefined,
+                  });
+                }}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                   activeTab === 'buat'
                     ? activeColor === 'amber'
@@ -1009,7 +1257,22 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab('upload')}
+                onClick={() => {
+                  setActiveTab('upload');
+                  syncToParent({
+                    tipe: 'upload',
+                    judul: '',
+                    sub_judul: undefined,
+                    isi: newIsi || extractedDocText,
+                    file_name: uploadedFile?.name,
+                    file_size: uploadedFile?.size,
+                    file_type: uploadedFile?.type,
+                    file_data: uploadedFile?.data,
+                    pdf_pages_images: pdfPageImages.length > 0 ? pdfPageImages : undefined,
+                    extracted_text: extractedDocText || undefined,
+                    tanpa_mark: tanpaMark,
+                  });
+                }}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                   activeTab === 'upload'
                     ? activeColor === 'amber'
@@ -1025,43 +1288,69 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
             </div>
           </div>
 
-          {/* Form Fields: Judul Lampiran & Sub Judul Lampiran (Label pojok kanan otomatis romawi) */}
-          <div className="space-y-2 text-xs">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Judul Lampiran:
-              </label>
-              <input
-                type="text"
-                value={newJudul}
-                onChange={(e) => setNewJudul(e.target.value)}
-                placeholder="Contoh: DAFTAR UNDANGAN / SUSUNAN ACARA / PEDOMAN TEKNIS"
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold uppercase focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
+          {/* Form Fields: Judul Lampiran & Sub Judul Lampiran (Hanya untuk Buat Lembar Teks/Tabel, BUKAN Upload Dokumen) */}
+          {activeTab === 'buat' && (
+            <div className="space-y-2 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Judul Lampiran:
+                </label>
+                <input
+                  type="text"
+                  value={newJudul}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewJudul(val);
+                    syncToParent({ judul: val.trim() || getDefaultJudul() });
+                  }}
+                  placeholder="Contoh: DAFTAR UNDANGAN / SUSUNAN ACARA / PEDOMAN TEKNIS"
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold uppercase focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
 
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Sub Judul Lampiran:
-              </label>
-              <input
-                type="text"
-                value={newSubJudul}
-                onChange={(e) => setNewSubJudul(e.target.value)}
-                placeholder="Contoh: Rapat Koordinasi Pembahasan Kebijakan Strategis Penyelenggaraan Digital"
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-1 focus:ring-amber-500"
-              />
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Sub Judul Lampiran:
+                </label>
+                <input
+                  type="text"
+                  value={newSubJudul}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewSubJudul(val);
+                    syncToParent({ sub_judul: val.trim() || undefined });
+                  }}
+                  placeholder="Contoh: Rapat Koordinasi Pembahasan Kebijakan Strategis Penyelenggaraan Digital"
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Sub-Tabs Khusus Mode "Buat Lembar Teks / Tabel" */}
           {activeTab === 'buat' && (
             <div className="space-y-3">
               <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-2">
-                {jenisNaskah !== 'NOTA_DINAS' && (
+                {jenisNaskah === 'UNDANGAN' && (
                   <button
                     type="button"
-                    onClick={() => setBuatSubTab('daftar_undangan')}
+                    onClick={() => {
+                      if (buatSubTab === 'rundown' || newIsi.includes('<table')) {
+                        savedTableHtmlRef.current = newIsi;
+                      } else if (buatSubTab === 'teks_bebas') {
+                        savedManualTextRef.current = newIsi;
+                      }
+                      const nextJudul =
+                        !newJudul || newJudul.includes('RUNDOWN') || newJudul.includes('MATRIKS')
+                          ? 'DAFTAR UNDANGAN'
+                          : newJudul;
+                      const nextUndangan = generateDaftarUndanganText || savedUndanganTextRef.current || '';
+                      savedUndanganTextRef.current = nextUndangan;
+                      setNewJudul(nextJudul);
+                      setNewIsi(nextUndangan);
+                      setBuatSubTab('daftar_undangan');
+                      syncToParent({ judul: nextJudul, isi: nextUndangan });
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                       buatSubTab === 'daftar_undangan'
                         ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs'
@@ -1075,7 +1364,27 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setBuatSubTab('rundown')}
+                  onClick={() => {
+                    let nextTable = newIsi;
+                    if (!newIsi.includes('<table')) {
+                      if (buatSubTab === 'teks_bebas') {
+                        savedManualTextRef.current = newIsi;
+                      } else if (buatSubTab === 'daftar_undangan') {
+                        savedUndanganTextRef.current = newIsi;
+                      }
+                      nextTable = savedTableHtmlRef.current || generateTableHtml;
+                      setNewIsi(nextTable);
+                    }
+                    const nextJudul =
+                      !newJudul || newJudul.includes('UNDANGAN')
+                        ? jenisNaskah === 'NOTA_DINAS'
+                          ? 'MATRIKS / SUSUNAN KEGIATAN'
+                          : 'SUSUNAN ACARA / RUNDOWN KEGIATAN'
+                        : newJudul;
+                    setNewJudul(nextJudul);
+                    setBuatSubTab('rundown');
+                    syncToParent({ judul: nextJudul, isi: nextTable });
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                     buatSubTab === 'rundown'
                       ? 'bg-teal-100 text-teal-900 border border-teal-300 shadow-2xs'
@@ -1088,7 +1397,17 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setBuatSubTab('teks_bebas')}
+                  onClick={() => {
+                    if (buatSubTab === 'rundown' || newIsi.includes('<table')) {
+                      savedTableHtmlRef.current = newIsi;
+                    } else if (buatSubTab === 'daftar_undangan') {
+                      savedUndanganTextRef.current = newIsi;
+                    }
+                    const nextManual = savedManualTextRef.current || '';
+                    setNewIsi(nextManual);
+                    setBuatSubTab('teks_bebas');
+                    syncToParent({ isi: nextManual });
+                  }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                     buatSubTab === 'teks_bebas'
                       ? 'bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs'
@@ -1351,6 +1670,7 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
                       {pegawaiList.map((p) => {
                         const isChecked = !!selectedInternalIds[p.id];
+                        const jabatanKhusus = getInternalPusakaJabatanKhusus(p.nama);
                         return (
                           <label
                             key={p.id}
@@ -1368,9 +1688,9 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                             />
                             <div className="truncate">
                               <span className="font-semibold">{p.nama}</span>
-                              {p.jabatan && p.jabatan !== '-' && (
-                                <span className="text-[10px] text-slate-500 block truncate">
-                                  {p.jabatan}
+                              {jabatanKhusus && (
+                                <span className="text-[10px] text-teal-700 font-medium block truncate">
+                                  {jabatanKhusus}
                                 </span>
                               )}
                             </div>
@@ -1397,8 +1717,12 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
 
                   {/* Editor Tabel Interaktif Visual (Tanpa Kodingan HTML Mentah) */}
                   <InteractiveDocumentTable
-                    initialContent={newIsi || generateTableHtml}
-                    onChangeContent={(html) => setNewIsi(html)}
+                    initialContent={newIsi.includes('<table') ? newIsi : (savedTableHtmlRef.current || generateTableHtml)}
+                    onChangeContent={(html) => {
+                      savedTableHtmlRef.current = html;
+                      setNewIsi(html);
+                      syncToParent({ isi: html });
+                    }}
                   />
                 </div>
               )}
@@ -1417,8 +1741,17 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                   <textarea
                     rows={8}
                     data-rich="true"
-                    value={newIsi}
-                    onChange={(e) => setNewIsi(e.target.value)}
+                    value={buatSubTab === 'teks_bebas' && newIsi.includes('<table') ? '' : newIsi}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (buatSubTab === 'teks_bebas') {
+                        savedManualTextRef.current = val;
+                      } else if (buatSubTab === 'daftar_undangan') {
+                        savedUndanganTextRef.current = val;
+                      }
+                      setNewIsi(val);
+                      syncToParent({ isi: val });
+                    }}
                     placeholder="Ketik atau edit daftar nama undangan, susunan acara, pedoman, atau materi lampiran di sini..."
                     className="w-full p-2.5 bg-white border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-1 focus:ring-amber-500 font-sans"
                   />
@@ -1476,6 +1809,14 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                         setUploadedFile(null);
                         setPdfPageImages([]);
                         setExtractedDocText('');
+                        syncToParent({
+                          file_name: undefined,
+                          file_size: undefined,
+                          file_type: undefined,
+                          file_data: undefined,
+                          pdf_pages_images: undefined,
+                          extracted_text: undefined,
+                        });
                       }}
                       className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 cursor-pointer"
                     >
@@ -1489,29 +1830,17 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
                     </div>
                   )}
 
-                  {extractedDocText && (
-                    <div>
-                      <div className="text-[10.5px] font-semibold text-slate-700 mb-1">
-                        Teks yang Diekstrak dari Dokumen (Dapat diedit):
-                      </div>
-                      <textarea
-                        rows={4}
-                        data-rich="true"
-                        value={newIsi}
-                        onChange={(e) => setNewIsi(e.target.value)}
-                        placeholder="Isi teks hasil ekstraksi dokumen..."
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded text-xs leading-relaxed font-mono"
-                      />
-                    </div>
-                  )}
-
                   {/* Opsi Tanpa Watermark / Tanda Mark Lampiran */}
                   <div className="bg-white p-3 rounded-lg border border-slate-200">
                     <label className="flex items-start space-x-2.5 cursor-pointer select-none">
                       <input
                         type="checkbox"
                         checked={tanpaMark}
-                        onChange={(e) => setTanpaMark(e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setTanpaMark(checked);
+                          syncToParent({ tanpa_mark: checked });
+                        }}
                         className="mt-0.5 w-4 h-4 rounded text-teal-600 focus:ring-teal-500 border-slate-300 cursor-pointer"
                       />
                       <div>
@@ -1529,32 +1858,33 @@ export const LampiranManager: React.FC<LampiranManagerProps> = ({
             </div>
           )}
 
-          {/* Buttons Simpan / Batal */}
-          <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-200/60">
-            <button
-              type="button"
-              onClick={() => {
-                setIsAdding(false);
-                setEditingItemId(null);
-              }}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveItem}
-              disabled={isProcessingFile}
-              className={`px-4 py-1.5 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50 ${
-                activeColor === 'amber'
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : activeColor === 'indigo'
-                  ? 'bg-indigo-700 hover:bg-indigo-800'
-                  : 'bg-teal-700 hover:bg-teal-800'
-              }`}
-            >
-              {editingItemId ? 'Simpan Perubahan' : 'Simpan Lampiran'}
-            </button>
+          {/* Tombol Hapus & Tutup Panel */}
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200/60">
+            <div className="flex items-center space-x-2">
+              {editingItemId && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteItem(editingItemId)}
+                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Hapus Lampiran
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleSaveItem}
+                disabled={isProcessingFile}
+                className={`px-4 py-1.5 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50 ${
+                  activeColor === 'amber'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : activeColor === 'indigo'
+                    ? 'bg-indigo-700 hover:bg-indigo-800'
+                    : 'bg-teal-700 hover:bg-teal-800'
+                }`}
+              >
+                Selesai / Tutup Editor
+              </button>
+            </div>
           </div>
         </div>
       )}

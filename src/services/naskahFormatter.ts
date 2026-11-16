@@ -4,6 +4,8 @@
  * baik untuk teks yang dihasilkan AI maupun ketikan/manual kalimat panjang dari pengguna.
  */
 
+import { stripMarkup } from './richText';
+
 /**
  * Merapikan teks berpoin-poin (nota_isi, telaah, rekomendasi) agar memiliki baris baru (\n)
  * dan indentasi yang tepat, bukan tersambung menjadi satu paragraf rapat.
@@ -27,7 +29,6 @@ export function formatNumberedPoints(rawText: string): string {
   }
 
   // 1. Tangani jika angka poin utama (1., 2., 3., dst) menempel setelah tanda titik, kurung tutup, petik, titik koma, atau titik dua
-  //    Termasuk kasus hasil AI di mana titik langsung diikuti angka tanpa spasi (misal: "...berkualitas.2. Kebijakan")
   text = text.replace(/([.:\)\"”;])\s*(\d+\.)\s+(?=[A-Z**(])/g, '$1\n\n$2 ');
   text = text.replace(/([.:\)\"”;])\s+(\d+\.)\s+/g, '$1\n\n$2 ');
 
@@ -92,33 +93,7 @@ export function combineNotaDinasSections(
 }
 
 /**
- * Memecah kalimat yang sangat panjang berdasarkan tanda koma atau spasi
- * sehingga tidak membentuk satu baris teks raksasa yang tidak bisa dipaginasi.
- */
-function splitLongSentenceByCommas(sentence: string): string[] {
-  const parts: string[] = [];
-  let remaining = sentence;
-  while (remaining.length > 110) {
-    let cutIdx = remaining.lastIndexOf(', ', 110);
-    if (cutIdx === -1 || cutIdx < 40) {
-      cutIdx = remaining.lastIndexOf(' ', 110);
-    }
-    if (cutIdx === -1 || cutIdx < 40) {
-      cutIdx = 110;
-    } else {
-      cutIdx += 1; // sertakan koma
-    }
-    parts.push(remaining.substring(0, cutIdx).trim());
-    remaining = remaining.substring(cutIdx).trim();
-  }
-  if (remaining) {
-    parts.push(remaining);
-  }
-  return parts;
-}
-
-/**
- * Memecah teks nota dinas menjadi unit-unit paragraf atau butir poin utuh
+ * Memecah teks menjadi unit-unit paragraf atau butir poin utuh
  * TANPA memotong di tengah kalimat atau pada tanda koma.
  */
 export function chunkIntoSentenceUnits(text: string): string[] {
@@ -134,11 +109,207 @@ export function chunkIntoSentenceUnits(text: string): string[] {
       }
       continue;
     }
-    // Pertahankan baris/paragraf secara utuh tanpa memecah di koma
     units.push(trimmed);
   }
 
   return units;
+}
+
+/**
+ * Memotong satu paragraf/poin yang panjang agar muat ke dalam sisa baris halaman (`maxLines`).
+ * Mengembalikan `[bagianMuatHalamanIni, sisaKeHalamanBerikutnya]`.
+ * Memotong tepat pada batas kata terakhir yang muat di baris terbawah halaman
+ * (layaknya MS Word / Google Docs) agar halaman terisi penuh sampai batas margin bawah.
+ */
+export function splitTextToFitLines(
+  text: string,
+  maxLines: number,
+  charsPerLine = 72
+): [string, string] {
+  const leadingSpaces = (text.match(/^ */) || [''])[0];
+  const trimmed = text.trim();
+  const isNumberedOrIndented =
+    /^\d+[.)]\s+/.test(trimmed) || leadingSpaces.length >= 2;
+  const isSubPoint = /^([a-zA-Z][.)]|\([0-9a-zA-Z]\))\s+/.test(trimmed);
+
+  // Untuk butir bernomor/sub-poin, lebar baris efektif sedikit lebih sempit karena hanging indent 24px
+  const effectiveCpl = isNumberedOrIndented || isSubPoint ? Math.max(40, charsPerLine - 4) : charsPerLine;
+  const targetChars = Math.max(effectiveCpl, Math.floor(maxLines * effectiveCpl));
+
+  if (trimmed.length <= targetChars) {
+    return [leadingSpaces + trimmed, ''];
+  }
+
+  const slice = trimmed.slice(0, targetChars);
+  let cutIdx = -1;
+
+  // Potong pada spasi kata terakhir mendekati ujung baris terakhir agar tidak menyisakan ruang kosong di bawah halaman
+  const lastSpace = slice.lastIndexOf(' ');
+  if (lastSpace >= targetChars * 0.45) {
+    cutIdx = lastSpace;
+  } else {
+    // String panjang tanpa spasi
+    cutIdx = targetChars;
+  }
+
+  // Pastikan tidak memotong di tengah penanda markup inline (** atau ^^ atau __)
+  const rawHead = trimmed.slice(0, cutIdx).trim();
+  const rawTail = trimmed.slice(cutIdx).trim();
+
+  // Jika yang dipotong adalah butir bernomor (1. / 2. / dst.) atau lanjutan ber-indent,
+  // beri awalan 2 spasi ('  ') pada tail agar di halaman berikutnya lurus sejajar (margin-left: 24px, tanpa text-indent paragraf baru)
+  const tailPrefix = isSubPoint ? '    ' : isNumberedOrIndented ? '  ' : '';
+
+  return [leadingSpaces + rawHead, rawTail ? tailPrefix + rawTail : ''];
+}
+
+/**
+ * Menghitung bobot baris visual sebuah teks berdasarkan lebar karakter per baris (`charsPerLine`).
+ */
+export function estimateVisualLines(
+  text: string | undefined,
+  charsPerLine = 72,
+  paragraphSpacingWeight = 0.22
+): number {
+  if (!text || !text.trim()) return 0;
+  const lines = text.split('\n');
+  let total = 0;
+  for (const line of lines) {
+    const clean = stripMarkup(line).trim();
+    if (!clean) {
+      total += 0.4;
+      continue;
+    }
+    const isNum = /^\d+[.)]\s+/.test(clean);
+    const cpl = isNum ? Math.max(40, charsPerLine - 4) : charsPerLine;
+    total += Math.max(1, Math.ceil(clean.length / cpl)) + paragraphSpacingWeight;
+  }
+  return total;
+}
+
+/**
+ * Mesin paginasi multi-halaman universal yang membagi array paragraf ke dalam
+ * `[Halaman 1, Halaman 2, Halaman 3, ...]` berdasarkan kapasitas baris masing-masing halaman.
+ */
+function paginateParagraphs(
+  rawParagraphs: string[],
+  opts: {
+    charsPerLine: number;
+    page1Capacity: number;
+    middlePageCapacity: number;
+    lastPageCapacity: number;
+    forceAtLeastTwoPages?: boolean;
+  }
+): string[][] {
+  const { charsPerLine, page1Capacity, middlePageCapacity, lastPageCapacity, forceAtLeastTwoPages } = opts;
+
+  const getWeight = (p: string): number => {
+    const clean = stripMarkup(p).trim();
+    if (!clean) return 0.4;
+    const isNum = /^\d+[.)]\s+/.test(clean) || /^ {2,}\S/.test(p);
+    const cpl = isNum ? Math.max(40, charsPerLine - 4) : charsPerLine;
+    return Math.max(1, Math.ceil(clean.length / cpl)) + 0.22;
+  };
+
+  const queue = [...rawParagraphs];
+  const pages: string[][] = [];
+
+  // 1. Isi Halaman 1 sampai penuh mendekati margin bawah
+  const page1Items: string[] = [];
+  let page1Used = 0;
+  const safePage1Cap = Math.max(2, page1Capacity);
+
+  while (queue.length > 0) {
+    const item = queue[0];
+    const w = getWeight(item);
+    const remLines = safePage1Cap - page1Used;
+
+    if (w <= remLines) {
+      page1Items.push(queue.shift()!);
+      page1Used += w;
+    } else if (remLines >= 1.8 || page1Items.length === 0) {
+      const [head, tail] = splitTextToFitLines(item, Math.max(1.2, remLines), charsPerLine);
+      if (head && tail) {
+        page1Items.push(head);
+        queue[0] = tail;
+      } else {
+        page1Items.push(queue.shift()!);
+      }
+      break;
+    } else {
+      break;
+    }
+  }
+  pages.push(page1Items);
+
+  // Jika dipaksa minimal 2 halaman (karena di Halaman 1 tidak cukup ruang untuk TTD),
+  // pastikan paragraf penutup / bagian paling akhir pindah ke Halaman 2 menemani blok tanda tangan
+  if (forceAtLeastTwoPages && queue.length === 0 && page1Items.length > 0) {
+    if (page1Items.length >= 2) {
+      queue.unshift(page1Items.pop()!);
+    } else {
+      const onlyItem = page1Items[0];
+      const w = getWeight(onlyItem);
+      if (w > 3) {
+        const [head, tail] = splitTextToFitLines(onlyItem, Math.max(2, w - 2), charsPerLine);
+        if (head && tail) {
+          page1Items[0] = head;
+          queue.unshift(tail);
+        }
+      }
+    }
+  }
+
+  // 2. Isi Halaman Lanjutan (Halaman 2, 3, 4, dst.)
+  while (queue.length > 0) {
+    let remainingWeight = 0;
+    for (const q of queue) {
+      remainingWeight += getWeight(q);
+    }
+
+    // Jika sisa teks muat di halaman terakhir bersama TTD
+    if (remainingWeight <= lastPageCapacity) {
+      pages.push(queue.splice(0, queue.length));
+      break;
+    }
+
+    const midItems: string[] = [];
+    let midUsed = 0;
+    const effectiveCap =
+      remainingWeight <= middlePageCapacity
+        ? Math.max(3, remainingWeight - 2.5)
+        : middlePageCapacity;
+
+    while (queue.length > 0) {
+      const item = queue[0];
+      const w = getWeight(item);
+      const remLines = effectiveCap - midUsed;
+
+      if (w <= remLines) {
+        midItems.push(queue.shift()!);
+        midUsed += w;
+      } else if (remLines >= 1.8 || midItems.length === 0) {
+        const [head, tail] = splitTextToFitLines(item, Math.max(1.2, remLines), charsPerLine);
+        if (head && tail) {
+          midItems.push(head);
+          queue[0] = tail;
+        } else {
+          midItems.push(queue.shift()!);
+        }
+        break;
+      } else {
+        break;
+      }
+    }
+
+    if (midItems.length > 0) {
+      pages.push(midItems);
+    } else if (queue.length > 0) {
+      pages.push([queue.shift()!]);
+    }
+  }
+
+  return pages;
 }
 
 export interface NotaDinasPageSplit {
@@ -149,58 +320,8 @@ export interface NotaDinasPageSplit {
 }
 
 /**
- * Memotong satu paragraf/poin yang panjang agar muat ke dalam sisa baris halaman (`maxLines`).
- * Mengembalikan `[bagianMuatHalamanIni, sisaKeHalamanBerikutnya]`.
- * Memprioritaskan pemotongan pada batas kalimat (`. `), kemudian batas kata (` `),
- * atau batas karakter jika pengguna mengetik string panjang tanpa spasi.
- */
-function splitTextToFitLines(
-  text: string,
-  maxLines: number,
-  charsPerLine = 65
-): [string, string] {
-  const trimmed = text.trim();
-  const targetChars = Math.max(charsPerLine, Math.floor(maxLines * charsPerLine));
-  if (trimmed.length <= targetChars) {
-    return [trimmed, ''];
-  }
-
-  // 1. Coba potong di batas akhir kalimat (. / ! / ? / ;) dalam rentang 55%..100% targetChars
-  const slice = trimmed.slice(0, targetChars);
-  let cutIdx = -1;
-  const sentenceEndRegex = /[.!?;]\s+/g;
-  let match: RegExpExecArray | null;
-  while ((match = sentenceEndRegex.exec(slice)) !== null) {
-    const endPos = match.index + 1;
-    if (endPos >= targetChars * 0.55) {
-      cutIdx = endPos;
-    }
-  }
-
-  // 2. Jika tidak ada batas kalimat yang pas, potong di batas spasi kata terdekat
-  if (cutIdx === -1) {
-    const lastSpace = slice.lastIndexOf(' ');
-    if (lastSpace >= targetChars * 0.4) {
-      cutIdx = lastSpace;
-    } else {
-      // String tanpa spasi (misal ketikan panjang terus-menerus)
-      cutIdx = targetChars;
-    }
-  }
-
-  const head = trimmed.slice(0, cutIdx).trim();
-  const tail = trimmed.slice(cutIdx).trim();
-  return [head, tail];
-}
-
-/**
- * Membagi teks nota dinas (baik poin-poin maupun paragraf narasi)
- * menjadi Halaman 1, 2, 3, dst. secara adaptif, profesional, dan dinamis.
- * - Mengutamakan 1 halaman penuh jika teks cukup.
- * - Jika melebihi 1 halaman, memanfaatkan ruang Halaman 1 secara optimal (~23-24 baris)
- *   tanpa menyisakan ruang kosong besar.
- * - Halaman lanjutan dibagi secara dinamis sehingga tanda tangan dan penutup
- *   berada tepat di bawah paragraf penutup dan tidak pernah terpotong/overflow.
+ * Membagi teks Nota Dinas menjadi Halaman 1, 2, 3, dst. secara adaptif dan otomatis
+ * ketika pengguna mengetik panjang lebar, persis seperti aliran halaman MS Word / Google Docs.
  */
 export function splitNotaDinasPages(
   notaIsi: string,
@@ -219,10 +340,23 @@ export function splitNotaDinasPages(
     return { page1Lines: [], page2Lines: [], pages: [], isMultiPage: false };
   }
 
-  // Rapikan penomoran poin yang menempel (misal "...berkualitas.2. Kebijakan...") sebelum dipaginasi
-  const normalizedText = formatNumberedPoints(fullText);
+  // Satukan kembali baris lanjutan ber-indent ('  ...') hasil pecahan halaman sebelumnya
+  // agar paragraf/butir bernomor utuh kembali sebelum dihitung ulang
+  const mergedLines: string[] = [];
+  for (const rawLine of fullText.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    const isContinuation =
+      /^ {2,}\S/.test(rawLine) &&
+      !/^\s*(?:\d+[.)]|[a-zA-Z][.)]|\([0-9a-zA-Z]\)|[-*•#])\s+/.test(rawLine);
+    if (isContinuation && mergedLines.length > 0) {
+      mergedLines[mergedLines.length - 1] = `${mergedLines[mergedLines.length - 1].trimEnd()} ${trimmed}`;
+    } else {
+      mergedLines.push(trimmed);
+    }
+  }
 
-  // Pecah menjadi blok paragraf/poin utuh
+  const normalizedText = formatNumberedPoints(mergedLines.join('\n\n'));
   const rawParagraphs = normalizedText
     .split(/\n+/)
     .map((p) => p.trim())
@@ -232,7 +366,7 @@ export function splitNotaDinasPages(
     return { page1Lines: [], page2Lines: [], pages: [], isMultiPage: false };
   }
 
-  // 1. Cek jika pengguna sengaja menyisipkan pemisah halaman manual: `---`, `===`, atau `[halaman baru]`
+  // 1. Cek pemisah halaman manual (`---`, `===`, `[halaman baru]`)
   const hasManualPageBreak = rawParagraphs.some((l) =>
     /^(?:---|===|\*\*\*|\[halaman baru\]|\[pagebreak\])/i.test(l.trim())
   );
@@ -260,27 +394,21 @@ export function splitNotaDinasPages(
     };
   }
 
-  // Hitung bobot baris (lebar efektif kertas A4 dengan margin kiri/kanan pada Arial 12pt adalah ~65 karakter/baris)
-  const getLineWeight = (text: string): number => {
-    const trimmed = text.trim();
-    if (!trimmed) return 0.5;
-    const isBulletOrNum = /^(\d+[\.\)]|[a-zA-Z][\.\)]|[\-\*•])\s+/.test(trimmed);
-    const charsPerLine = isBulletOrNum ? 62 : 65;
-    return Math.max(1, Math.ceil(trimmed.length / charsPerLine)) + 0.25; // +0.25 untuk spasi antar paragraf
-  };
-
-  // Hitung total baris keseluruhan
+  // Lebar area teks Nota Dinas pada kertas A4 (640px, Arial 12pt) memuat ~74 karakter per baris
+  const CHARS_PER_LINE = 74;
   let totalWeight = 0;
   let totalChars = 0;
   for (const p of rawParagraphs) {
-    totalWeight += getLineWeight(p);
-    totalChars += p.length;
+    const clean = stripMarkup(p).trim();
+    const isNum = /^\d+[.)]\s+/.test(clean);
+    const cpl = isNum ? CHARS_PER_LINE - 4 : CHARS_PER_LINE;
+    totalWeight += Math.max(1, Math.ceil(clean.length / cpl)) + 0.22;
+    totalChars += clean.length;
   }
 
-  // 2. Cek apakah cukup 1 Halaman:
-  // Ruang bebas untuk isi + penutup + TTD pada Halaman 1 A4 adalah ~18.5 baris visual atau ~1.200 karakter.
-  const SINGLE_PAGE_MAX_LINES = 18.5;
-  if (totalWeight <= SINGLE_PAGE_MAX_LINES && totalChars <= 1200 && rawParagraphs.length <= 12) {
+  // Kapasitas Halaman 1 jika beserta TTD: ~23.5 baris visual (~1.650 karakter)
+  const SINGLE_PAGE_MAX_LINES = 23.5;
+  if (totalWeight <= SINGLE_PAGE_MAX_LINES && totalChars <= 1650) {
     return {
       page1Lines: rawParagraphs,
       page2Lines: [],
@@ -289,120 +417,19 @@ export function splitNotaDinasPages(
     };
   }
 
-  // 3. Multi-Halaman:
-  // Kapasitas baris aman per halaman:
-  // - Halaman 1: Memuat Kop + Atribut Nota Dinas + Isi + "(bersambung ke halaman 2)" => 24 baris
-  const PAGE_1_CAPACITY = 24;
-  // - Halaman Tengah: Memuat "- 2 -" + Isi + "(bersambung ke halaman 3)" => 31 baris
-  const MIDDLE_PAGE_CAPACITY = 31;
-  // - Halaman Terakhir: Memuat "- N -" + Isi + Penutup + Blok Tanda Tangan => 22 baris
-  const LAST_PAGE_CAPACITY = 22;
-
-  const queue = [...rawParagraphs];
-  const pages: string[][] = [];
-
-  // Isi Halaman 1 secara proporsional (potong paragraf panjang jika masih ada sisa ruang >= 3 baris)
-  const page1Items: string[] = [];
-  let page1Used = 0;
-
-  while (queue.length > 0) {
-    const item = queue[0];
-    const w = getLineWeight(item);
-    const remLines = PAGE_1_CAPACITY - page1Used;
-
-    if (w <= remLines) {
-      page1Items.push(queue.shift()!);
-      page1Used += w;
-    } else if (remLines >= 3.5 || page1Items.length === 0) {
-      // Potong paragraf/poin agar mengisi ruang Halaman 1 dan sisanya mengalir ke Halaman 2
-      const [head, tail] = splitTextToFitLines(item, Math.max(3, remLines - 0.3), 64);
-      if (head && tail) {
-        page1Items.push(head);
-        queue[0] = tail;
-      } else {
-        page1Items.push(queue.shift()!);
-      }
-      break;
-    } else {
-      break;
-    }
-  }
-  pages.push(page1Items);
-
-  // Isi Halaman Lanjutan (Halaman 2, 3, dst.)
-  while (queue.length > 0) {
-    let remainingWeight = 0;
-    for (const q of queue) {
-      remainingWeight += getLineWeight(q);
-    }
-
-    if (remainingWeight <= LAST_PAGE_CAPACITY) {
-      pages.push(queue.splice(0, queue.length));
-      break;
-    }
-
-    const midItems: string[] = [];
-    let midUsed = 0;
-
-    while (queue.length > 0) {
-      const item = queue[0];
-      const w = getLineWeight(item);
-      const remLines = MIDDLE_PAGE_CAPACITY - midUsed;
-
-      if (w <= remLines) {
-        midItems.push(queue.shift()!);
-        midUsed += w;
-      } else if (remLines >= 3.5 || midItems.length === 0) {
-        const [head, tail] = splitTextToFitLines(item, Math.max(3, remLines - 0.3), 64);
-        if (head && tail) {
-          midItems.push(head);
-          queue[0] = tail;
-        } else {
-          midItems.push(queue.shift()!);
-        }
-        break;
-      } else {
-        break;
-      }
-    }
-
-    if (midItems.length > 0) {
-      pages.push(midItems);
-    } else if (queue.length > 0) {
-      pages.push([queue.shift()!]);
-    }
-  }
-
-  // 4. Penyeimbangan Anti-Orphan:
-  // Jika halaman terakhir hanya berisi 1 paragraf pendek (< 4 baris, misal hanya kalimat "Demikian disampaikan...")
-  // dan halaman sebelumnya memiliki >= 2 paragraf, geser 1 paragraf (atau potongan akhir) ke halaman terakhir
-  // agar halaman terakhir tidak tampak kosong melompong sebelum tanda tangan.
-  if (pages.length >= 2) {
-    const lastPage = pages[pages.length - 1];
-    const prevPage = pages[pages.length - 2];
-    const lastWeight = lastPage.reduce((acc, l) => acc + getLineWeight(l), 0);
-
-    if (lastWeight < 4 && prevPage.length >= 2) {
-      const candidate = prevPage[prevPage.length - 1];
-      const candidateWeight = getLineWeight(candidate);
-      if (lastWeight + candidateWeight <= LAST_PAGE_CAPACITY) {
-        prevPage.pop();
-        lastPage.unshift(candidate);
-      } else if (candidateWeight > 6) {
-        const keepLines = Math.max(3, Math.ceil(candidateWeight - 5));
-        const [head, tail] = splitTextToFitLines(candidate, keepLines, 64);
-        if (head && tail) {
-          prevPage[prevPage.length - 1] = head;
-          lastPage.unshift(tail);
-        }
-      }
-    }
-  }
+  // Jika melebihi 1 halaman (totalWeight > 23.5), Halaman 1 diisi penuh sampai margin bawah (~29.5 baris visual)
+  const pages = paginateParagraphs(rawParagraphs, {
+    charsPerLine: CHARS_PER_LINE,
+    page1Capacity: 29.5,
+    middlePageCapacity: 42,
+    lastPageCapacity: 34,
+    forceAtLeastTwoPages: true,
+  });
 
   return {
     page1Lines: pages[0] || [],
     page2Lines: pages[1] || [],
-    pages: pages,
+    pages,
     isMultiPage: pages.length > 1,
   };
 }
@@ -410,11 +437,13 @@ export function splitNotaDinasPages(
 export interface SuratUndanganPageSplit {
   page1AgendaLines: string[];
   page2AgendaLines: string[];
+  agendaPages: string[][];
   isMultiPage: boolean;
 }
 
 /**
- * Membagi agenda dan rincian acara Surat Undangan jika kalimatnya panjang / melebihi 1 halaman A4.
+ * Membagi Surat Undangan secara otomatis ke Halaman 2, 3, dst. apabila pengguna
+ * mengetik panjang lebar pada Kepada Yth., Paragraf Pembuka, Agenda, atau Paragraf Penutup.
  */
 export function splitSuratUndanganPages(
   agendaText: string,
@@ -422,70 +451,57 @@ export function splitSuratUndanganPages(
   undanganPembuka?: string,
   undanganPenutup?: string
 ): SuratUndanganPageSplit {
-  const formatted = formatNumberedPoints(agendaText);
-  const units = chunkIntoSentenceUnits(formatted).filter((u) => u.trim() !== '');
+  const formattedAgenda = formatNumberedPoints(agendaText || '');
+  const agendaUnits = chunkIntoSentenceUnits(formattedAgenda).filter((u) => u.trim() !== '');
 
-  if (units.length === 0) {
-    return { page1AgendaLines: [], page2AgendaLines: [], isMultiPage: false };
-  }
+  const AGENDA_CPL = 56; // Kolom agenda berada di sebelah kanan label "Agenda :"
+  const BODY_CPL = 72;
 
-  const charsPerLine = 52; // Kolom agenda dimulai setelah label "Agenda :" (lebar ~52 karakter/baris)
-  let agendaLineWeight = 0;
-  for (const u of units) {
-    agendaLineWeight += Math.max(1, Math.ceil(u.trim().length / charsPerLine));
-  }
+  const kepadaWeight = Math.max(1.2, estimateVisualLines(undanganKepada, BODY_CPL, 0.2));
+  const pembukaWeight = Math.max(1.5, estimateVisualLines(undanganPembuka, BODY_CPL, 0.22));
+  const agendaWeight = Math.max(1, estimateVisualLines(formattedAgenda, AGENDA_CPL, 0.22));
+  const penutupWeight = Math.max(1.5, estimateVisualLines(undanganPenutup, BODY_CPL, 0.22));
 
-  const kepadaLines = undanganKepada ? Math.max(1, undanganKepada.split('\n').length) : 2;
-  const pembukaLines = undanganPembuka ? Math.max(2, Math.ceil(undanganPembuka.length / 65)) : 3;
-  const penutupLines = undanganPenutup ? Math.max(2, Math.ceil(undanganPenutup.length / 65)) : 3;
-  const extraLines = Math.max(0, kepadaLines - 3) + Math.max(0, pembukaLines - 4) + Math.max(0, penutupLines - 3);
+  const totalDynamicWeight = kepadaWeight + pembukaWeight + agendaWeight + penutupWeight;
 
-  // Surat Undangan memuat Kop, Nomor/Sifat/Hal/Lampiran, Kepada Yth, Waktu, Tempat, Penutup, TTD.
-  // Jika agenda + ekstra > 5 baris atau panjang karakter > 280, pecah ke Halaman 2.
-  if (agendaLineWeight + extraLines <= 5 && formatted.length <= 280) {
+  // Pada Halaman 1 Surat Undangan (dengan Kop, Nomor/Hal, Hari/Waktu/Tempat, dan Blok TTD),
+  // ruang dinamis untuk (Kepada + Pembuka + Agenda + Penutup) adalah ~22.5 baris visual.
+  const SINGLE_PAGE_BUDGET = 22.5;
+
+  if (totalDynamicWeight <= SINGLE_PAGE_BUDGET) {
     return {
-      page1AgendaLines: units,
+      page1AgendaLines: agendaUnits.length > 0 ? agendaUnits : [agendaText || ''],
       page2AgendaLines: [],
+      agendaPages: [agendaUnits.length > 0 ? agendaUnits : [agendaText || '']],
       isMultiPage: false,
     };
   }
 
-  // Kapasitas baris agenda di Halaman 1 (tanpa Penutup & TTD di Halaman 1) adalah ~9 baris
-  const maxPage1AgendaLines = Math.max(3, 9 - Math.max(0, kepadaLines - 3) - Math.max(0, pembukaLines - 4));
+  // Jika melebihi 1 halaman: Penutup & TTD otomatis pindah ke halaman lanjutan.
+  // Hitung sisa ruang untuk Agenda di Halaman 1 sampai margin bawah (~30 baris total):
+  const page1AgendaCap = Math.max(2, 30 - kepadaWeight - pembukaWeight);
 
-  const page1AgendaLines: string[] = [];
-  const page2AgendaLines: string[] = [];
-  let usedLines = 0;
-  let overflowed = false;
-
-  for (const unit of units) {
-    const trimmed = unit.trim();
-    const w = Math.max(1, Math.ceil(trimmed.length / charsPerLine));
-    if (!overflowed) {
-      if (usedLines + w <= maxPage1AgendaLines) {
-        page1AgendaLines.push(trimmed);
-        usedLines += w;
-      } else if (maxPage1AgendaLines - usedLines >= 2 || page1AgendaLines.length === 0) {
-        const [head, tail] = splitTextToFitLines(trimmed, Math.max(2, maxPage1AgendaLines - usedLines), charsPerLine);
-        if (head && tail) {
-          page1AgendaLines.push(head);
-          page2AgendaLines.push(tail);
-        } else {
-          page1AgendaLines.push(trimmed);
-        }
-        overflowed = true;
-      } else {
-        page2AgendaLines.push(trimmed);
-        overflowed = true;
-      }
-    } else {
-      page2AgendaLines.push(trimmed);
-    }
+  if (agendaUnits.length === 0) {
+    return {
+      page1AgendaLines: [''],
+      page2AgendaLines: [],
+      agendaPages: [['']],
+      isMultiPage: true,
+    };
   }
 
+  const agendaPages = paginateParagraphs(agendaUnits, {
+    charsPerLine: AGENDA_CPL,
+    page1Capacity: page1AgendaCap,
+    middlePageCapacity: 40,
+    lastPageCapacity: Math.max(4, 33 - penutupWeight),
+    forceAtLeastTwoPages: false,
+  });
+
   return {
-    page1AgendaLines,
-    page2AgendaLines,
+    page1AgendaLines: agendaPages[0] || [],
+    page2AgendaLines: agendaPages.slice(1).flat(),
+    agendaPages,
     isMultiPage: true,
   };
 }
@@ -493,94 +509,85 @@ export function splitSuratUndanganPages(
 export interface SuratTugasPageSplit {
   page1UntukLines: string[];
   page2UntukLines: string[];
+  untukPages: string[][];
   isMultiPage: boolean;
 }
 
 /**
- * Membagi diktum "Untuk" dan bagian penutup/TTD pada Surat Tugas (1-3 pegawai)
- * apabila pengguna mengetik teks yang panjang pada Menimbang, Dasar, atau Untuk.
+ * Membagi Surat Tugas secara otomatis ke Halaman 2, 3, dst. apabila pengguna
+ * mengetik panjang lebar pada Menimbang, Dasar, Kepada, Untuk, atau Penutup.
  */
 export function splitSuratTugasPages(
   untukText: string,
   menimbangText: string,
   dasarText: string,
-  pegawaiCount: number
+  pegawaiCount: number,
+  customKepadaText?: string,
+  penutupText?: string
 ): SuratTugasPageSplit {
-  const countLines = (txt: string, cpl = 58): number => {
-    if (!txt || !txt.trim()) return 1;
-    return txt
-      .split('\n')
-      .reduce((acc, line) => acc + Math.max(1, Math.ceil(line.trim().length / cpl)), 0);
-  };
+  const DIKTUM_CPL = 64; // Kolom kanan di sebelah label Menimbang / Dasar / Kepada / Untuk
 
-  const menimbangLines = countLines(menimbangText, 58);
-  const dasarLines = countLines(dasarText, 58);
-  const untukLines = countLines(untukText, 58);
-  const pegawaiLines = pegawaiCount <= 1 ? 4 : pegawaiCount === 2 ? 8 : 12;
+  const menimbangWeight = Math.max(1.5, estimateVisualLines(menimbangText, DIKTUM_CPL, 0.22));
+  const dasarWeight = Math.max(1.5, estimateVisualLines(dasarText, DIKTUM_CPL, 0.22));
+  const untukWeight = Math.max(1.5, estimateVisualLines(untukText, DIKTUM_CPL, 0.22));
+  const penutupWeight = penutupText ? estimateVisualLines(penutupText, 72, 0.22) : 0;
+
+  const pegawaiWeight =
+    pegawaiCount === 0
+      ? Math.max(1.5, estimateVisualLines(customKepadaText, DIKTUM_CPL, 0.22))
+      : pegawaiCount > 3
+      ? 1.5
+      : pegawaiCount === 1
+      ? 4.2
+      : pegawaiCount === 2
+      ? 8.4
+      : 12.2;
 
   const rawUntukUnits = (untukText || '')
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const totalLines = menimbangLines + dasarLines + untukLines + pegawaiLines;
+  const totalWeight = menimbangWeight + dasarWeight + pegawaiWeight + untukWeight + penutupWeight;
 
-  // Aturan 1-3 Pegawai: Surat Tugas selalu cukup 1 halaman (diskalakan adaptif di SuratPreview),
-  // kecuali pengguna mengetik diktum yang sangat panjang (> 32 baris atau > 850 karakter).
-  if (totalLines <= 32 && (untukText || '').length <= 850) {
+  // Aturan 1-3 Pegawai: Surat Tugas muat 1 halaman untuk teks standar (<= 28.5 baris bobot),
+  // namun otomatis menambah Halaman 2, 3, dst. jika pengguna mengetik manual panjang lebar.
+  const SINGLE_PAGE_BUDGET = pegawaiCount === 3 ? 29.5 : 28.5;
+
+  if (totalWeight <= SINGLE_PAGE_BUDGET) {
+    const defaultPages = [rawUntukUnits.length > 0 ? rawUntukUnits : [untukText || '']];
     return {
-      page1UntukLines: rawUntukUnits.length > 0 ? rawUntukUnits : [untukText || ''],
+      page1UntukLines: defaultPages[0],
       page2UntukLines: [],
+      untukPages: defaultPages,
       isMultiPage: false,
     };
   }
 
-  // Jika melebihi 1 halaman, hitung sisa baris di Halaman 1 untuk diktum "Untuk"
-  // Tanpa Penutup & TTD di Halaman 1, total kapasitas Halaman 1 adalah ~27 baris
-  const maxPage1UntukLines = Math.max(3, 27 - menimbangLines - dasarLines - pegawaiLines);
+  // Tanpa Penutup & TTD di Halaman 1, kapasitas Halaman 1 sampai margin bawah adalah ~36 baris
+  const page1UntukCap = Math.max(2, 36 - menimbangWeight - dasarWeight - pegawaiWeight);
 
-  if (untukLines <= maxPage1UntukLines) {
-    // Seluruh "Untuk" masih muat di Halaman 1, hanya Penutup & TTD yang pindah ke Halaman 2
+  if (rawUntukUnits.length === 0) {
     return {
-      page1UntukLines: rawUntukUnits.length > 0 ? rawUntukUnits : [untukText || ''],
+      page1UntukLines: [''],
       page2UntukLines: [],
+      untukPages: [['']],
       isMultiPage: true,
     };
   }
 
-  // Jika "Untuk" sangat panjang hingga melebihi Halaman 1, bagi "Untuk" ke Halaman 1 dan Halaman 2
-  const page1UntukLines: string[] = [];
-  const page2UntukLines: string[] = [];
-  let used = 0;
-  let overflow = false;
-
-  for (const unit of rawUntukUnits) {
-    const w = Math.max(1, Math.ceil(unit.length / 58));
-    if (!overflow) {
-      if (used + w <= maxPage1UntukLines) {
-        page1UntukLines.push(unit);
-        used += w;
-      } else if (maxPage1UntukLines - used >= 2 || page1UntukLines.length === 0) {
-        const [head, tail] = splitTextToFitLines(unit, Math.max(2, maxPage1UntukLines - used), 58);
-        if (head && tail) {
-          page1UntukLines.push(head);
-          page2UntukLines.push(tail);
-        } else {
-          page1UntukLines.push(unit);
-        }
-        overflow = true;
-      } else {
-        page2UntukLines.push(unit);
-        overflow = true;
-      }
-    } else {
-      page2UntukLines.push(unit);
-    }
-  }
+  const untukPages = paginateParagraphs(rawUntukUnits, {
+    charsPerLine: DIKTUM_CPL,
+    page1Capacity: page1UntukCap,
+    middlePageCapacity: 40,
+    lastPageCapacity: Math.max(4, 32 - penutupWeight),
+    forceAtLeastTwoPages: false,
+  });
 
   return {
-    page1UntukLines,
-    page2UntukLines,
+    page1UntukLines: untukPages[0] || [],
+    page2UntukLines: untukPages.slice(1).flat(),
+    untukPages,
     isMultiPage: true,
   };
 }

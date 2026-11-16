@@ -276,7 +276,7 @@ export const INITIAL_PEGAWAI: Pegawai[] = [
 export const INITIAL_PEJABAT: Pejabat[] = [
   {
     "id": "pej-1",
-    "nama": "Oki Suryowahono, S.T., M.T.",
+    "nama": "Oki Suryowahono",
     "nip": "197909072008031001",
     "pangkat_golongan": "Pembina Tingkat I (IV/c)",
     "jabatan": "Kepala Pusat Kebijakan Strategis",

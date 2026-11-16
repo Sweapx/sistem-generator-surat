@@ -56,8 +56,15 @@ import {
   getJenisNaskahLabel,
   getJenisNaskahCode,
 } from './services/nomorSuratService';
-import { exportNaskahDinasDocx, formatTanggalIndonesia } from './services/docxService';
+import { exportNaskahDinasDocx, formatTanggalIndonesia, stripAcademicTitles, cleanTempatField } from './services/docxService';
 import { formatNumberedPoints, combineNotaDinasSections } from './services/naskahFormatter';
+import {
+  setMemoryDraft,
+  getMemoryDraft,
+  saveDraftToIndexedDB,
+  loadDraftFromIndexedDB,
+  removeDraftFromIndexedDB,
+} from './services/draftStorage';
 import {
   isSheetsConfigured,
   fetchNomorSuratFromSheets,
@@ -89,8 +96,34 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
+function stripHeavyLampiran(items?: any[]) {
+  if (!Array.isArray(items)) return items;
+  return items.map((it) => ({
+    ...it,
+    file_data: undefined,
+    pdf_pages_images: undefined,
+  }));
+}
+
 function saveToStorage<T>(key: string, value: T): void {
   try {
+    if (key === LS_NOMOR_SURAT && Array.isArray(value)) {
+      const compactList = value.map((rec: any) => ({
+        ...rec,
+        pdf_base64: undefined,
+        docx_base64: undefined,
+        form_state: rec.form_state
+          ? {
+              ...rec.form_state,
+              lampiran_items: stripHeavyLampiran(rec.form_state.lampiran_items),
+              undangan_lampiran_items: stripHeavyLampiran(rec.form_state.undangan_lampiran_items),
+              nota_lampiran_items: stripHeavyLampiran(rec.form_state.nota_lampiran_items),
+            }
+          : undefined,
+      }));
+      localStorage.setItem(key, JSON.stringify(compactList));
+      return;
+    }
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
     console.warn(`Failed to save ${key} to localStorage:`, e);
@@ -109,7 +142,10 @@ export function App() {
     loadFromStorage<Pegawai[]>(LS_PEGAWAI, INITIAL_PEGAWAI)
   );
   const [pejabatList, setPejabatList] = useState<Pejabat[]>(() =>
-    loadFromStorage<Pejabat[]>(LS_PEJABAT, INITIAL_PEJABAT)
+    loadFromStorage<Pejabat[]>(LS_PEJABAT, INITIAL_PEJABAT).map((p) => ({
+      ...p,
+      nama: stripAcademicTitles(p.nama) || p.nama,
+    }))
   );
   const [nomorSuratList, setNomorSuratList] = useState<NomorSuratRecord[]>(() =>
     loadFromStorage<NomorSuratRecord[]>(LS_NOMOR_SURAT, INITIAL_NOMOR_SURAT)
@@ -269,14 +305,46 @@ export function App() {
     return baseDefault;
   });
 
-  // Auto-Save Draft per tab surat ke localStorage setiap kali form berubah
+  // Saat aplikasi pertama kali dimuat (termasuk setelah refresh F5), pulihkan draft penuh (termasuk gambar PDF lampiran) dari IndexedDB
+  useEffect(() => {
+    const activeJenis = (localStorage.getItem('pusaka_active_naskah') as JenisNaskah) || 'TUGAS';
+    loadDraftFromIndexedDB(activeJenis).then((idbDraft) => {
+      if (idbDraft) {
+        setForm((prev) => {
+          if (prev.jenis_naskah !== activeJenis) return prev;
+          return {
+            ...prev,
+            ...idbDraft,
+            jenis_naskah: activeJenis,
+            selectedPegawaiIds: Array.isArray(idbDraft.selectedPegawaiIds) ? idbDraft.selectedPegawaiIds : prev.selectedPegawaiIds,
+            undangan_lampiran_items: Array.isArray(idbDraft.undangan_lampiran_items) ? idbDraft.undangan_lampiran_items : prev.undangan_lampiran_items,
+            nota_lampiran_items: Array.isArray(idbDraft.nota_lampiran_items) ? idbDraft.nota_lampiran_items : prev.nota_lampiran_items,
+            lampiran_items: Array.isArray(idbDraft.lampiran_items) ? idbDraft.lampiran_items : prev.lampiran_items,
+          };
+        });
+      }
+    });
+  }, []);
+
+  // Auto-Save Draft per tab surat ke IndexedDB, Memory, dan localStorage setiap kali form berubah
   useEffect(() => {
     if (form && form.jenis_naskah) {
+      setMemoryDraft(form.jenis_naskah, form);
+      saveDraftToIndexedDB(form.jenis_naskah, form);
+      localStorage.setItem('pusaka_active_naskah', form.jenis_naskah);
       try {
         localStorage.setItem(`pusaka_draft_${form.jenis_naskah}`, JSON.stringify(form));
-        localStorage.setItem('pusaka_active_naskah', form.jenis_naskah);
-      } catch (err) {
-        console.warn('Gagal auto-save draft ke localStorage:', err);
+      } catch {
+        // Jika lampiran melebihi kuota localStorage (5MB), IndexedDB sudah menyimpan versi penuhnya (termasuk pdf_pages_images)
+        try {
+          const lightDraft = {
+            ...form,
+            lampiran_items: stripHeavyLampiran(form.lampiran_items),
+            undangan_lampiran_items: stripHeavyLampiran(form.undangan_lampiran_items),
+            nota_lampiran_items: stripHeavyLampiran(form.nota_lampiran_items),
+          };
+          localStorage.setItem(`pusaka_draft_${form.jenis_naskah}`, JSON.stringify(lightDraft));
+        } catch {}
       }
     }
   }, [form]);
@@ -306,13 +374,23 @@ export function App() {
       simulatedMonth,
       simulatedYear
     );
-    setForm((prev) => ({
-      ...prev,
-      nomor_urut: nextNomorUrut,
-      tahun: simulatedYear,
-      bulan: simulatedMonth,
-      nomor_lengkap: computed,
-    }));
+    setForm((prev) => {
+      if (
+        prev.nomor_urut === nextNomorUrut &&
+        prev.tahun === simulatedYear &&
+        prev.bulan === simulatedMonth &&
+        prev.nomor_lengkap === computed
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        nomor_urut: nextNomorUrut,
+        tahun: simulatedYear,
+        bulan: simulatedMonth,
+        nomor_lengkap: computed,
+      };
+    });
   }, [nextNomorUrut, simulatedMonth, simulatedYear, editingRecord, form.jenis_naskah, form.kode_klasifikasi]);
 
   // ─── Modal & UI States ───────────────────────────────────────────────────────
@@ -503,13 +581,52 @@ export function App() {
             const styles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
             styles.forEach((s) => s.remove());
 
-            // Sisipkan style minimalis khusus dokumen surat tugas
+            // Sisipkan style lengkap khusus dokumen agar hasil PDF 100% identik dengan preview web
             const printStyle = clonedDoc.createElement('style');
             printStyle.textContent = `
               * { box-sizing: border-box; }
-              body { background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
-              #surat-tugas-document { background: #ffffff !important; color: #000000 !important; width: 794px !important; margin: 0 auto !important; }
-              .print-page { background: #ffffff !important; color: #000000 !important; margin: 0 auto !important; }
+              body { background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; margin: 0 !important; padding: 0 !important; }
+              .no-print, [data-no-print], .print\\:hidden, .action-bar-print-hide { display: none !important; }
+              .preview-scroll-container { overflow: visible !important; max-height: none !important; height: auto !important; padding: 0 !important; background: #ffffff !important; border: none !important; }
+              .preview-doc-wrapper { width: 794px !important; height: auto !important; margin: 0 auto !important; position: static !important; }
+              .preview-doc-inner { position: static !important; transform: none !important; width: 794px !important; }
+              #surat-tugas-document { background: #ffffff !important; color: #000000 !important; width: 794px !important; margin: 0 auto !important; padding: 0 !important; }
+              .print-page {
+                background: #ffffff !important;
+                color: #000000 !important;
+                margin: 0 auto !important;
+                width: 794px !important;
+                height: 1122px !important;
+                min-height: 1122px !important;
+                max-height: 1122px !important;
+                overflow: hidden !important;
+                box-shadow: none !important;
+                border: none !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+              }
+              .print-page:last-child {
+                page-break-after: avoid !important;
+                break-after: avoid !important;
+              }
+              .kop-container { margin-bottom: 4px !important; }
+              .kop-alamat-line { margin-top: 6px !important; padding-bottom: 3px !important; }
+              .editable-text-field { background: transparent !important; border: none !important; outline: none !important; box-shadow: none !important; }
+              .rt-line { min-height: 1em; }
+              .rt-line[data-list='b'] { position: relative; padding-left: 20px; }
+              .rt-line[data-list='b']::before { content: '\\2022'; position: absolute; left: 6px; }
+              .rt-h1 { font-weight: 700; font-size: 1.17em; text-indent: 0 !important; margin: 5px 0 3px; }
+              .rt-h2 { font-weight: 700; font-size: 1.08em; text-indent: 0 !important; margin: 4px 0 3px; }
+              .rt-nota .rt-p { text-indent: 32px; margin: 4px 0; line-height: 1.42; text-align: justify; }
+              .rt-nota .rt-p[data-indent] { text-indent: 0 !important; }
+              .rt-nota .rt-num { padding-left: 24px; text-indent: -24px; margin: 5px 0 3px; line-height: 1.42; text-align: justify; }
+              .rt-nota .rt-sub { padding-left: 38px; text-indent: -18px; margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
+              .rt-nota .rt-b { margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
+              .rt-nota .rt-kv { display: flex; align-items: flex-start; padding-left: 32px; text-indent: 0 !important; margin: 2px 0; line-height: 1.4; text-align: left; }
+              .rt-nota .rt-kv-key { width: 155px; flex-shrink: 0; }
+              .rt-nota .rt-kv-sep { width: 16px; flex-shrink: 0; text-align: center; }
+              .rt-nota .rt-kv-val { flex: 1; min-width: 0; }
             `;
             clonedDoc.head.appendChild(printStyle);
           },
@@ -552,44 +669,75 @@ export function App() {
    * Ganti jenis naskah (Tugas, Undangan, Nota Dinas) dengan Auto-Save Draft
    */
   const handleChangeJenisNaskah = (newJenis: JenisNaskah) => {
-    if (newJenis === form.jenis_naskah) return;
+    const currentJenis = form.jenis_naskah || 'TUGAS';
+    if (newJenis === currentJenis) return;
 
-    // 1. Simpan draft naskah saat ini
+    // 1. Simpan draft naskah saat ini ke Memory, IndexedDB, dan localStorage
+    setMemoryDraft(currentJenis, form);
+    saveDraftToIndexedDB(currentJenis, form);
     try {
-      localStorage.setItem(`pusaka_draft_${form.jenis_naskah}`, JSON.stringify(form));
-    } catch {}
+      localStorage.setItem(`pusaka_draft_${currentJenis}`, JSON.stringify(form));
+    } catch {
+      try {
+        const lightDraft = {
+          ...form,
+          lampiran_items: stripHeavyLampiran(form.lampiran_items),
+          undangan_lampiran_items: stripHeavyLampiran(form.undangan_lampiran_items),
+          nota_lampiran_items: stripHeavyLampiran(form.nota_lampiran_items),
+        };
+        localStorage.setItem(`pusaka_draft_${currentJenis}`, JSON.stringify(lightDraft));
+      } catch {}
+    }
 
-    // 2. Cek apakah ada draft naskah tersimpan untuk newJenis
+    // 2. Cek apakah ada draft naskah tersimpan di Memory atau localStorage untuk newJenis
     const defaultKlas = getDefaultKlasifikasi(newJenis);
+    const applyLoadedDraft = (parsed: any) => {
+      const kode = parsed.kode_klasifikasi || defaultKlas.kode_lengkap;
+      const computedNomor = formatNomorNaskah(
+        newJenis,
+        form.nomor_urut || nextNomorUrut,
+        kode,
+        form.bulan || simulatedMonth,
+        form.tahun || simulatedYear
+      );
+      setForm((prev) => ({
+        ...prev,
+        ...parsed,
+        jenis_naskah: newJenis,
+        kode_klasifikasi: kode,
+        kategori_klasifikasi: parsed.kategori_klasifikasi || defaultKlas.kategori_utama,
+        uraian_klasifikasi: parsed.uraian_klasifikasi || defaultKlas.uraian,
+        nomor_lengkap: computedNomor,
+        selectedPegawaiIds: Array.isArray(parsed.selectedPegawaiIds) ? parsed.selectedPegawaiIds : prev.selectedPegawaiIds || [],
+        undangan_lampiran_items: Array.isArray(parsed.undangan_lampiran_items) ? parsed.undangan_lampiran_items : [],
+        nota_lampiran_items: Array.isArray(parsed.nota_lampiran_items) ? parsed.nota_lampiran_items : [],
+        lampiran_items: Array.isArray(parsed.lampiran_items) ? parsed.lampiran_items : [],
+      }));
+      setIsSavedToDB(false);
+    };
+
+    const memDraft = getMemoryDraft(newJenis);
+    if (memDraft) {
+      applyLoadedDraft(memDraft);
+      return;
+    }
+
     try {
       const savedDraft = localStorage.getItem(`pusaka_draft_${newJenis}`);
       if (savedDraft) {
         const parsed = JSON.parse(savedDraft);
-        const kode = parsed.kode_klasifikasi || defaultKlas.kode_lengkap;
-        const computedNomor = formatNomorNaskah(
-          newJenis,
-          form.nomor_urut || nextNomorUrut,
-          kode,
-          form.bulan || simulatedMonth,
-          form.tahun || simulatedYear
-        );
-        setForm((prev) => ({
-          ...prev,
-          ...parsed,
-          jenis_naskah: newJenis,
-          kode_klasifikasi: kode,
-          kategori_klasifikasi: parsed.kategori_klasifikasi || defaultKlas.kategori_utama,
-          uraian_klasifikasi: parsed.uraian_klasifikasi || defaultKlas.uraian,
-          nomor_lengkap: computedNomor,
-          selectedPegawaiIds: Array.isArray(parsed.selectedPegawaiIds) ? parsed.selectedPegawaiIds : prev.selectedPegawaiIds || [],
-          undangan_lampiran_items: Array.isArray(parsed.undangan_lampiran_items) ? parsed.undangan_lampiran_items : [],
-          nota_lampiran_items: Array.isArray(parsed.nota_lampiran_items) ? parsed.nota_lampiran_items : [],
-          lampiran_items: Array.isArray(parsed.lampiran_items) ? parsed.lampiran_items : [],
-        }));
-        setIsSavedToDB(false);
+        applyLoadedDraft(parsed);
+        // Pulihkan juga versi penuh dari IndexedDB jika ada lampiran PDF besar
+        loadDraftFromIndexedDB(newJenis).then((idbDraft) => {
+          if (idbDraft) applyLoadedDraft(idbDraft);
+        });
         return;
       }
     } catch {}
+
+    loadDraftFromIndexedDB(newJenis).then((idbDraft) => {
+      if (idbDraft) applyLoadedDraft(idbDraft);
+    });
     const newNomor = formatNomorNaskah(
       newJenis,
       form.nomor_urut || nextNomorUrut,
@@ -726,7 +874,8 @@ export function App() {
       : (form.nomor_lengkap || nextNomorInfo.nomor_lengkap);
     const cleanNomor = currentNomorLengkap.replace(/[\/\\:\*\?"<>\|]/g, '_');
     const filePrefix = currentJenis === 'UNDANGAN' ? 'Surat_Undangan' : currentJenis === 'NOTA_DINAS' ? 'Nota_Dinas' : 'Surat_Tugas';
-    const pdfFileName = `${filePrefix}_${cleanNomor}.pdf`;
+    const docFileName = `${filePrefix}_${cleanNomor}.docx`;
+    const docxMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
     const perihalStr =
       currentJenis === 'UNDANGAN'
@@ -759,49 +908,41 @@ export function App() {
         : selectedPegawaiList.map((p) => p.nama).join(', ');
 
     setIsSavingToSheets(true);
-    setLastSyncMsg('Mengonversi dokumen surat ke PDF untuk arsip Google Drive...');
+    setLastSyncMsg('Menyiapkan dokumen Word (.docx / Google Docs) untuk arsip Google Drive...');
 
-    // Generate Base64 PDF secara otomatis di latar belakang untuk diupload ke Google Drive
-    let pdfBase64: string | undefined = undefined;
-    const element = document.getElementById('surat-tugas-document');
-    if (element) {
-      try {
-        // @ts-ignore
-        const html2pdfModule = await import('html2pdf.js');
-        const html2pdf = html2pdfModule.default || html2pdfModule;
-        const opt = {
-          margin: 0,
-          image: { type: 'jpeg' as const, quality: 0.88 },
-          html2canvas: {
-            scale: 1.5,
-            useCORS: true,
-            logging: false,
-            scrollY: 0,
-            onclone: (clonedDoc: Document) => {
-              const styles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
-              styles.forEach((s) => s.remove());
-
-              const printStyle = clonedDoc.createElement('style');
-              printStyle.textContent = `
-                * { box-sizing: border-box; }
-                body { background: #ffffff !important; color: #000000 !important; font-family: Arial, sans-serif !important; }
-                #surat-tugas-document { background: #ffffff !important; color: #000000 !important; width: 794px !important; margin: 0 auto !important; }
-                .print-page { background: #ffffff !important; color: #000000 !important; margin: 0 auto !important; }
-              `;
-              clonedDoc.head.appendChild(printStyle);
-            },
-          },
-          jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const },
-          pagebreak: { mode: ['css', 'legacy'] },
+    // Generate Base64 Word (.docx) secara otomatis dengan format resmi 100% utuh untuk diupload ke Google Drive / Google Docs
+    let docxBase64: string | undefined = undefined;
+    try {
+      const docxBlob = await exportNaskahDinasDocx(form, selectedPegawaiList, selectedPejabatObj);
+      docxBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+          if (dataUrl.includes('base64,')) {
+            resolve(dataUrl.split('base64,')[1]);
+          } else {
+            resolve('');
+          }
         };
-        const dataUri: string = await html2pdf().set(opt).from(element).outputPdf('datauristring');
-        if (dataUri && dataUri.includes('base64,')) {
-          pdfBase64 = dataUri.split('base64,')[1];
-        }
-      } catch (pdfErr) {
-        console.warn('Gagal generate PDF Base64 untuk Drive:', pdfErr);
-      }
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(docxBlob);
+      });
+    } catch (docxErr) {
+      console.warn('Gagal generate DOCX Base64 untuk Drive:', docxErr);
     }
+
+    const resolveGoogleDocsUrl = (rawUrl?: string, fileId?: string): string | undefined => {
+      if (fileId) {
+        return `https://docs.google.com/document/d/${fileId}/edit`;
+      }
+      if (!rawUrl) return undefined;
+      if (rawUrl.includes('docs.google.com/document/d/')) return rawUrl;
+      const m = rawUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      if (m && m[1]) {
+        return `https://docs.google.com/document/d/${m[1]}/edit`;
+      }
+      return rawUrl;
+    };
 
     if (editingRecord) {
       // ── MODE EDIT: Perbarui record yang ada tanpa membuat nomor baru ──
@@ -821,9 +962,13 @@ export function App() {
         kepada: kepadaStr,
         status_ttd: selectedPejabatObj.is_default ? 'Kapus' : 'Plh. Kapus',
         konseptor: form.konseptor || editingRecord.konseptor || 'TU Pusaka',
-        link_pdf: pdfFileName,
-        pdf_base64: pdfBase64,
-        pdf_filename: pdfFileName,
+        link_word: ' ',
+        link_pdf: docFileName,
+        pdf_base64: docxBase64,
+        pdf_filename: docFileName,
+        docx_base64: docxBase64,
+        docx_filename: docFileName,
+        file_mime_type: docxMimeType,
         form_state: { ...form },
         pegawai_ids: form.selectedPegawaiIds,
         pejabat_id: form.selectedPejabatId,
@@ -836,22 +981,27 @@ export function App() {
 
       if (isSheetsConnected) {
         try {
-          setLastSyncMsg('Memperbarui perubahan surat di Google Sheets & Drive...');
+          setLastSyncMsg('Memperbarui berkas Word (.docx / Google Docs) di Google Sheets & Drive...');
           const result = await updateNomorSuratInSheets(updatedRecord);
-          if (result && result.drive_url) {
-            setLastSavedDriveUrl(result.drive_url);
-            setLastSyncMsg(`✓ Surat ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet & Drive`);
+          if (result && (result.drive_url || result.drive_file_id)) {
+            const finalDocUrl = resolveGoogleDocsUrl(result.drive_url, result.drive_file_id) || result.drive_url!;
+            setLastSavedDriveUrl(finalDocUrl);
+            setLastSyncMsg(`✓ Dokumen Word/GDocs ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet & Drive`);
             setNomorSuratList((prev) =>
               prev.map((rec) =>
                 rec.id === updatedRecord.id
                   ? {
                       ...rec,
-                      drive_url: result.drive_url,
+                      drive_url: finalDocUrl,
+                      drive_file_id: result.drive_file_id,
                       drive_folder: result.drive_folder,
                     }
                   : rec
               )
             );
+            if ((result as any).code_version !== 'v2_docx') {
+              setIsSheetsModalOpen(true);
+            }
           } else {
             setLastSyncMsg(`✓ Surat ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet`);
           }
@@ -895,10 +1045,13 @@ export function App() {
         topik_tim: 'TU',
         konseptor: form.konseptor || 'TU Pusaka',
         status_surat: 'OK',
-        link_word: '-',
-        link_pdf: pdfFileName,
-        pdf_base64: pdfBase64,
-        pdf_filename: pdfFileName,
+        link_word: ' ',
+        link_pdf: docFileName,
+        pdf_base64: docxBase64,
+        pdf_filename: docFileName,
+        docx_base64: docxBase64,
+        docx_filename: docFileName,
+        file_mime_type: docxMimeType,
         form_state: { ...form },
         pegawai_ids: form.selectedPegawaiIds,
         pejabat_id: form.selectedPejabatId,
@@ -906,14 +1059,15 @@ export function App() {
 
       setNomorSuratList((prev) => [...prev, newRecord]);
       setIsSavedToDB(true);
-      // Hapus draft tersimpan dari localStorage setelah berhasil diterbitkan & disimpan
+      // Hapus draft tersimpan dari localStorage & IndexedDB setelah berhasil diterbitkan & disimpan
+      removeDraftFromIndexedDB(currentJenis);
       try {
         localStorage.removeItem(`pusaka_draft_${currentJenis}`);
       } catch {}
 
       if (isSheetsConnected) {
         try {
-          setLastSyncMsg('Mengunggah ke Google Drive & mencatat ke Spreadsheet...');
+          setLastSyncMsg('Mengunggah dokumen Word (.docx / Google Docs) ke Google Drive & mencatat ke Spreadsheet...');
           const savedResult = await appendNomorSuratToSheets(newRecord);
           if (savedResult && (savedResult as any).drive_error) {
             setLastSyncMsg(`⚠️ Tercatat di Sheets, namun Google Drive kendala: ${(savedResult as any).drive_error}`);
@@ -926,22 +1080,27 @@ export function App() {
               `2. Refresh halaman, lalu klik menu baru di toolbar atas: "📌 Pusaka Surat Tugas" -> "☁️ Otorisasi & Buat Folder Bulan Ini"\n` +
               `3. Klik Izinkan (Allow) saat Google meminta konfirmasi.`
             );
-          } else if (savedResult && savedResult.drive_url) {
-            setLastSavedDriveUrl(savedResult.drive_url);
+          } else if (savedResult && (savedResult.drive_url || savedResult.drive_file_id)) {
+            const finalDocUrl = resolveGoogleDocsUrl(savedResult.drive_url, savedResult.drive_file_id) || savedResult.drive_url!;
+            setLastSavedDriveUrl(finalDocUrl);
             setLastSyncMsg(
-              `✓ Surat ${newRecord.nomor_lengkap} berhasil diunggah ke Google Drive (${savedResult.drive_folder || 'Folder Bulan'}) & dicatat di Sheets`
+              `✓ Dokumen Word/GDocs ${newRecord.nomor_lengkap} berhasil diunggah ke Google Drive (${savedResult.drive_folder || 'Folder Bulan'}) & dicatat di Sheets`
             );
             setNomorSuratList((prev) =>
               prev.map((rec) =>
                 rec.id === newRecord.id
                   ? {
                       ...rec,
-                      drive_url: savedResult.drive_url,
+                      drive_url: finalDocUrl,
+                      drive_file_id: savedResult.drive_file_id,
                       drive_folder: savedResult.drive_folder,
                     }
                   : rec
               )
             );
+            if ((savedResult as any).code_version !== 'v2_docx') {
+              setIsSheetsModalOpen(true);
+            }
           } else {
             setLastSyncMsg(`Nomor surat ${newRecord.nomor_lengkap} tersinkronisasi ke Sheets ✓`);
           }
@@ -1143,7 +1302,7 @@ export function App() {
                   className="font-bold underline hover:text-teal-950 inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-white/70 px-2 py-0.5 rounded shadow-2xs"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  <span>Buka di Google Drive</span>
+                  <span>Buka Dokumen (GDocs / Word)</span>
                 </a>
               )}
             </span>
@@ -1827,6 +1986,52 @@ export function App() {
                   </div>
                 )}
               </div>
+
+              {/* Card 5: Lampiran Dokumen Tambahan (opsional) pada Surat Tugas */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4.5 space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div
+                    onClick={() => toggleSection('tugas_5')}
+                    className="flex items-center space-x-2 cursor-pointer select-none group"
+                    title="Klik untuk membuka/menutup bagian ini"
+                  >
+                    <span className="w-5 h-5 rounded bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">
+                      5
+                    </span>
+                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                      Lampiran Dokumen Tambahan (opsional)
+                    </h3>
+                    {collapsedSections['tugas_5'] ? (
+                      <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                    ) : (
+                      <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {(form.lampiran_items || []).length} lampiran
+                  </span>
+                </div>
+
+                {!collapsedSections['tugas_5'] && (
+                  <div className="pt-1">
+                    <LampiranManager
+                      jenisNaskah="TUGAS"
+                      items={form.lampiran_items || []}
+                      romanOffset={form.selectedPegawaiIds.length > 3 ? 1 : 0}
+                      onChange={(newItems) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          lampiran_items: newItems,
+                        }));
+                        setIsSavedToDB(false);
+                      }}
+                      nomorSurat={form.nomor_lengkap}
+                      tanggalSurat={formatTanggalIndonesia(form.tanggal_surat)}
+                      pegawaiList={pegawaiList}
+                    />
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -1961,7 +2166,14 @@ export function App() {
                               key={tipe}
                               type="button"
                               onClick={() => {
-                                setForm({ ...form, undangan_tipe_tempat: tipe });
+                                setForm({
+                                  ...form,
+                                  undangan_tipe_tempat: tipe,
+                                  undangan_tempat_online: cleanTempatField(form.undangan_tempat_online, 'online'),
+                                  undangan_tempat_offline: cleanTempatField(form.undangan_tempat_offline, 'offline'),
+                                  undangan_tempat_online_custom: undefined,
+                                  undangan_tempat_offline_custom: undefined,
+                                });
                                 setIsSavedToDB(false);
                               }}
                               className={`py-1.5 px-2 rounded-md font-bold text-xs capitalize transition-all cursor-pointer ${
@@ -2018,9 +2230,13 @@ export function App() {
                           <textarea
                             rows={2}
                             placeholder="Contoh: Ruang Rapat Lt. 5 Gd Sapta Pesona..."
-                            value={form.undangan_tempat_offline || ''}
+                            value={cleanTempatField(form.undangan_tempat_offline, 'offline')}
                             onChange={(e) => {
-                              setForm({ ...form, undangan_tempat_offline: e.target.value });
+                              setForm({
+                                ...form,
+                                undangan_tempat_offline: e.target.value,
+                                undangan_tempat_offline_custom: undefined,
+                              });
                               setIsSavedToDB(false);
                             }}
                             className="w-full p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:ring-1 focus:ring-amber-500 leading-relaxed"
@@ -2038,9 +2254,13 @@ export function App() {
                             <input
                               type="text"
                               placeholder="https://s.komdigi.go.id/zoom-meeting"
-                              value={form.undangan_tempat_online || ''}
+                              value={cleanTempatField(form.undangan_tempat_online, 'online')}
                               onChange={(e) => {
-                                setForm({ ...form, undangan_tempat_online: e.target.value });
+                                setForm({
+                                  ...form,
+                                  undangan_tempat_online: e.target.value,
+                                  undangan_tempat_online_custom: undefined,
+                                });
                                 setIsSavedToDB(false);
                               }}
                               className="w-full p-2 bg-white border border-amber-200 rounded-md focus:ring-1 focus:ring-amber-500 font-mono text-[11px]"
@@ -2220,7 +2440,7 @@ export function App() {
                             type="date"
                             value={form.tanggal_surat}
                             onChange={(e) => {
-                              setForm({ ...form, tanggal_surat: e.target.value });
+                              setForm({ ...form, tanggal_surat: e.target.value, custom_tanggal_surat_text: undefined });
                               setIsSavedToDB(false);
                             }}
                             className="w-full p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:ring-1 focus:ring-amber-500"
@@ -2403,7 +2623,7 @@ export function App() {
                             >
                               <option value="Biasa">Biasa</option>
                               <option value="Segera">Segera</option>
-                              <option value="Rahasia">Rahasia</option>
+                              <option value="Sangat Segera">Sangat Segera</option>
                             </select>
                           </div>
                           <div>
@@ -2514,7 +2734,12 @@ export function App() {
                           <select
                             value={form.selectedPejabatId}
                             onChange={(e) => {
-                              setForm({ ...form, selectedPejabatId: e.target.value });
+                              setForm({
+                                ...form,
+                                selectedPejabatId: e.target.value,
+                                custom_jabatan_ttd: undefined,
+                                custom_nama_ttd: undefined,
+                              });
                               setIsSavedToDB(false);
                             }}
                             className="w-full p-2 bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:ring-1 focus:ring-indigo-500 font-medium"
@@ -2801,6 +3026,13 @@ export function App() {
                         dasar_custom: undefined,
                         untuk_custom: undefined,
                         penutup_custom: undefined,
+                        custom_jabatan_ttd: undefined,
+                        custom_nama_ttd: undefined,
+                        custom_tanggal_surat_text: undefined,
+                        custom_kalimat_penutup_tugas: undefined,
+                        custom_kepada_tugas: undefined,
+                        custom_pegawai_overrides: undefined,
+                        lampiran_items: [],
                       }));
                       setIsSavedToDB(false);
                     }
@@ -2824,6 +3056,9 @@ export function App() {
                         undangan_agenda: '',
                         undangan_tembusan: '',
                         undangan_lampiran_items: [],
+                        custom_jabatan_ttd: undefined,
+                        custom_nama_ttd: undefined,
+                        custom_tanggal_surat_text: undefined,
                       }));
                       setIsSavedToDB(false);
                     }
@@ -2844,6 +3079,9 @@ export function App() {
                         nota_penutup: '',
                         nota_tembusan: '',
                         nota_lampiran_items: [],
+                        custom_jabatan_ttd: undefined,
+                        custom_nama_ttd: undefined,
+                        custom_tanggal_surat_text: undefined,
                       }));
                       setIsSavedToDB(false);
                     }

@@ -1,11 +1,12 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { Download, Printer, FileCheck, Layers, Edit3, RotateCcw, FileText, RefreshCw, Sparkles } from 'lucide-react';
 import { SuratTugasFormState, Pegawai, Pejabat } from '../types';
-import { formatTanggalIndonesia } from '../services/docxService';
+import { formatTanggalIndonesia, stripAcademicTitles, normalizeTwoDigitDateText, cleanTempatField } from '../services/docxService';
 import { splitNotaDinasPages, splitSuratUndanganPages, splitSuratTugasPages } from '../services/naskahFormatter';
 import { RichEditable, MarkupText } from './RichEditable';
 import { DocumentPreviewTable } from './InteractiveDocumentTable';
-import { visibleLength, isNotaKeyValueLine } from '../services/richText';
+import { toRoman } from './LampiranManager';
+import { visibleLength, isNotaKeyValueLine, setVisibleRange, visibleTotal } from '../services/richText';
 
 export const BsreQrCode: React.FC<{ size?: string | number; className?: string }> = ({
   size = '76px',
@@ -191,8 +192,24 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
           form.undangan_pembuka,
           form.undangan_penutup
         )
-      : { page1AgendaLines: [], page2AgendaLines: [], isMultiPage: false };
+      : { page1AgendaLines: [], page2AgendaLines: [], agendaPages: [], isMultiPage: false };
   }, [isUndangan, form.undangan_agenda, form.undangan_kepada, form.undangan_pembuka, form.undangan_penutup]);
+
+  const undanganAgendaPages: string[][] =
+    undanganSplit.agendaPages && undanganSplit.agendaPages.length > 0
+      ? undanganSplit.agendaPages
+      : [undanganSplit.page1AgendaLines];
+  const undanganAgendaPageStarts = undanganAgendaPages.map((_, i) =>
+    undanganAgendaPages.slice(0, i).reduce((a, pg) => a + visibleLength(pg), 0)
+  );
+  const commitUndanganAgendaPage = (idx: number, v: string) => {
+    const pages = undanganAgendaPages.map((pg) => [...pg]);
+    pages[idx] = v.split('\n');
+    const combined = pages
+      .flatMap((pg) => pg.filter((l) => l.trim() !== ''))
+      .join('\n');
+    onUpdateForm?.({ undangan_agenda: combined });
+  };
 
   const notaPages: string[][] =
     notaSplit.pages && notaSplit.pages.length > 0 ? notaSplit.pages : [notaSplit.page1Lines];
@@ -203,13 +220,21 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
   const joinNotaLinesSmart = (lines: string[]): string => {
     const cleaned = lines.filter((l) => l.trim() !== '');
     if (cleaned.length === 0) return '';
-    let result = cleaned[0];
+    let result = cleaned[0].trim();
     for (let i = 1; i < cleaned.length; i++) {
+      const rawCurr = cleaned[i];
       const prev = cleaned[i - 1].trim();
-      const curr = cleaned[i].trim();
+      const curr = rawCurr.trim();
+      const isSplitContinuation =
+        /^ {2,}\S/.test(rawCurr) &&
+        !/^\s*(?:\d+[.)]|[a-zA-Z][.)]|\([0-9a-zA-Z]\)|[-*•#])\s+/.test(rawCurr);
+      if (isSplitContinuation) {
+        result += ' ' + curr;
+        continue;
+      }
       const bothKv = isNotaKeyValueLine(prev) && isNotaKeyValueLine(curr);
       const currIsSub = /^([a-zA-Z][\.\)]|\([0-9a-zA-Z]\)|[\-\*•])\s+/.test(curr);
-      result += (bothKv || currIsSub ? '\n' : '\n\n') + cleaned[i];
+      result += (bothKv || currIsSub ? '\n' : '\n\n') + rawCurr;
     }
     return result;
   };
@@ -251,7 +276,74 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
     );
   };
 
-  const tglSuratFormatted = form.tanggal_surat ? formatTanggalIndonesia(form.tanggal_surat) : '';
+  const tglSuratFormatted =
+    form.custom_tanggal_surat_text ||
+    (form.tanggal_surat ? formatTanggalIndonesia(form.tanggal_surat) : '');
+  const kotaTanggalFormatted = `${form.kota_surat || 'Jakarta'}, ${tglSuratFormatted}`;
+  const handleCommitKotaTanggal = (val: string) => {
+    const idx = val.indexOf(',');
+    if (idx !== -1) {
+      const kota = val.slice(0, idx).trim();
+      const tgl = normalizeTwoDigitDateText(val.slice(idx + 1).trim());
+      onUpdateForm?.({ kota_surat: kota, custom_tanggal_surat_text: tgl });
+    } else {
+      onUpdateForm?.({ custom_tanggal_surat_text: normalizeTwoDigitDateText(val.trim()) });
+    }
+  };
+
+  /**
+   * Saat pengguna mengklik area kosong / label di atas kertas A4,
+   * otomatis arahkan kursor ketik ke baris teks terdekat layaknya MS Word / Google Docs.
+   */
+  const handlePaperCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('[contenteditable="true"]') ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('textarea') ||
+      target.closest('table[data-lampiran-table="true"]')
+    ) {
+      return;
+    }
+    const pageEl = e.currentTarget;
+    const editables = Array.from(
+      pageEl.querySelectorAll<HTMLElement>('.editable-text-field[contenteditable="true"]')
+    );
+    if (editables.length === 0) return;
+
+    const clickY = e.clientY;
+    const clickX = e.clientX;
+    let closestEl = editables[0];
+    let minDistance = Infinity;
+
+    for (const el of editables) {
+      const rect = el.getBoundingClientRect();
+      const dy =
+        clickY < rect.top
+          ? rect.top - clickY
+          : clickY > rect.bottom
+          ? clickY - rect.bottom
+          : 0;
+      const dx =
+        clickX < rect.left
+          ? rect.left - clickX
+          : clickX > rect.right
+          ? clickX - rect.right
+          : 0;
+      const dist = dy * 3 + dx * 0.25;
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestEl = el;
+      }
+    }
+
+    closestEl.focus();
+    const rect = closestEl.getBoundingClientRect();
+    const total = visibleTotal(closestEl);
+    const pos = clickX < rect.left + 12 ? 0 : total;
+    setVisibleRange(closestEl, pos, pos);
+  };
   const tglMulaiFormatted = form.tanggal_mulai ? formatTanggalIndonesia(form.tanggal_mulai) : '';
   const tglSelesaiFormatted = form.tanggal_selesai ? formatTanggalIndonesia(form.tanggal_selesai) : '';
   const rentangTanggal =
@@ -295,31 +387,57 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
   const dasarText = form.dasar_custom !== undefined ? form.dasar_custom : defaultDasar;
   const untukText = form.untuk_custom !== undefined ? form.untuk_custom : defaultUntuk;
   const penutupText = form.penutup_custom !== undefined ? form.penutup_custom : defaultPenutup;
-  const jabatanTTD = selectedPejabat.is_default
-    ? `${selectedPejabat.jabatan},`
-    : `Plh. ${selectedPejabat.jabatan},`;
+  const jabatanTTD =
+    form.custom_jabatan_ttd ||
+    (selectedPejabat.is_default
+      ? `${selectedPejabat.jabatan},`
+      : `Plh. ${selectedPejabat.jabatan},`);
+  const namaPejabatClean = stripAcademicTitles(form.custom_nama_ttd || selectedPejabat.nama);
 
   const tugasSplit = useMemo(() => {
-    if (!isTugas || isLampiran) {
-      return { page1UntukLines: [untukText || ''], page2UntukLines: [], isMultiPage: false };
+    if (!isTugas) {
+      return { page1UntukLines: [untukText || ''], page2UntukLines: [], untukPages: [[untukText || '']], isMultiPage: false };
     }
-    return splitSuratTugasPages(untukText || '', menimbangText || '', dasarText || '', count);
-  }, [isTugas, isLampiran, count, dasarText, menimbangText, untukText]);
+    return splitSuratTugasPages(
+      untukText || '',
+      menimbangText || '',
+      dasarText || '',
+      count,
+      form.custom_kepada_tugas,
+      penutupText
+    );
+  }, [isTugas, count, dasarText, menimbangText, untukText, form.custom_kepada_tugas, penutupText]);
+
+  const tugasUntukPages: string[][] =
+    tugasSplit.untukPages && tugasSplit.untukPages.length > 0
+      ? tugasSplit.untukPages
+      : [tugasSplit.page1UntukLines];
+  const tugasUntukPageStarts = tugasUntukPages.map((_, i) =>
+    tugasUntukPages.slice(0, i).reduce((a, pg) => a + visibleLength(pg), 0)
+  );
+  const commitTugasUntukPage = (idx: number, v: string) => {
+    const pages = tugasUntukPages.map((pg) => [...pg]);
+    pages[idx] = v.split('\n');
+    const combined = pages
+      .flatMap((pg) => pg.filter((l) => l.trim() !== ''))
+      .join('\n');
+    onUpdateForm?.({ untuk_custom: combined });
+  };
 
   const isTugasMultiPage = tugasSplit.isMultiPage;
 
-  const isMultiPageDoc =
-    isLampiran ||
+  const hasContinuationPage =
     (isNotaDinas && notaSplit.isMultiPage) ||
     (isUndangan && undanganSplit.isMultiPage) ||
     isTugasMultiPage;
 
+  const isMultiPageDoc = isLampiran || hasContinuationPage;
+
   // ─── Penskalaan Adaptif 1 Halaman A4 (Font Isi Tetap 12pt Sesuai Ketentuan) ───
-  // Ruang tanda tangan manual diperlebar dan dipertinggi agar sangat leluasa untuk ttd basah & cap dinas
-  // Ruang bawah disisakan 2 cm (80px) untuk stempel/catatan UU ITE & Sertifikat Elektronik
   const bodyFontSize = '12pt';
   let bodyLineHeight = '1.28';
-  let pagePadding = '24px 72px 80px 82px';
+  let pagePadding = hasContinuationPage ? '24px 72px 40px 82px' : '24px 72px 64px 82px';
+  const continuationPagePadding = '40px 72px 52px 82px';
   let sectionMargin = '5px';
   let pegawaiGap = '6px';
   let ttdMargin = '16px';
@@ -424,6 +542,16 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
     selectedPegawai.length,
     form.nota_isi,
     form.undangan_agenda,
+    form.undangan_kepada,
+    form.undangan_pembuka,
+    form.undangan_penutup,
+    form.untuk_custom,
+    form.menimbang_custom,
+    form.dasar_custom,
+    form.custom_kepada_tugas,
+    notaPages.length,
+    undanganAgendaPages.length,
+    tugasUntukPages.length,
     isMultiPageDoc,
   ]);
 
@@ -432,176 +560,153 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
 
   return (
     <div className="flex flex-col space-y-2.5 h-[calc(100vh-120px)] print:h-auto print:block print:space-y-0">
-      {/* ─── BILAH TOMBOL & INFO (NON-SCROLLABLE / TETAP DI ATAS) ─────── */}
+      {/* ─── BILAH TOMBOL AKSI (NON-SCROLLABLE / TETAP DI ATAS) ─────── */}
       <div className="action-bar-print-hide shrink-0 space-y-2">
         {/* ─── Action Bar ─────────────────────────────────────────── */}
-        <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-          <div className="flex items-center space-x-2">
-          {isEditMode && onCancelEdit && (
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
+          {/* Kelompok Kiri: Utilitas Form & Pindai AI */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isEditMode && onCancelEdit && (
+              <button
+                onClick={onCancelEdit}
+                className="flex items-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap"
+                title="Batalkan pengeditan dan kembali ke formulir surat baru"
+              >
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <span>Batal Edit</span>
+              </button>
+            )}
+
+            {onResetIsiPembuatan && (
+              <button
+                type="button"
+                onClick={onResetIsiPembuatan}
+                className={`flex items-center space-x-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
+                  form.jenis_naskah === 'NOTA_DINAS'
+                    ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                    : form.jenis_naskah === 'UNDANGAN'
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200'
+                }`}
+                title="Hapus semua isi form untuk memulai dari awal"
+              >
+                <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                <span>Reset Isi</span>
+              </button>
+            )}
+
+            {onGenerateGeneralTemplate && (
+              <button
+                type="button"
+                onClick={onGenerateGeneralTemplate}
+                className={`flex items-center space-x-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
+                  form.jenis_naskah === 'NOTA_DINAS'
+                    ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                    : form.jenis_naskah === 'UNDANGAN'
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                    : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200'
+                }`}
+                title="Isi otomatis dengan template general sesuai jenis surat"
+              >
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span>Template general</span>
+              </button>
+            )}
+
+            {onOpenAiScanner && (isTugas || isNotaDinas) && (
+              <button
+                type="button"
+                onClick={onOpenAiScanner}
+                className={`flex items-center space-x-1.5 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xs transition-all cursor-pointer whitespace-nowrap ${
+                  isNotaDinas
+                    ? 'bg-gradient-to-r from-indigo-700 to-indigo-600 hover:from-indigo-800 hover:to-indigo-700'
+                    : 'bg-gradient-to-r from-teal-800 to-teal-700 hover:from-teal-900 hover:to-teal-800'
+                }`}
+                title={
+                  isNotaDinas
+                    ? 'Pindai dokumen laporan atau ketik prompt AI untuk menyusun Nota Dinas otomatis'
+                    : 'Pindai surat undangan atau ketik prompt AI untuk menyusun Surat Tugas otomatis'
+                }
+              >
+                <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isNotaDinas ? 'text-indigo-200' : 'text-teal-300'}`} />
+                <span>{isNotaDinas ? 'Pindai Laporan (AI)' : 'Pindai Undangan (AI)'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Kelompok Kanan: Cetak, Unduh & Simpan */}
+          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
             <button
-              onClick={onCancelEdit}
-              className="flex items-center space-x-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors cursor-pointer"
-              title="Batalkan pengeditan dan kembali ke formulir surat baru"
+              onClick={() => window.print()}
+              className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap"
+              title="Cetak langsung ke printer atau Simpan sebagai PDF dari browser"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Batal Edit</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span>Cetak</span>
             </button>
-          )}
-          {/* Tombol Reset Isi & Tamplate General — tampil untuk semua jenis naskah */}
-          {(onResetIsiPembuatan || onGenerateGeneralTemplate) && (
-            <>
-              <div className="w-px h-5 bg-slate-200" />
-              {onResetIsiPembuatan && (
-                <button
-                  type="button"
-                  onClick={onResetIsiPembuatan}
-                  className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-md border transition-colors cursor-pointer ${
-                    form.jenis_naskah === 'NOTA_DINAS'
-                      ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
-                      : form.jenis_naskah === 'UNDANGAN'
-                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
-                      : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200'
-                  }`}
-                  title="Hapus semua isi form untuk memulai dari awal"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Reset Isi</span>
-                </button>
-              )}
-              {onGenerateGeneralTemplate && (
-                <button
-                  type="button"
-                  onClick={onGenerateGeneralTemplate}
-                  className={`flex items-center space-x-1.5 text-xs font-medium px-3 py-1.5 rounded-md border transition-colors cursor-pointer ${
-                    form.jenis_naskah === 'NOTA_DINAS'
-                      ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
-                      : form.jenis_naskah === 'UNDANGAN'
-                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
-                      : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200'
-                  }`}
-                  title="Isi otomatis dengan tamplate general sesuai jenis surat"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Tamplate general</span>
-                </button>
-              )}
-              <div className="w-px h-5 bg-slate-200" />
-            </>
-          )}
-          <button
-            onClick={() => window.print()}
-            className="flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-3 py-1.5 rounded-md transition-colors cursor-pointer"
-            title="Cetak langsung ke printer atau Simpan sebagai PDF dari browser"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Cetak</span>
-          </button>
-          <button
-            onClick={onDownloadPdf}
-            disabled={isGeneratingPdf}
-            className="flex items-center space-x-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-            title="Unduh dokumen langsung dalam format file PDF resmi"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
-          </button>
-          {onDownloadDocx && (
             <button
-              onClick={onDownloadDocx}
-              className="flex items-center space-x-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer"
-              title="Unduh dokumen dalam format Microsoft Word (.docx)"
+              onClick={onDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="flex items-center space-x-1.5 bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              title="Unduh dokumen langsung dalam format file PDF resmi"
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Unduh Word</span>
+              <Download className="w-3.5 h-3.5 shrink-0" />
+              <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
             </button>
-          )}
-          <button
-            onClick={onSaveToDatabase}
-            disabled={isSaved}
-            className={`flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer ${
-              isSaved
-                ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                : isEditMode
-                ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                : 'bg-emerald-700 hover:bg-emerald-800 text-white'
-            }`}
-          >
-            <FileCheck className="w-3.5 h-3.5" />
-            <span>
-              {isSaved
-                ? isEditMode
-                  ? 'Perubahan Tersimpan'
-                  : 'Tersimpan di Sheets'
-                : isEditMode
-                ? 'Perbarui Surat'
-                : 'Terbitkan & Simpan'}
-            </span>
-          </button>
+            {onDownloadDocx && (
+              <button
+                onClick={onDownloadDocx}
+                className="flex items-center space-x-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+                title="Unduh dokumen dalam format Microsoft Word (.docx)"
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span>Unduh Word</span>
+              </button>
+            )}
+            <button
+              onClick={onSaveToDatabase}
+              disabled={isSaved}
+              className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer whitespace-nowrap ${
+                isSaved
+                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  : isEditMode
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+              }`}
+            >
+              <FileCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {isSaved
+                  ? isEditMode
+                    ? 'Perubahan Tersimpan'
+                    : 'Tersimpan di Sheets'
+                  : isEditMode
+                  ? 'Perbarui Surat'
+                  : 'Terbitkan & Simpan'}
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* Tombol Fitur Pindai AI — diletakkan paling kanan dengan jarak pemisah untuk Surat Tugas & Nota Dinas */}
-        {onOpenAiScanner && (isTugas || isNotaDinas) && (
-          <div className="flex items-center pl-3 ml-auto border-l border-slate-200">
-            <button
-              type="button"
-              onClick={onOpenAiScanner}
-              className={`flex items-center space-x-1.5 text-white text-xs font-semibold px-3.5 py-1.5 rounded-md shadow-xs transition-all cursor-pointer ${
-                isNotaDinas
-                  ? 'bg-gradient-to-r from-indigo-700 to-indigo-600 hover:from-indigo-800 hover:to-indigo-700'
-                  : 'bg-gradient-to-r from-teal-800 to-teal-700 hover:from-teal-900 hover:to-teal-800'
-              }`}
-              title={
-                isNotaDinas
-                  ? 'Pindai dokumen laporan atau ketik prompt AI untuk menyusun Nota Dinas otomatis'
-                  : 'Pindai surat undangan atau ketik prompt AI untuk menyusun Surat Tugas otomatis'
-              }
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isNotaDinas ? 'text-indigo-200' : 'text-teal-300'}`} />
-              <span>{isNotaDinas ? 'Pindai Laporan / Telaah (AI)' : 'Pindai Undangan (AI)'}</span>
-            </button>
+        {/* Banner Mode Edit Dokumen */}
+        {isEditMode && (
+          <div className="action-bar-print-hide flex items-center justify-between bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2 rounded-lg text-xs">
+            <div className="flex items-center space-x-2">
+              <span className="font-bold text-amber-800 uppercase tracking-wide">✏️ Mode Edit:</span>
+              <span>
+                Anda sedang mengedit naskah <strong>{form.nomor_lengkap}</strong>. Nomor urut surat tetap dipertahankan.
+              </span>
+            </div>
+            {onCancelEdit && (
+              <button
+                onClick={onCancelEdit}
+                className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline ml-2 cursor-pointer"
+              >
+                Kembali ke Surat Baru
+              </button>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Banner Mode Edit Dokumen */}
-      {isEditMode && (
-        <div className="action-bar-print-hide flex items-center justify-between bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2 rounded-lg text-xs">
-          <div className="flex items-center space-x-2">
-            <span className="font-bold text-amber-800 uppercase tracking-wide">✏️ Mode Edit:</span>
-            <span>
-              Anda sedang mengedit naskah <strong>{form.nomor_lengkap}</strong>. Nomor urut surat tetap dipertahankan.
-            </span>
-          </div>
-          {onCancelEdit && (
-            <button
-              onClick={onCancelEdit}
-              className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline ml-2 cursor-pointer"
-            >
-              Kembali ke Surat Baru
-            </button>
-          )}
-        </div>
-      )}
-
-        {/* Petunjuk Edit Langsung — disesuaikan per jenis naskah */}
-        <div className={`flex items-center space-x-1.5 text-[11px] px-3 py-1.5 rounded border ${
-          isNotaDinas
-            ? 'text-indigo-800 bg-indigo-50/80 border-indigo-200'
-            : isUndangan
-            ? 'text-amber-800 bg-amber-50/80 border-amber-200'
-            : 'text-teal-800 bg-teal-50/80 border-teal-200'
-        }`}>
-          <Edit3 className={`w-3.5 h-3.5 shrink-0 ${isNotaDinas ? 'text-indigo-600' : isUndangan ? 'text-amber-600' : 'text-teal-600'}`} />
-          <span>
-            {isNotaDinas ? (
-              <><strong>Edit Langsung:</strong> Klik teks <em>Kepada Yth.</em>, <em>Dari</em>, <em>Hal</em>, <em>Isi</em>, dan <em>Penutup</em> pada lembar pratinjau untuk mengedit langsung.</>
-            ) : isUndangan ? (
-              <><strong>Edit Langsung:</strong> Klik teks <em>Kepada Yth.</em>, <em>Pembuka</em>, <em>Agenda</em>, dan <em>Penutup</em> pada lembar pratinjau untuk mengedit langsung.</>
-            ) : (
-              <><strong>Edit Langsung:</strong> Klik teks <em>Menimbang</em>, <em>Dasar</em>, <em>Untuk</em>, dan <em>Penutup</em> pada lembar pratinjau untuk mengedit langsung.</>
-            )}
-          </span>
-        </div>
       </div>
 
       {/* ─── AREA PREVIEW DOKUMEN (HANYA INI YANG SCROLLABLE VERTIKAL & AUTO-FIT) ─── */}
@@ -635,6 +740,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             <div id="surat-tugas-document" ref={docRef}>
         {/* ── HALAMAN 1 (SURAT / NOTA DINAS) ──────────────────────────── */}
         <div
+          onClick={handlePaperCanvasClick}
           className={`print-page bg-white shadow-md mx-auto print:shadow-none print:border-none ${
             isMultiPageDoc ? 'is-lampiran' : 'single-page-locked'
           }`}
@@ -650,8 +756,8 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             position: 'relative',
           }}
         >
-          {/* ── KOP SURAT RESMI KOMDIGI ──────────────────────────── */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '5px' }}>
+          {/* ── KOP SURAT RESMI KOMDIGI (Baris alamat dibuat ke bawah mepet garis) ── */}
+          <div className="kop-container" style={{ display: 'flex', alignItems: 'stretch', gap: '14px', marginBottom: '1px' }}>
             <img
               src="/komdigi_logo.png"
               alt="Logo Komdigi"
@@ -663,47 +769,52 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               }}
             />
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontFamily: 'Arial, sans-serif',
-                  fontWeight: 'bold',
-                  fontSize: count === 3 ? '14pt' : '15pt',
-                  lineHeight: '1.2',
-                  color: '#000',
-                  letterSpacing: '0.01em',
-                }}
-              >
-                KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div
+                  style={{
+                    fontFamily: 'Arial, sans-serif',
+                    fontWeight: 'bold',
+                    fontSize: count === 3 ? '14pt' : '15pt',
+                    lineHeight: '1.2',
+                    color: '#000',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'Arial, sans-serif',
+                    fontWeight: 'bold',
+                    fontSize: count === 3 ? '14pt' : '15pt',
+                    lineHeight: '1.2',
+                    color: '#000',
+                  }}
+                >
+                  SEKRETARIAT JENDERAL
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'Arial, sans-serif',
+                    fontWeight: 'bold',
+                    fontSize: count === 3 ? '13.5pt' : '14.5pt',
+                    lineHeight: '1.2',
+                    color: '#000',
+                  }}
+                >
+                  PUSAT KEBIJAKAN STRATEGIS
+                </div>
               </div>
               <div
-                style={{
-                  fontFamily: 'Arial, sans-serif',
-                  fontWeight: 'bold',
-                  fontSize: count === 3 ? '14pt' : '15pt',
-                  lineHeight: '1.2',
-                  color: '#000',
-                }}
-              >
-                SEKRETARIAT JENDERAL
-              </div>
-              <div
-                style={{
-                  fontFamily: 'Arial, sans-serif',
-                  fontWeight: 'bold',
-                  fontSize: count === 3 ? '13.5pt' : '14.5pt',
-                  lineHeight: '1.2',
-                  color: '#000',
-                }}
-              >
-                PUSAT KEBIJAKAN STRATEGIS
-              </div>
-              <div
+                className="kop-alamat-line"
                 style={{
                   fontFamily: 'Arial, sans-serif',
                   fontSize: count === 3 ? '8.2pt' : '8.6pt',
-                  lineHeight: '1.3',
-                  marginTop: '3px',
+                  lineHeight: '1.15',
+                  marginTop: '12px',
+                  marginBottom: '0px',
+                  paddingBottom: '0px',
                   color: '#000',
                 }}
               >
@@ -713,7 +824,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             </div>
           </div>
 
-          {/* Garis pemisah kop — garis ganda resmi */}
+          {/* Garis pemisah kop — garis ganda resmi tepat di bawah baris alamat */}
           <div style={{ borderBottom: '2.5px solid #000', marginBottom: '1.5px' }} />
           <div style={{ borderBottom: '0.75px solid #000', marginBottom: count === 3 ? '12px' : '16px' }} />
 
@@ -725,36 +836,60 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               {/* Header 2 Kolom: Kiri (Nomor/Sifat/Lampiran/Hal), Kanan (Jakarta, Tanggal) */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: '60%' }}>
-                  <div style={{ display: 'flex' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                     <div style={{ width: '85px', flexShrink: 0 }}>Nomor</div>
-                    <div style={{ width: '14px', textAlign: 'center' }}>:</div>
-                    <div style={{ flex: 1, fontWeight: '500' }}>{form.nomor_lengkap}</div>
+                    <div style={{ width: '14px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={form.nomor_lengkap || ''}
+                      onCommit={(v) => onUpdateForm?.({ nomor_lengkap: v })}
+                      style={{ flex: 1 }}
+                    />
                   </div>
-                  <div style={{ display: 'flex' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                     <div style={{ width: '85px', flexShrink: 0 }}>Sifat</div>
-                    <div style={{ width: '14px', textAlign: 'center' }}>:</div>
-                    <div style={{ flex: 1 }}>{form.undangan_sifat || 'Biasa'}</div>
+                    <div style={{ width: '14px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={form.undangan_sifat || 'Biasa'}
+                      onCommit={(v) => onUpdateForm?.({ undangan_sifat: v })}
+                      style={{ flex: 1 }}
+                    />
                   </div>
-                  <div style={{ display: 'flex' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                     <div style={{ width: '85px', flexShrink: 0 }}>Lampiran</div>
-                    <div style={{ width: '14px', textAlign: 'center' }}>:</div>
-                    <div style={{ flex: 1 }}>{form.undangan_lampiran || '-'}</div>
+                    <div style={{ width: '14px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={form.undangan_lampiran || '-'}
+                      onCommit={(v) => onUpdateForm?.({ undangan_lampiran: v })}
+                      style={{ flex: 1 }}
+                    />
                   </div>
-                  <div style={{ display: 'flex' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                     <div style={{ width: '85px', flexShrink: 0 }}>Hal</div>
-                    <div style={{ width: '14px', textAlign: 'center' }}>:</div>
-                    <div style={{ flex: 1, fontWeight: '500' }}>
-                      {form.undangan_hal || (
-                        <span className="text-slate-300 italic no-print select-none" style={{ fontWeight: 'normal' }}>
-                          (Belum ada perihal undangan &mdash; isi perihal pada formulir atau gunakan Pindai Acara AI)
-                        </span>
-                      )}
-                    </div>
+                    <div style={{ width: '14px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                    <RichEditable
+                      rich={false}
+                      value={form.undangan_hal || ''}
+                      onCommit={(v) => onUpdateForm?.({ undangan_hal: v })}
+                      placeholder="(Ketik perihal surat undangan di sini)"
+                      style={{ flex: 1 }}
+                    />
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right', width: '38%' }}>
-                  <div>{form.kota_surat || 'Jakarta'}, {tglSuratFormatted}</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={kotaTanggalFormatted}
+                    onCommit={handleCommitKotaTanggal}
+                    style={{ textAlign: 'right' }}
+                  />
                 </div>
               </div>
 
@@ -762,12 +897,10 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <div style={{ marginBottom: '14px', lineHeight: '1.4' }}>
                 <div style={{ fontWeight: 'normal', marginBottom: '3px' }}>Kepada Yth.</div>
                 <RichEditable
-                  rich={false}
                   value={form.undangan_kepada || ''}
                   onCommit={(v) => onUpdateForm?.({ undangan_kepada: v })}
-                  placeholder="(Belum ada penerima undangan — ketik nama pejabat/instansi atau gunakan Lampiran Daftar Undangan)"
-                  title="Klik untuk mengedit penerima undangan"
-                  style={{ lineHeight: '1.4' }}
+                  placeholder="(Ketik penerima undangan atau (Daftar Terlampir))"
+                  style={{ lineHeight: '1.4', minHeight: '22px' }}
                 />
               </div>
 
@@ -776,92 +909,140 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 <RichEditable
                   value={form.undangan_pembuka || ''}
                   onCommit={(v) => onUpdateForm?.({ undangan_pembuka: v })}
-                  placeholder="(Paragraf pembuka belum diisi — ketik pembuka surat undangan pada formulir atau langsung di sini)"
-                  title="Klik untuk mengedit narasi pembuka undangan"
-                  style={{ textAlign: 'justify', lineHeight: '1.5', textIndent: '32px' }}
+                  placeholder="(Ketik paragraf pembuka surat undangan di sini...)"
+                  style={{ textAlign: 'justify', lineHeight: '1.5', textIndent: '32px', minHeight: '24px' }}
                 />
               </div>
 
               {/* Rincian Acara */}
               <div style={{ margin: '10px 0 14px 20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '120px', flexShrink: 0 }}>Hari, Tanggal</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1, fontWeight: '500' }}>
-                    {form.undangan_hari_tanggal || form.hari_tanggal_pelaksanaan || tglSuratFormatted || '-'}
-                  </div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={normalizeTwoDigitDateText(
+                      form.undangan_hari_tanggal || form.hari_tanggal_pelaksanaan || tglSuratFormatted || ''
+                    )}
+                    onCommit={(v) => onUpdateForm?.({ undangan_hari_tanggal: normalizeTwoDigitDateText(v) })}
+                    placeholder="(Ketik hari dan tanggal pelaksanaan)"
+                    style={{ flex: 1 }}
+                  />
                 </div>
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '120px', flexShrink: 0 }}>Waktu</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1 }}>{form.undangan_waktu || form.waktu_kegiatan || '-'}</div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.undangan_waktu || form.waktu_kegiatan || ''}
+                    onCommit={(v) => onUpdateForm?.({ undangan_waktu: v })}
+                    placeholder="(Ketik waktu pelaksanaan, misal: 09.00 WIB s.d. selesai)"
+                    style={{ flex: 1 }}
+                  />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '120px', flexShrink: 0 }}>Tempat</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
                   <div style={{ flex: 1 }}>
                     {form.undangan_tipe_tempat === 'online' ? (
-                      <div>
-                        <em>online</em> via tautan{' '}
-                        {form.undangan_tempat_online ? (
-                          <a href={form.undangan_tempat_online} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                            {form.undangan_tempat_online}
-                          </a>
-                        ) : (
-                          '-'
-                        )}
-                      </div>
+                      <RichEditable
+                        value={
+                          form.undangan_tempat_online_custom !== undefined
+                            ? form.undangan_tempat_online_custom.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**')
+                            : `**online** via tautan ${cleanTempatField(form.undangan_tempat_online, 'online')}`
+                        }
+                        onCommit={(v) => {
+                          const normalized = v.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**');
+                          const cleanedLink = cleanTempatField(normalized, 'online');
+                          onUpdateForm?.({
+                            undangan_tempat_online_custom: normalized,
+                            undangan_tempat_online: cleanedLink,
+                          });
+                        }}
+                        placeholder="(Ketik tautan rapat online)"
+                        style={{ flex: 1 }}
+                      />
                     ) : form.undangan_tipe_tempat === 'hybrid' ? (
-                      <div>
-                        <div>
-                          <em>online</em> via tautan{' '}
-                          <span className="text-blue-600 underline">{form.undangan_tempat_online || '-'}</span>
-                        </div>
-                        <div style={{ marginTop: '2px' }}>
-                          <em>offline</em> di {form.undangan_tempat_offline || form.lokasi_kegiatan || '-'}
-                        </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <RichEditable
+                          value={
+                            form.undangan_tempat_online_custom !== undefined
+                              ? form.undangan_tempat_online_custom.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**')
+                              : `**online** via tautan ${cleanTempatField(form.undangan_tempat_online, 'online')}`
+                          }
+                          onCommit={(v) => {
+                            const normalized = v.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**');
+                            const cleanedLink = cleanTempatField(normalized, 'online');
+                            onUpdateForm?.({
+                              undangan_tempat_online_custom: normalized,
+                              undangan_tempat_online: cleanedLink,
+                            });
+                          }}
+                          placeholder="(Ketik tautan rapat online)"
+                          style={{ flex: 1 }}
+                        />
+                        <RichEditable
+                          value={
+                            form.undangan_tempat_offline_custom !== undefined
+                              ? form.undangan_tempat_offline_custom.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**')
+                              : `**offline** di ${cleanTempatField(form.undangan_tempat_offline || form.lokasi_kegiatan, 'offline')}`
+                          }
+                          onCommit={(v) => {
+                            const normalized = v.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '**$1**');
+                            const cleanedRoom = cleanTempatField(normalized, 'offline');
+                            onUpdateForm?.({
+                              undangan_tempat_offline_custom: normalized,
+                              undangan_tempat_offline: cleanedRoom,
+                              lokasi_kegiatan: cleanedRoom,
+                            });
+                          }}
+                          placeholder="(Ketik tempat/lokasi rapat offline)"
+                          style={{ flex: 1 }}
+                        />
                       </div>
                     ) : (
-                      <div>{form.undangan_tempat_offline || form.lokasi_kegiatan || '-'}</div>
+                      <RichEditable
+                        rich={false}
+                        value={cleanTempatField(form.undangan_tempat_offline || form.lokasi_kegiatan, 'offline')}
+                        onCommit={(v) =>
+                          onUpdateForm?.({
+                            undangan_tempat_offline: v,
+                            lokasi_kegiatan: v,
+                            undangan_tempat_offline_custom: undefined,
+                          })
+                        }
+                        placeholder="(Ketik tempat/lokasi pelaksanaan)"
+                      />
                     )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '120px', flexShrink: 0 }}>Agenda</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1, fontWeight: '500' }}>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <div style={{ flex: 1 }}>
                     <RichEditable
                       groupId="undangan-agenda"
                       groupStart={0}
                       value={
                         undanganSplit.isMultiPage
-                          ? undanganSplit.page1AgendaLines.join('\n')
+                          ? (undanganAgendaPages[0] || []).join('\n')
                           : form.undangan_agenda || ''
                       }
                       onCommit={(v) => {
                         if (undanganSplit.isMultiPage) {
-                          const combined = [v, ...undanganSplit.page2AgendaLines]
-                            .filter((s) => s.trim() !== '')
-                            .join('\n');
-                          onUpdateForm?.({ undangan_agenda: combined });
+                          commitUndanganAgendaPage(0, v);
                         } else {
                           onUpdateForm?.({ undangan_agenda: v });
                         }
                       }}
-                      placeholder="(Belum ada agenda pembahasan — ketik rincian agenda pada formulir atau langsung di sini)"
-                      title="Klik untuk mengedit agenda pembahasan"
+                      placeholder="(Ketik agenda acara di sini)"
                       style={{ lineHeight: '1.45' }}
                     />
                   </div>
                 </div>
               </div>
-
-              {/* Jika Multi-Halaman: Tampilkan penanda bersambung di kanan bawah Halaman 1 */}
-              {undanganSplit.isMultiPage && (
-                <div style={{ textAlign: 'right', fontSize: '9pt', color: '#64748b', marginTop: '16px', fontStyle: 'italic' }}>
-                  (bersambung ke halaman 2)
-                </div>
-              )}
 
               {/* Jika 1 Halaman Saja (Muat): Tampilkan Penutup & TTD di Halaman 1 */}
               {!undanganSplit.isMultiPage && (
@@ -870,25 +1051,40 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                   <RichEditable
                     value={form.undangan_penutup || ''}
                     onCommit={(v) => onUpdateForm?.({ undangan_penutup: v })}
-                    placeholder="(Paragraf penutup belum diisi — ketik penutup surat undangan pada formulir atau langsung di sini)"
-                    title="Klik untuk mengedit narasi penutup undangan"
-                    style={{ textAlign: 'justify', lineHeight: '1.5', marginBottom: form.undangan_penutup ? ttdMargin : '0px', textIndent: '32px' }}
+                    placeholder="(Ketik paragraf penutup surat undangan di sini...)"
+                    style={{ textAlign: 'justify', lineHeight: '1.5', marginBottom: ttdMargin, textIndent: '32px', minHeight: '24px' }}
                   />
 
-                  {/* Tanda Tangan */}
+                  {/* Tanda Tangan (Nama tidak di-bold & tanpa gelar) */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
                     <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                      <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={jabatanTTD}
+                        onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                        style={{ marginTop: '2px', textAlign: 'center' }}
+                      />
                       <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
-                      <div style={{ fontWeight: 'bold' }}>{selectedPejabat.nama}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={namaPejabatClean}
+                        onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                        style={{ fontWeight: 'normal', textAlign: 'center' }}
+                      />
                     </div>
                   </div>
 
                   {/* Tembusan jika ada */}
-                  {form.undangan_tembusan && (
+                  {form.undangan_tembusan !== undefined && form.undangan_tembusan !== '' && (
                     <div style={{ fontSize: '9pt', marginTop: '14px', lineHeight: '1.3' }}>
                       <div style={{ fontWeight: 'bold' }}>Tembusan disampaikan kepada Yth.</div>
-                      <div style={{ whiteSpace: 'pre-line' }}>{form.undangan_tembusan}</div>
+                      <RichEditable
+                        value={form.undangan_tembusan}
+                        onCommit={(v) => onUpdateForm?.({ undangan_tembusan: v })}
+                        style={{ lineHeight: '1.3' }}
+                      />
                     </div>
                   )}
                 </>
@@ -899,21 +1095,28 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 CABANG 2: NOTA DINAS
             ══════════════════════════════════════════════════════════ */
             <div style={{ fontSize: bodyFontSize, lineHeight: '1.45' }}>
-              {/* Judul Tengah */}
+              {/* Judul Tengah — Arial 14pt */}
               <div style={{ textAlign: 'center', marginBottom: '8px' }}>
                 <div
                   style={{
                     fontFamily: 'Arial, sans-serif',
                     fontWeight: 'bold',
-                    fontSize: bodyFontSize,
+                    fontSize: '14pt',
                     textDecoration: 'underline',
                     letterSpacing: '0.05em',
                   }}
                 >
                   NOTA DINAS
                 </div>
-                <div style={{ fontFamily: 'Arial, sans-serif', fontSize: bodyFontSize, marginTop: '2px' }}>
-                  Nomor: {form.nomor_lengkap}
+                <div style={{ fontFamily: 'Arial, sans-serif', fontSize: bodyFontSize, marginTop: '2px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Nomor:</span>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.nomor_lengkap || ''}
+                    onCommit={(v) => onUpdateForm?.({ nomor_lengkap: v })}
+                    style={{ display: 'inline-grid' }}
+                  />
                 </div>
               </div>
 
@@ -927,7 +1130,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     singleLine
                     value={form.nota_kepada || ''}
                     onCommit={(v) => onUpdateForm?.({ nota_kepada: v })}
-                    placeholder="(Belum ada penerima nota dinas — ketik nama/jabatan penerima pada formulir)"
+                    placeholder="(Ketik tujuan penerima Nota Dinas)"
                     style={{ flex: 1, lineHeight: '1.4' }}
                   />
                 </div>
@@ -939,7 +1142,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     singleLine
                     value={form.nota_dari || ''}
                     onCommit={(v) => onUpdateForm?.({ nota_dari: v })}
-                    placeholder="(Belum ada pengirim nota dinas — ketik jabatan pengirim pada formulir)"
+                    placeholder="(Ketik pengirim Nota Dinas)"
                     style={{ flex: 1, lineHeight: '1.4' }}
                   />
                 </div>
@@ -948,61 +1151,82 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                   <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
                   <RichEditable
                     rich={false}
-                    singleLine
                     value={form.nota_hal || ''}
                     onCommit={(v) => onUpdateForm?.({ nota_hal: v })}
-                    placeholder="(Belum ada perihal nota dinas — ketik pokok telaah pada formulir)"
-                    style={{ flex: 1, fontWeight: '500', lineHeight: '1.4' }}
+                    placeholder="(Ketik perihal Nota Dinas)"
+                    style={{ flex: 1, lineHeight: '1.4' }}
                   />
                 </div>
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '110px', flexShrink: 0 }}>Sifat</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1 }}>{form.nota_sifat || 'Biasa'}</div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.nota_sifat || 'Biasa'}
+                    onCommit={(v) => onUpdateForm?.({ nota_sifat: v })}
+                    style={{ flex: 1, lineHeight: '1.4' }}
+                  />
                 </div>
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '110px', flexShrink: 0 }}>Lampiran</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1 }}>{form.nota_lampiran || '-'}</div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.nota_lampiran || '-'}
+                    onCommit={(v) => onUpdateForm?.({ nota_lampiran: v })}
+                    style={{ flex: 1, lineHeight: '1.4' }}
+                  />
                 </div>
-                <div style={{ display: 'flex' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
                   <div style={{ width: '110px', flexShrink: 0 }}>Tanggal</div>
-                  <div style={{ width: '16px', textAlign: 'center' }}>:</div>
-                  <div style={{ flex: 1 }}>{tglSuratFormatted}</div>
+                  <div style={{ width: '16px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={tglSuratFormatted}
+                    onCommit={(v) => onUpdateForm?.({ custom_tanggal_surat_text: normalizeTwoDigitDateText(v) })}
+                    style={{ flex: 1, lineHeight: '1.4' }}
+                  />
                 </div>
               </div>
 
               {/* Garis batas tipis di bawah atribut */}
               <div style={{ borderBottom: '1px solid #000', margin: '8px 0 14px 0' }} />
 
-              {/* Isi / Badan Surat Nota Dinas (satu kotak teks kontinu) */}
+              {/* Isi / Badan Surat Nota Dinas (satu kanvas teks kontinu) */}
               <RichEditable
                 variant="nota"
                 groupId="nota-body"
                 groupStart={0}
                 value={(notaPages[0] || []).join('\n')}
                 onCommit={(v) => commitNotaPage(0, v)}
-                placeholder="(Belum ada isi nota dinas — ketik paragraf pembuka, isi, dan penutup pada formulir atau langsung di sini)"
-                title="Klik untuk langsung mengedit isi badan nota dinas"
-                style={{ marginBottom: '12px', minHeight: '140px' }}
+                placeholder="(Ketik isi Nota Dinas di sini...)"
+                style={{ marginBottom: notaSplit.isMultiPage ? '0px' : '12px', minHeight: '160px' }}
               />
-
-              {/* Jika Multi-Halaman: Tampilkan penanda bersambung di kanan bawah Halaman 1 */}
-              {notaSplit.isMultiPage && (
-                <div style={{ textAlign: 'right', fontSize: '9pt', color: '#64748b', marginTop: '16px', fontStyle: 'italic' }}>
-                  (bersambung ke halaman 2)
-                </div>
-              )}
 
               {/* Jika 1 Halaman Saja (Muat): Tampilkan TTD di Halaman 1 */}
               {!notaSplit.isMultiPage && (
                 <>
-                  {/* Tanda Tangan */}
+                  {/* Tanda Tangan (Nama tidak di-bold & tanpa gelar) */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px', marginTop: '16px' }}>
                     <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                      <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={jabatanTTD}
+                        onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                        style={{ marginTop: '2px', textAlign: 'center' }}
+                      />
                       <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
-                      <div style={{ fontWeight: 'bold' }}>{selectedPejabat.nama}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={namaPejabatClean}
+                        onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                        style={{ fontWeight: 'normal', textAlign: 'center' }}
+                      />
                     </div>
                   </div>
 
@@ -1010,7 +1234,11 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                   {form.nota_tembusan && (
                     <div style={{ fontSize: '9pt', marginTop: '14px', lineHeight: '1.3' }}>
                       <div style={{ fontWeight: 'bold' }}>Tembusan disampaikan kepada Yth.</div>
-                      <div style={{ whiteSpace: 'pre-line' }}>{form.nota_tembusan}</div>
+                      <RichEditable
+                        value={form.nota_tembusan}
+                        onCommit={(v) => onUpdateForm?.({ nota_tembusan: v })}
+                        style={{ lineHeight: '1.3' }}
+                      />
                     </div>
                   )}
                 </>
@@ -1018,24 +1246,31 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             </div>
           ) : (
             /* ═════════════════════════════════════════════════════════
-                CABANG 3: SURAT TUGAS (FORMAT ASLI DIJAGA PERSIS)
+                CABANG 3: SURAT TUGAS
             ══════════════════════════════════════════════════════════ */
             <div>
-              {/* ── JUDUL ──────────────────────────────────────────────── */}
+              {/* ── JUDUL — Arial 14pt ─────────────────────────────────── */}
               <div style={{ textAlign: 'center', marginBottom: count === 3 ? '4px' : '6px' }}>
                 <div
                   style={{
                     fontFamily: 'Arial, sans-serif',
                     fontWeight: 'bold',
-                    fontSize: bodyFontSize,
+                    fontSize: '14pt',
                     textDecoration: 'underline',
                     letterSpacing: '0.05em',
                   }}
                 >
                   SURAT TUGAS
                 </div>
-                <div style={{ fontFamily: 'Arial, sans-serif', fontSize: bodyFontSize, marginTop: '2px' }}>
-                  Nomor: {form.nomor_lengkap}
+                <div style={{ fontFamily: 'Arial, sans-serif', fontSize: bodyFontSize, marginTop: '2px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Nomor:</span>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.nomor_lengkap || ''}
+                    onCommit={(v) => onUpdateForm?.({ nomor_lengkap: v })}
+                    style={{ display: 'inline-grid' }}
+                  />
                 </div>
               </div>
 
@@ -1048,8 +1283,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 <RichEditable
                   value={menimbangText || ''}
                   onCommit={(v) => onUpdateForm?.({ menimbang_custom: v })}
-                  placeholder="(Belum ada redaksi Menimbang — isi nama kegiatan atau gunakan Pindai Undangan AI)"
-                  title="Klik untuk langsung mengedit teks Menimbang"
+                  placeholder="(Ketik klausul Menimbang di sini)"
                   style={{ flex: 1, textAlign: 'justify', lineHeight: bodyLineHeight, minHeight: '20px' }}
                 />
               </div>
@@ -1061,8 +1295,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 <RichEditable
                   value={dasarText || ''}
                   onCommit={(v) => onUpdateForm?.({ dasar_custom: v })}
-                  placeholder="(Belum ada dasar surat undangan — isi nomor/instansi undangan atau gunakan Pindai Undangan AI)"
-                  title="Klik untuk langsung mengedit teks Dasar"
+                  placeholder="(Ketik dasar hukum / surat undangan di sini)"
                   style={{ flex: 1, textAlign: 'justify', lineHeight: bodyLineHeight, minHeight: '20px' }}
                 />
               </div>
@@ -1079,38 +1312,59 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 MEMBERI TUGAS:
               </div>
 
-              {/* ── KEPADA ─────────────────────────────────────────────── */}
+              {/* ── KEPADA (Nama yang ditugaskan tidak di-bold & dapat langsung diedit di kertas) ── */}
               <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: sectionMargin }}>
                 <div style={{ width: LABEL_W, flexShrink: 0, fontWeight: 'normal' }}>Kepada</div>
                 <div style={{ width: COLON_W, flexShrink: 0, textAlign: 'center' }}>:</div>
                 <div style={{ flex: 1, lineHeight: bodyLineHeight, minHeight: '22px' }}>
                   {count === 0 ? (
-                    <div className="text-slate-400 italic no-print select-none" style={{ lineHeight: bodyLineHeight }}>
-                      (Belum ada pegawai yang dipilih &mdash; silakan pilih pegawai pada daftar formulir)
-                    </div>
+                    <RichEditable
+                      value={form.custom_kepada_tugas || ''}
+                      onCommit={(v) => onUpdateForm?.({ custom_kepada_tugas: v })}
+                      placeholder="(Pilih pegawai di panel kiri atau ketik langsung di sini)"
+                      style={{ lineHeight: bodyLineHeight, minHeight: '22px' }}
+                    />
                   ) : isLampiran ? (
-                    <span>(Daftar Terlampir)</span>
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={form.custom_kepada_tugas || '(Daftar Terlampir)'}
+                      onCommit={(v) => onUpdateForm?.({ custom_kepada_tugas: v })}
+                    />
                   ) : count === 1 ? (
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      {[
-                        ['Nama', selectedPegawai[0].nama, true],
-                        ['NIP', selectedPegawai[0].nip, false],
-                        ['Pangkat, Gol/Ruang', selectedPegawai[0].pangkat_golongan, false],
-                        ['Jabatan', selectedPegawai[0].jabatan, false],
-                      ].map(([label, value, bold]) => (
+                      {([
+                        ['Nama', 'nama', stripAcademicTitles(form.custom_pegawai_overrides?.[selectedPegawai[0].id]?.nama ?? selectedPegawai[0].nama)],
+                        ['NIP', 'nip', form.custom_pegawai_overrides?.[selectedPegawai[0].id]?.nip ?? selectedPegawai[0].nip],
+                        ['Pangkat, Gol/Ruang', 'pangkat_golongan', form.custom_pegawai_overrides?.[selectedPegawai[0].id]?.pangkat_golongan ?? selectedPegawai[0].pangkat_golongan],
+                        ['Jabatan', 'jabatan', form.custom_pegawai_overrides?.[selectedPegawai[0].id]?.jabatan ?? selectedPegawai[0].jabatan],
+                      ] as const).map(([label, fieldKey, val]) => (
                         <div
-                          key={String(label)}
+                          key={label}
                           style={{
                             display: 'flex',
                             alignItems: 'flex-start',
                             lineHeight: employeeInnerLineHeight,
                           }}
                         >
-                          <div style={{ width: '156px', flexShrink: 0, whiteSpace: 'nowrap' }}>{String(label)}</div>
+                          <div style={{ width: '156px', flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</div>
                           <div style={{ width: '16px', flexShrink: 0, textAlign: 'center' }}>:</div>
-                          <div style={{ flex: 1, fontWeight: bold ? 'bold' : 'normal' }}>
-                            {String(value)}
-                          </div>
+                          <RichEditable
+                            rich={false}
+                            singleLine
+                            value={String(val)}
+                            onCommit={(v) => {
+                              const pid = selectedPegawai[0].id;
+                              const prevOverrides = form.custom_pegawai_overrides || {};
+                              onUpdateForm?.({
+                                custom_pegawai_overrides: {
+                                  ...prevOverrides,
+                                  [pid]: { ...(prevOverrides[pid] || {}), [fieldKey]: v },
+                                },
+                              });
+                            }}
+                            style={{ flex: 1, fontWeight: 'normal' }}
+                          />
                         </div>
                       ))}
                     </div>
@@ -1118,27 +1372,39 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: pegawaiGap }}>
                       {selectedPegawai.map((peg, idx) => (
                         <div key={peg.id} style={{ display: 'flex', alignItems: 'flex-start', lineHeight: employeeInnerLineHeight }}>
-                          <div style={{ width: '18px', flexShrink: 0, fontWeight: 'bold' }}>{idx + 1}.</div>
+                          <div style={{ width: '18px', flexShrink: 0, fontWeight: 'normal' }}>{idx + 1}.</div>
                           <div style={{ flex: 1 }}>
-                            {[
-                              ['Nama', peg.nama, true],
-                              ['NIP', peg.nip, false],
-                              ['Pangkat, Gol/Ruang', peg.pangkat_golongan, false],
-                              ['Jabatan', peg.jabatan, false],
-                            ].map(([label, value, bold]) => (
+                            {([
+                              ['Nama', 'nama', stripAcademicTitles(form.custom_pegawai_overrides?.[peg.id]?.nama ?? peg.nama)],
+                              ['NIP', 'nip', form.custom_pegawai_overrides?.[peg.id]?.nip ?? peg.nip],
+                              ['Pangkat, Gol/Ruang', 'pangkat_golongan', form.custom_pegawai_overrides?.[peg.id]?.pangkat_golongan ?? peg.pangkat_golongan],
+                              ['Jabatan', 'jabatan', form.custom_pegawai_overrides?.[peg.id]?.jabatan ?? peg.jabatan],
+                            ] as const).map(([label, fieldKey, val]) => (
                               <div
-                                key={String(label)}
+                                key={label}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'flex-start',
                                   lineHeight: employeeInnerLineHeight,
                                 }}
                               >
-                                <div style={{ width: '156px', flexShrink: 0, whiteSpace: 'nowrap' }}>{String(label)}</div>
+                                <div style={{ width: '156px', flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</div>
                                 <div style={{ width: '16px', flexShrink: 0, textAlign: 'center' }}>:</div>
-                                <div style={{ flex: 1, fontWeight: bold ? 'bold' : 'normal' }}>
-                                  {String(value)}
-                                </div>
+                                <RichEditable
+                                  rich={false}
+                                  singleLine
+                                  value={String(val)}
+                                  onCommit={(v) => {
+                                    const prevOverrides = form.custom_pegawai_overrides || {};
+                                    onUpdateForm?.({
+                                      custom_pegawai_overrides: {
+                                        ...prevOverrides,
+                                        [peg.id]: { ...(prevOverrides[peg.id] || {}), [fieldKey]: v },
+                                      },
+                                    });
+                                  }}
+                                  style={{ flex: 1, fontWeight: 'normal' }}
+                                />
                               </div>
                             ))}
                           </div>
@@ -1163,29 +1429,18 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 <RichEditable
                   groupId="tugas-untuk"
                   groupStart={0}
-                  value={isTugasMultiPage ? tugasSplit.page1UntukLines.join('\n') : untukText || ''}
+                  value={isTugasMultiPage ? (tugasUntukPages[0] || []).join('\n') : untukText || ''}
                   onCommit={(v) => {
-                    if (isTugasMultiPage && tugasSplit.page2UntukLines.length > 0) {
-                      const combined = [v, ...tugasSplit.page2UntukLines]
-                        .filter((s) => s.trim() !== '')
-                        .join('\n');
-                      onUpdateForm?.({ untuk_custom: combined });
+                    if (isTugasMultiPage) {
+                      commitTugasUntukPage(0, v);
                     } else {
                       onUpdateForm?.({ untuk_custom: v });
                     }
                   }}
-                  placeholder="(Belum ada diktum Untuk — isi kegiatan, waktu, dan lokasi pelaksanaan)"
-                  title="Klik untuk langsung mengedit teks Untuk"
+                  placeholder="(Ketik rincian tugas / kegiatan di sini)"
                   style={{ flex: 1, textAlign: 'justify', lineHeight: bodyLineHeight, minHeight: '20px' }}
                 />
               </div>
-
-              {/* Jika Multi-Halaman pada Surat Tugas: Tampilkan penanda bersambung di kanan bawah Halaman 1 */}
-              {isTugasMultiPage && (
-                <div style={{ textAlign: 'right', fontSize: '9pt', color: '#64748b', marginTop: '16px', fontStyle: 'italic' }}>
-                  (bersambung ke halaman 2)
-                </div>
-              )}
 
               {/* Jika 1 Halaman: Tampilkan Penutup & TTD di Halaman 1 */}
               {!isTugasMultiPage && (
@@ -1195,32 +1450,50 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     <RichEditable
                       value={penutupText}
                       onCommit={(v) => onUpdateForm?.({ penutup_custom: v })}
-                      title="Klik untuk langsung mengedit klausul pembebanan anggaran"
                       style={{ textAlign: 'justify', lineHeight: bodyLineHeight, marginBottom: '3px' }}
                     />
                   ) : null}
-                  <div
+                  <RichEditable
+                    value={
+                      form.custom_kalimat_penutup_tugas ||
+                      'Demikian Surat Tugas ini dibuat untuk dilaksanakan dengan seksama dan penuh tanggung jawab.'
+                    }
+                    onCommit={(v) => onUpdateForm?.({ custom_kalimat_penutup_tugas: v })}
                     style={{
                       textAlign: 'justify',
                       lineHeight: bodyLineHeight,
                       marginBottom: ttdMargin,
                     }}
-                  >
-                    Demikian Surat Tugas ini dibuat untuk dilaksanakan dengan seksama dan penuh tanggung jawab.
-                  </div>
+                  />
 
-                  {/* ── TANDA TANGAN ───────────────────────────────────────── */}
+                  {/* ── TANDA TANGAN (Nama tidak di-bold & tanpa gelar) ────── */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
                     <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                      <div>{form.kota_surat || 'Jakarta'}, {tglSuratFormatted}</div>
-                      <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={kotaTanggalFormatted}
+                        onCommit={handleCommitKotaTanggal}
+                        style={{ textAlign: 'center' }}
+                      />
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={jabatanTTD}
+                        onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                        style={{ marginTop: '2px', textAlign: 'center' }}
+                      />
 
                       {/* Space kosong lebar dan tinggi untuk tanda tangan manual */}
                       <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
 
-                      <div style={{ fontWeight: 'bold' }}>
-                        {selectedPejabat.nama}
-                      </div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={namaPejabatClean}
+                        onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                        style={{ fontWeight: 'normal', textAlign: 'center' }}
+                      />
                     </div>
                   </div>
                 </>
@@ -1230,7 +1503,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
 
         </div>
 
-        {/* ── HALAMAN LANJUTAN — NOTA DINAS (Halaman 2, 3, dst.) ── */}
+        {/* ── HALAMAN LANJUTAN — NOTA DINAS (Halaman 2, 3, dst. tanpa nomor halaman & tanpa teks bersambung) ── */}
         {isNotaDinas && notaSplit.isMultiPage && (
           (notaSplit.pages && notaSplit.pages.length > 1 ? notaSplit.pages.slice(1) : [notaSplit.page2Lines]).map((pageLines, pageIdx, arr) => {
             const pageNum = pageIdx + 2;
@@ -1239,6 +1512,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             return (
               <div
                 key={`nota-page-${pageNum}`}
+                onClick={handlePaperCanvasClick}
                 className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none is-lampiran"
                 style={{
                   ...baseStyle,
@@ -1247,44 +1521,43 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                   height: '1123px',
                   maxHeight: '1123px',
                   overflow: 'hidden',
-                  padding: pagePadding,
+                  padding: continuationPagePadding,
                   boxSizing: 'border-box',
                   position: 'relative',
-                  marginTop: '24px',
+                  marginTop: '12px',
                 }}
               >
-                {/* Header Nomor Halaman Resmi Tata Naskah Dinas */}
-                <div style={{ textAlign: 'center', fontSize: '11pt', color: '#000', marginBottom: '20px', fontWeight: 'bold' }}>
-                  - {pageNum} -
-                </div>
-
-                {/* Lanjutan isi nota dinas */}
+                {/* Lanjutan isi nota dinas langsung mengalir rapi dari atas halaman */}
                 <RichEditable
                   variant="nota"
                   groupId="nota-body"
                   groupStart={notaPageStarts[pageIdx + 1] || 0}
                   value={pageLines.join('\n')}
                   onCommit={(v) => commitNotaPage(pageIdx + 1, v)}
-                  title="Klik untuk mengedit isi nota dinas"
-                  style={{ marginBottom: '14px' }}
+                  style={{ marginBottom: isLastPage ? '14px' : '0px' }}
                 />
-
-                {/* Jika belum halaman terakhir, tampilkan bersambung ke halaman berikutnya */}
-                {!isLastPage && (
-                  <div style={{ textAlign: 'right', fontSize: '9pt', color: '#64748b', marginTop: '16px', marginBottom: '16px', fontStyle: 'italic' }}>
-                    (bersambung ke halaman {pageNum + 1})
-                  </div>
-                )}
 
                 {/* Jika halaman terakhir: Tampilkan Tanda Tangan dan Tembusan tepat setelah paragraf penutup */}
                 {isLastPage && (
                   <>
-                    {/* Tanda Tangan */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px', marginTop: '22px' }}>
+                    {/* Tanda Tangan (Nama tidak di-bold & tanpa gelar) */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px', marginTop: '20px' }}>
                       <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                        <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={jabatanTTD}
+                          onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                          style={{ marginTop: '2px', textAlign: 'center' }}
+                        />
                         <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
-                        <div style={{ fontWeight: 'bold' }}>{selectedPejabat.nama}</div>
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={namaPejabatClean}
+                          onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                          style={{ fontWeight: 'normal', textAlign: 'center' }}
+                        />
                       </div>
                     </div>
 
@@ -1292,7 +1565,11 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     {form.nota_tembusan && (
                       <div style={{ fontSize: '9pt', marginTop: '14px', lineHeight: '1.3' }}>
                         <div style={{ fontWeight: 'bold' }}>Tembusan disampaikan kepada Yth.</div>
-                        <div style={{ whiteSpace: 'pre-line' }}>{form.nota_tembusan}</div>
+                        <RichEditable
+                          value={form.nota_tembusan}
+                          onCommit={(v) => onUpdateForm?.({ nota_tembusan: v })}
+                          style={{ lineHeight: '1.3' }}
+                        />
                       </div>
                     )}
                   </>
@@ -1302,151 +1579,195 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
           })
         )}
 
-        {/* ── HALAMAN 2 — SURAT UNDANGAN (Lanjutan Agenda, Penutup & Tanda Tangan) ── */}
+        {/* ── HALAMAN LANJUTAN — SURAT UNDANGAN (Halaman 2, 3, dst. tanpa nomor halaman & tanpa teks bersambung) ── */}
         {isUndangan && undanganSplit.isMultiPage && (
-          <div
-            className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none is-lampiran"
-            style={{
-              ...baseStyle,
-              width: '794px',
-              minHeight: '1123px',
-              height: '1123px',
-              maxHeight: '1123px',
-              overflow: 'hidden',
-              padding: pagePadding,
-              boxSizing: 'border-box',
-              position: 'relative',
-              marginTop: '24px',
-            }}
-          >
-            {/* Header Nomor Halaman Resmi Tata Naskah Dinas */}
-            <div style={{ textAlign: 'center', fontSize: '11pt', color: '#000', marginBottom: '22px', fontWeight: 'bold' }}>
-              - 2 -
-            </div>
+          (undanganAgendaPages.length > 1 ? undanganAgendaPages.slice(1) : [[]]).map((pageLines, pageIdx, arr) => {
+            const pageNum = pageIdx + 2;
+            const isLastPage = pageIdx === arr.length - 1;
 
-            {/* Lanjutan Agenda */}
-            {undanganSplit.page2AgendaLines.length > 0 && (
-              <div style={{ marginBottom: '18px', lineHeight: '1.55' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>Lanjutan Rincian Agenda &amp; Pembahasan:</div>
-                <RichEditable
-                  groupId="undangan-agenda"
-                  groupStart={visibleLength(undanganSplit.page1AgendaLines)}
-                  value={undanganSplit.page2AgendaLines.join('\n')}
-                  onCommit={(v) =>
-                    onUpdateForm?.({
-                      undangan_agenda: [...undanganSplit.page1AgendaLines, v]
-                        .filter((s) => s.trim() !== '')
-                        .join('\n'),
-                    })
-                  }
-                  style={{ textAlign: 'justify' }}
-                />
+            return (
+              <div
+                key={`undangan-page-${pageNum}`}
+                onClick={handlePaperCanvasClick}
+                className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none is-lampiran"
+                style={{
+                  ...baseStyle,
+                  width: '794px',
+                  minHeight: '1123px',
+                  height: '1123px',
+                  maxHeight: '1123px',
+                  overflow: 'hidden',
+                  padding: continuationPagePadding,
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  marginTop: '12px',
+                }}
+              >
+                {/* Lanjutan Agenda langsung mengalir sejajar kolom Agenda */}
+                {pageLines.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', marginLeft: '32px', marginBottom: '12px', lineHeight: '1.45' }}>
+                    <div style={{ width: '120px', flexShrink: 0 }} />
+                    <div style={{ width: '16px', flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <RichEditable
+                        groupId="undangan-agenda"
+                        groupStart={undanganAgendaPageStarts[pageIdx + 1] || 0}
+                        value={pageLines.join('\n')}
+                        onCommit={(v) => commitUndanganAgendaPage(pageIdx + 1, v)}
+                        style={{ textAlign: 'justify', lineHeight: '1.45' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isLastPage && (
+                  <>
+                    {/* Paragraf Penutup */}
+                    <RichEditable
+                      value={form.undangan_penutup || 'Demikian kami sampaikan, atas perhatian dan kehadirannya diucapkan terima kasih.'}
+                      onCommit={(v) => onUpdateForm?.({ undangan_penutup: v })}
+                      style={{ textAlign: 'justify', lineHeight: '1.5', marginBottom: ttdMargin, textIndent: '32px' }}
+                    />
+
+                    {/* Tanda Tangan (Nama tidak di-bold & tanpa gelar) */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+                      <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={jabatanTTD}
+                          onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                          style={{ marginTop: '2px', textAlign: 'center' }}
+                        />
+                        <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={namaPejabatClean}
+                          onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                          style={{ fontWeight: 'normal', textAlign: 'center' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tembusan jika ada */}
+                    {form.undangan_tembusan && (
+                      <div style={{ fontSize: '9pt', marginTop: '14px', lineHeight: '1.3' }}>
+                        <div style={{ fontWeight: 'bold' }}>Tembusan disampaikan kepada Yth.</div>
+                        <RichEditable
+                          value={form.undangan_tembusan}
+                          onCommit={(v) => onUpdateForm?.({ undangan_tembusan: v })}
+                          style={{ lineHeight: '1.3' }}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-            )}
-
-            {/* Paragraf Penutup */}
-            <RichEditable
-              value={form.undangan_penutup || 'Demikian kami sampaikan, atas perhatian dan kehadirannya diucapkan terima kasih.'}
-              onCommit={(v) => onUpdateForm?.({ undangan_penutup: v })}
-              title="Klik untuk mengedit narasi penutup undangan"
-              style={{ textAlign: 'justify', lineHeight: '1.5', marginBottom: ttdMargin, textIndent: '32px' }}
-            />
-
-            {/* Tanda Tangan */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
-              <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
-                <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
-                <div style={{ fontWeight: 'bold' }}>{selectedPejabat.nama}</div>
-              </div>
-            </div>
-
-            {/* Tembusan jika ada */}
-            {form.undangan_tembusan && (
-              <div style={{ fontSize: '9pt', marginTop: '14px', lineHeight: '1.3' }}>
-                <div style={{ fontWeight: 'bold' }}>Tembusan disampaikan kepada Yth.</div>
-                <div style={{ whiteSpace: 'pre-line' }}>{form.undangan_tembusan}</div>
-              </div>
-            )}
-          </div>
+            );
+          })
         )}
 
-        {/* ── HALAMAN 2 — SURAT TUGAS (Lanjutan Untuk, Penutup & Tanda Tangan jika Diktum Panjang) ── */}
+        {/* ── HALAMAN LANJUTAN — SURAT TUGAS (Halaman 2, 3, dst. tanpa nomor halaman & tanpa teks bersambung) ── */}
         {isTugas && isTugasMultiPage && (
-          <div
-            className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none is-lampiran"
-            style={{
-              ...baseStyle,
-              width: '794px',
-              minHeight: '1123px',
-              height: '1123px',
-              maxHeight: '1123px',
-              overflow: 'hidden',
-              padding: pagePadding,
-              boxSizing: 'border-box',
-              position: 'relative',
-              marginTop: '24px',
-            }}
-          >
-            <div style={{ textAlign: 'center', fontSize: '11pt', color: '#000', marginBottom: '22px', fontWeight: 'bold' }}>
-              - 2 -
-            </div>
+          (tugasUntukPages.length > 1 ? tugasUntukPages.slice(1) : [[]]).map((pageLines, pageIdx, arr) => {
+            const pageNum = pageIdx + 2;
+            const isLastPage = pageIdx === arr.length - 1;
 
-            {/* Lanjutan Diktum Untuk jika meluber dari Halaman 1 */}
-            {tugasSplit.page2UntukLines.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
-                <div style={{ width: LABEL_W, flexShrink: 0 }} />
-                <div style={{ width: COLON_W, flexShrink: 0 }} />
-                <RichEditable
-                  groupId="tugas-untuk"
-                  groupStart={visibleLength(tugasSplit.page1UntukLines)}
-                  value={tugasSplit.page2UntukLines.join('\n')}
-                  onCommit={(v) => {
-                    const combined = [...tugasSplit.page1UntukLines, v]
-                      .filter((s) => s.trim() !== '')
-                      .join('\n');
-                    onUpdateForm?.({ untuk_custom: combined });
-                  }}
-                  title="Klik untuk mengedit lanjutan diktum Untuk"
-                  style={{ flex: 1, textAlign: 'justify', lineHeight: bodyLineHeight }}
-                />
-              </div>
-            )}
-
-            {/* Paragraf Penutup Pembebanan Anggaran */}
-            {penutupText && penutupText.trim() ? (
+            return (
+              <div
+                key={`tugas-page-${pageNum}`}
+                onClick={handlePaperCanvasClick}
+                className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none is-lampiran"
+                style={{
+                  ...baseStyle,
+                  width: '794px',
+                  minHeight: '1123px',
+                  height: '1123px',
+                  maxHeight: '1123px',
+                  overflow: 'hidden',
+                  padding: continuationPagePadding,
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  marginTop: '12px',
+                }}
+              >
+                {/* Lanjutan Diktum Untuk langsung mengalir sejajar kolom Untuk */}
+                {pageLines.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '10px' }}>
+                    <div style={{ width: LABEL_W, flexShrink: 0 }} />
+                    <div style={{ width: COLON_W, flexShrink: 0 }} />
                     <RichEditable
-                      value={penutupText}
-                      onCommit={(v) => onUpdateForm?.({ penutup_custom: v })}
-                      title="Klik untuk langsung mengedit klausul pembebanan anggaran"
-                      style={{ textAlign: 'justify', lineHeight: bodyLineHeight, marginBottom: '10px' }}
+                      groupId="tugas-untuk"
+                      groupStart={tugasUntukPageStarts[pageIdx + 1] || 0}
+                      value={pageLines.join('\n')}
+                      onCommit={(v) => commitTugasUntukPage(pageIdx + 1, v)}
+                      style={{ flex: 1, textAlign: 'justify', lineHeight: bodyLineHeight }}
                     />
-                  ) : null}
-            <div
-              style={{
-                textAlign: 'justify',
-                lineHeight: bodyLineHeight,
-                marginBottom: ttdMargin,
-              }}
-            >
-              Demikian Surat Tugas ini dibuat untuk dilaksanakan dengan seksama dan penuh tanggung jawab.
-            </div>
+                  </div>
+                )}
 
-            {/* Tanda Tangan */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
-              <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
-                <div>{form.kota_surat || 'Jakarta'}, {tglSuratFormatted}</div>
-                <div style={{ marginTop: '2px' }}>{jabatanTTD}</div>
-                <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
-                <div style={{ fontWeight: 'bold' }}>{selectedPejabat.nama}</div>
+                {isLastPage && (
+                  <>
+                    {/* Paragraf Penutup Pembebanan Anggaran */}
+                    {penutupText && penutupText.trim() ? (
+                      <RichEditable
+                        value={penutupText}
+                        onCommit={(v) => onUpdateForm?.({ penutup_custom: v })}
+                        style={{ textAlign: 'justify', lineHeight: bodyLineHeight, marginBottom: '10px' }}
+                      />
+                    ) : null}
+                    <RichEditable
+                      value={
+                        form.custom_kalimat_penutup_tugas ||
+                        'Demikian Surat Tugas ini dibuat untuk dilaksanakan dengan seksama dan penuh tanggung jawab.'
+                      }
+                      onCommit={(v) => onUpdateForm?.({ custom_kalimat_penutup_tugas: v })}
+                      style={{
+                        textAlign: 'justify',
+                        lineHeight: bodyLineHeight,
+                        marginBottom: ttdMargin,
+                      }}
+                    />
+
+                    {/* Tanda Tangan (Nama tidak di-bold & tanpa gelar) */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+                      <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center' }}>
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={kotaTanggalFormatted}
+                          onCommit={handleCommitKotaTanggal}
+                          style={{ textAlign: 'center' }}
+                        />
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={jabatanTTD}
+                          onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                          style={{ marginTop: '2px', textAlign: 'center' }}
+                        />
+                        <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
+                        <RichEditable
+                          rich={false}
+                          singleLine
+                          value={namaPejabatClean}
+                          onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                          style={{ fontWeight: 'normal', textAlign: 'center' }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          </div>
+            );
+          })
         )}
 
         {/* ── HALAMAN LAMPIRAN SURAT TUGAS (Hanya untuk Surat Tugas jika pegawai > 3) ─────── */}
         {isTugas && isLampiran && (
           <div
+            onClick={handlePaperCanvasClick}
             className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none"
             style={{
               ...baseStyle,
@@ -1461,73 +1782,200 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             {/* Header Lampiran - Pojok Kanan Atas Resmi */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px', width: '100%' }}>
               <div style={{ minWidth: '240px', maxWidth: '320px', fontSize: '10pt', lineHeight: '1.4', textAlign: 'left' }}>
-                <div style={{ display: 'flex' }}>
-                  <div style={{ width: '60px', flexShrink: 0 }}>Lampiran</div>
-                  <div style={{ width: '12px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                  <div style={{ flex: 1 }}>Surat Tugas Kepala Pusat Kebijakan Strategis</div>
+                <div style={{ fontWeight: 'normal', marginBottom: '2px' }}>
+                  Lampiran I Surat Tugas
                 </div>
                 <div style={{ display: 'flex' }}>
                   <div style={{ width: '60px', flexShrink: 0 }}>Nomor</div>
                   <div style={{ width: '12px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                  <div style={{ flex: 1 }}>{form.nomor_lengkap}</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={form.nomor_lengkap || ''}
+                    onCommit={(v) => onUpdateForm?.({ nomor_lengkap: v })}
+                    style={{ flex: 1 }}
+                  />
                 </div>
                 <div style={{ display: 'flex' }}>
                   <div style={{ width: '60px', flexShrink: 0 }}>Tanggal</div>
                   <div style={{ width: '12px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                  <div style={{ flex: 1 }}>{tglSuratFormatted}</div>
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={tglSuratFormatted}
+                    onCommit={(v) => onUpdateForm?.({ custom_tanggal_surat_text: normalizeTwoDigitDateText(v) })}
+                    style={{ flex: 1 }}
+                  />
                 </div>
               </div>
             </div>
 
-            <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11pt', marginBottom: '16px' }}>
-              DAFTAR PEGAWAI YANG DITUGASKAN
-            </div>
-
-            {/* Tabel Daftar Pegawai */}
+            {/* Tabel Daftar Pegawai: Kolom judul di-bold & center, Nama pegawai tidak di-bold & dapat langsung diedit */}
             <table
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
                 fontSize: '10pt',
-                marginBottom: '24px',
+                marginBottom: '28px',
               }}
             >
               <thead>
                 <tr style={{ backgroundColor: '#ffffff' }}>
-                  <th style={{ border: '1px solid #000', padding: '6px 8px', width: '36px', textAlign: 'center' }}>No</th>
-                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'left' }}>Nama</th>
-                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'left', width: '160px' }}>NIP</th>
-                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'left', width: '140px' }}>Pangkat, Gol/Ruang</th>
-                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'left' }}>Jabatan</th>
+                  <th style={{ border: '1px solid #000', padding: '6px 8px', width: '36px', textAlign: 'center', fontWeight: 'bold' }}>No</th>
+                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>Nama</th>
+                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', width: '160px', fontWeight: 'bold' }}>NIP</th>
+                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', width: '140px', fontWeight: 'bold' }}>Pangkat, Gol/Ruang</th>
+                  <th style={{ border: '1px solid #000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>Jabatan</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedPegawai.map((peg, idx) => (
                   <tr key={peg.id}>
-                    <td style={{ border: '1px solid #000', padding: '5px 8px', textAlign: 'center' }}>{idx + 1}</td>
-                    <td style={{ border: '1px solid #000', padding: '5px 8px', fontWeight: 'bold' }}>{peg.nama}</td>
-                    <td style={{ border: '1px solid #000', padding: '5px 8px' }}>{peg.nip}</td>
-                    <td style={{ border: '1px solid #000', padding: '5px 8px' }}>{peg.pangkat_golongan}</td>
-                    <td style={{ border: '1px solid #000', padding: '5px 8px' }}>{peg.jabatan}</td>
+                    <td style={{ border: '1px solid #000', padding: '5px 8px', textAlign: 'center', fontWeight: 'normal' }}>{idx + 1}</td>
+                    <td style={{ border: '1px solid #000', padding: '5px 8px', fontWeight: 'normal' }}>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={stripAcademicTitles(form.custom_pegawai_overrides?.[peg.id]?.nama ?? peg.nama)}
+                        onCommit={(v) => {
+                          const prevOverrides = form.custom_pegawai_overrides || {};
+                          onUpdateForm?.({
+                            custom_pegawai_overrides: {
+                              ...prevOverrides,
+                              [peg.id]: { ...(prevOverrides[peg.id] || {}), nama: v },
+                            },
+                          });
+                        }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #000', padding: '5px 8px', fontWeight: 'normal' }}>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={form.custom_pegawai_overrides?.[peg.id]?.nip ?? peg.nip}
+                        onCommit={(v) => {
+                          const prevOverrides = form.custom_pegawai_overrides || {};
+                          onUpdateForm?.({
+                            custom_pegawai_overrides: {
+                              ...prevOverrides,
+                              [peg.id]: { ...(prevOverrides[peg.id] || {}), nip: v },
+                            },
+                          });
+                        }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #000', padding: '5px 8px', fontWeight: 'normal' }}>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={form.custom_pegawai_overrides?.[peg.id]?.pangkat_golongan ?? peg.pangkat_golongan}
+                        onCommit={(v) => {
+                          const prevOverrides = form.custom_pegawai_overrides || {};
+                          onUpdateForm?.({
+                            custom_pegawai_overrides: {
+                              ...prevOverrides,
+                              [peg.id]: { ...(prevOverrides[peg.id] || {}), pangkat_golongan: v },
+                            },
+                          });
+                        }}
+                      />
+                    </td>
+                    <td style={{ border: '1px solid #000', padding: '5px 8px', fontWeight: 'normal' }}>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={form.custom_pegawai_overrides?.[peg.id]?.jabatan ?? peg.jabatan}
+                        onCommit={(v) => {
+                          const prevOverrides = form.custom_pegawai_overrides || {};
+                          onUpdateForm?.({
+                            custom_pegawai_overrides: {
+                              ...prevOverrides,
+                              [peg.id]: { ...(prevOverrides[peg.id] || {}), jabatan: v },
+                            },
+                          });
+                        }}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Blok Penandatangan pada Lampiran Pegawai yang Ditugaskan (Sama seperti halaman Surat Tugas untuk TTE) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px', marginTop: '16px' }}>
+              <div style={{ width: '280px', minWidth: '280px', lineHeight: '1.35', textAlign: 'center', fontSize: '12pt' }}>
+                <RichEditable
+                  rich={false}
+                  singleLine
+                  value={kotaTanggalFormatted}
+                  onCommit={handleCommitKotaTanggal}
+                  style={{ textAlign: 'center' }}
+                />
+                <RichEditable
+                  rich={false}
+                  singleLine
+                  value={jabatanTTD}
+                  onCommit={(v) => onUpdateForm?.({ custom_jabatan_ttd: v })}
+                  style={{ marginTop: '2px', textAlign: 'center' }}
+                />
+                <div style={{ height: ttdImgHeight, width: '100%', margin: '8px 0' }} />
+                <RichEditable
+                  rich={false}
+                  singleLine
+                  value={namaPejabatClean}
+                  onCommit={(v) => onUpdateForm?.({ custom_nama_ttd: stripAcademicTitles(v) })}
+                  style={{ fontWeight: 'normal', textAlign: 'center' }}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {/* ── HALAMAN LAMPIRAN DOKUMEN & TEKS (MASING-MASING TAB TERPISAH) ─────── */}
+        {/* ── HALAMAN LAMPIRAN DOKUMEN & TEKS (MASING-MASING TAB TERPISAH, LANGSUNG DIEDIT DI KERTAS) ─────── */}
         {(form.jenis_naskah === 'UNDANGAN'
           ? (form.undangan_lampiran_items || [])
           : form.jenis_naskah === 'NOTA_DINAS'
           ? (form.nota_lampiran_items || [])
           : (form.lampiran_items || [])
         ).map((item, idx, effectiveLampiran) => {
-          // Jika lampiran berupa dokumen PDF multi-halaman, pisahkan menjadi lembar A4 masing-masing
-          if (item.pdf_pages_images && item.pdf_pages_images.length > 0) {
+          const romanOffset = (!form.jenis_naskah || form.jenis_naskah === 'TUGAS') && isLampiran ? 1 : 0;
+          const autoRomanMark = `Lampiran ${toRoman(idx + 1 + romanOffset)}`;
+          const effectiveLabelMark =
+            !item.label_mark || /^Lampiran\s+[IVXLCDM\d]+$/i.test(item.label_mark.trim())
+              ? autoRomanMark
+              : item.label_mark;
+
+          const updateLampiranField = (patch: Partial<typeof item>) => {
+            const nextLampiran = [...effectiveLampiran];
+            nextLampiran[idx] = { ...nextLampiran[idx], ...patch };
+            if (form.jenis_naskah === 'UNDANGAN') {
+              onUpdateForm?.({ undangan_lampiran_items: nextLampiran });
+            } else if (form.jenis_naskah === 'NOTA_DINAS') {
+              onUpdateForm?.({ nota_lampiran_items: nextLampiran });
+            } else {
+              onUpdateForm?.({ lampiran_items: nextLampiran });
+            }
+          };
+
+          const isUploadedDoc = item.tipe === 'upload' || (item.pdf_pages_images && item.pdf_pages_images.length > 0);
+          const isPdfUpload =
+            item.tipe === 'upload' &&
+            (item.file_type === 'application/pdf' || item.file_name?.toLowerCase().endsWith('.pdf'));
+
+          // Gabungkan halaman gambar dari PDF multi-halaman maupun unggahan gambar tunggal agar tampil hampir full kertas A4
+          const effectivePageImages =
+            item.pdf_pages_images && item.pdf_pages_images.length > 0
+              ? item.pdf_pages_images
+              : item.file_type?.startsWith('image/') && item.file_data
+              ? [item.file_data]
+              : [];
+
+          // Jika lampiran berupa dokumen PDF multi-halaman atau gambar terunggah:
+          // Tampilkan seluruh halaman dokumen hampir full kertas A4, TANPA judul lampiran dan TANPA footer halaman!
+          if (effectivePageImages.length > 0) {
             return (
               <React.Fragment key={item.id || idx}>
-                {item.pdf_pages_images.map((pageImg, pIdx) => (
+                {effectivePageImages.map((pageImg, pIdx) => (
                   <div
                     key={`${item.id || idx}-page-${pIdx}`}
                     className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none"
@@ -1536,74 +1984,52 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                       width: '794px',
                       minHeight: '1123px',
                       height: '1123px',
-                      padding: item.tanpa_mark ? '24px 32px' : pIdx === 0 ? '45px 60px 35px 70px' : '30px 40px',
+                      padding: item.tanpa_mark ? '14px 20px' : pIdx === 0 ? '32px 36px 16px 36px' : '16px 22px',
                       boxSizing: 'border-box',
                       position: 'relative',
                       marginTop: '20px',
                       display: 'flex',
                       flexDirection: 'column',
-                      justifyContent: 'space-between',
+                      justifyContent: 'flex-start',
                       overflow: 'hidden',
                     }}
                   >
-                    <div>
-                      {/* Header Mark hanya di halaman 1 dan hanya jika BUKAN tanpa_mark */}
-                      {pIdx === 0 && !item.tanpa_mark && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px', width: '100%' }}>
-                          <div style={{ minWidth: '240px', maxWidth: '300px', fontSize: '9.5pt', lineHeight: '1.4', fontFamily: 'Arial, sans-serif', textAlign: 'left' }}>
-                            <div style={{ fontWeight: 'normal', marginBottom: '1px' }}>
-                              {item.label_mark || `Lampiran ${idx + 1}`}
-                            </div>
-                            <div style={{ display: 'flex' }}>
-                              <div style={{ width: '54px', flexShrink: 0 }}>Nomor</div>
-                              <div style={{ width: '10px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                              <div style={{ flex: 1 }}>{form.nomor_lengkap || '-'}</div>
-                            </div>
-                            <div style={{ display: 'flex' }}>
-                              <div style={{ width: '54px', flexShrink: 0 }}>Tanggal</div>
-                              <div style={{ width: '10px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                              <div style={{ flex: 1 }}>{tglSuratFormatted}</div>
-                            </div>
+                    {/* Header Mark hanya di halaman 1 dan hanya jika BUKAN tanpa_mark (Tanpa Judul Lampiran & Tanpa Footer Halaman) */}
+                    {pIdx === 0 && !item.tanpa_mark && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px', width: '100%', paddingRight: '16px' }}>
+                        <div style={{ minWidth: '240px', maxWidth: '300px', fontSize: '9.5pt', lineHeight: '1.4', fontFamily: 'Arial, sans-serif', textAlign: 'left' }}>
+                          <div style={{ fontWeight: 'normal', marginBottom: '1px' }}>
+                            {effectiveLabelMark}
+                          </div>
+                          <div style={{ display: 'flex' }}>
+                            <div style={{ width: '54px', flexShrink: 0 }}>Nomor</div>
+                            <div style={{ width: '10px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                            <div style={{ flex: 1 }}>{form.nomor_lengkap || '-'}</div>
+                          </div>
+                          <div style={{ display: 'flex' }}>
+                            <div style={{ width: '54px', flexShrink: 0 }}>Tanggal</div>
+                            <div style={{ width: '10px', textAlign: 'center', flexShrink: 0 }}>:</div>
+                            <div style={{ flex: 1 }}>{tglSuratFormatted}</div>
                           </div>
                         </div>
-                      )}
-
-                      {/* Judul Lampiran hanya di halaman 1 dan jika bukan tanpa_mark */}
-                      {pIdx === 0 && !item.tanpa_mark && item.judul && (
-                        <div
-                          style={{
-                            textAlign: 'center',
-                            fontWeight: 'bold',
-                            fontSize: '11pt',
-                            marginBottom: '14px',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {item.judul}
-                        </div>
-                      )}
-
-                      {/* Render Gambar Halaman PDF */}
-                      <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <img
-                          src={pageImg}
-                          alt={`Halaman ${pIdx + 1}`}
-                          style={{
-                            maxWidth: '100%',
-                            maxHeight: pIdx === 0 && !item.tanpa_mark ? '890px' : '1020px',
-                            height: 'auto',
-                            objectFit: 'contain',
-                            display: 'block',
-                            margin: '0 auto',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                          }}
-                        />
                       </div>
-                    </div>
+                    )}
 
-                    {/* Penanda Nomor Halaman di bawah */}
-                    <div style={{ textAlign: 'center', fontSize: '8pt', color: '#64748b', paddingTop: '4px' }}>
-                      {item.file_name} &bull; Halaman {pIdx + 1} dari {item.pdf_pages_images?.length || 1}
+                    {/* Render Gambar Halaman PDF / Dokumen Hampir Full Kertas A4 */}
+                    <div style={{ textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+                      <img
+                        src={pageImg}
+                        alt={`Lampiran Halaman ${pIdx + 1}`}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          maxHeight: pIdx === 0 && !item.tanpa_mark ? '995px' : '1085px',
+                          height: 'auto',
+                          objectFit: 'contain',
+                          display: 'block',
+                          margin: '0 auto',
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -1611,10 +2037,16 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             );
           }
 
-          // Lampiran Berupa Teks, Gambar Tunggal, atau Berkas Lain
+          // Jika item adalah PDF terunggah dari sesi lama yang belum memiliki render halaman gambar, jangan tampilkan teks mentahnya
+          if (isPdfUpload) {
+            return null;
+          }
+
+          // Lampiran Berupa Teks (Daftar Undangan / Teks Bebas), Tabel Interaktif, atau Gambar Tunggal
           return (
             <div
               key={item.id || idx}
+              onClick={handlePaperCanvasClick}
               className="print-page bg-white shadow-md mx-auto print:shadow-none print:border-none"
               style={{
                 ...baseStyle,
@@ -1630,50 +2062,70 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               {!item.tanpa_mark && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '22px', width: '100%' }}>
                   <div style={{ minWidth: '240px', maxWidth: '300px', fontSize: '10pt', lineHeight: '1.45', fontFamily: 'Arial, sans-serif', textAlign: 'left' }}>
-                    <div style={{ fontWeight: 'normal', marginBottom: '2px' }}>
-                      {item.label_mark || `Lampiran ${idx + 1}`}
-                    </div>
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={effectiveLabelMark}
+                      onCommit={(v) => updateLampiranField({ label_mark: v })}
+                      style={{ fontWeight: 'normal', marginBottom: '2px' }}
+                    />
                     <div style={{ display: 'flex' }}>
                       <div style={{ width: '56px', flexShrink: 0 }}>Nomor</div>
                       <div style={{ width: '12px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                      <div style={{ flex: 1 }}>{form.nomor_lengkap || '-'}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={form.nomor_lengkap || '-'}
+                        onCommit={(v) => onUpdateForm?.({ nomor_lengkap: v })}
+                        style={{ flex: 1 }}
+                      />
                     </div>
                     <div style={{ display: 'flex' }}>
                       <div style={{ width: '56px', flexShrink: 0 }}>Tanggal</div>
                       <div style={{ width: '12px', textAlign: 'center', flexShrink: 0 }}>:</div>
-                      <div style={{ flex: 1 }}>{tglSuratFormatted}</div>
+                      <RichEditable
+                        rich={false}
+                        singleLine
+                        value={tglSuratFormatted}
+                        onCommit={(v) => onUpdateForm?.({ custom_tanggal_surat_text: normalizeTwoDigitDateText(v) })}
+                        style={{ flex: 1 }}
+                      />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Judul & Sub Judul Lampiran */}
-              {!item.tanpa_mark && (item.judul || item.sub_judul) && (
+              {/* Judul & Sub Judul Lampiran (HANYA untuk lampiran Buat Teks/Tabel, BUKAN unggah dokumen, dan dapat langsung diedit di kertas!) */}
+              {!isUploadedDoc && !item.tanpa_mark && (
                 <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                  {item.judul && (
-                    <div
-                      style={{
-                        fontWeight: 'bold',
-                        fontSize: '11pt',
-                        textTransform: 'uppercase',
-                        lineHeight: '1.4',
-                      }}
-                    >
-                      {item.judul}
-                    </div>
-                  )}
-                  {item.sub_judul && (
-                    <div
+                  <RichEditable
+                    rich={false}
+                    singleLine
+                    value={item.judul || ''}
+                    onCommit={(v) => updateLampiranField({ judul: v })}
+                    style={{
+                      fontWeight: 'bold',
+                      fontSize: '11pt',
+                      textTransform: 'uppercase',
+                      lineHeight: '1.4',
+                      textAlign: 'center',
+                    }}
+                  />
+                  {(item.sub_judul !== undefined && item.sub_judul !== '') && (
+                    <RichEditable
+                      rich={false}
+                      singleLine
+                      value={item.sub_judul || ''}
+                      onCommit={(v) => updateLampiranField({ sub_judul: v })}
                       style={{
                         fontWeight: 'bold',
                         fontSize: '10.5pt',
                         marginTop: '4px',
                         color: '#1e293b',
                         lineHeight: '1.4',
+                        textAlign: 'center',
                       }}
-                    >
-                      {item.sub_judul}
-                    </div>
+                    />
                   )}
                 </div>
               )}
@@ -1688,8 +2140,6 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                       maxWidth: '100%',
                       maxHeight: item.tanpa_mark ? '1020px' : '860px',
                       objectFit: 'contain',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '4px',
                       display: 'block',
                       margin: '0 auto',
                     }}
@@ -1697,69 +2147,44 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                 </div>
               )}
 
-              {/* Isi Lampiran Teks atau Tabel Rundown */}
-              {!item.file_type?.startsWith('image/') && (item.isi || item.extracted_text) && (() => {
+              {/* Isi Lampiran Teks (Daftar Undangan / Bebas) atau Tabel Rundown — Dapat Langsung Diedit di Kertas! */}
+              {!item.file_type?.startsWith('image/') && (() => {
                 const textContent = (item.isi || item.extracted_text || '').trim();
-
                 const lines = textContent.split('\n');
                 const isTable = textContent.includes('<table') || lines.some((l) => l.trim().startsWith('|') && l.trim().endsWith('|'));
 
                 if (isTable) {
                   return (
-                    <DocumentPreviewTable
-                      key={item.id || `lamp-table-${idx}`}
-                      initialContent={textContent}
-                      onChangeContent={(newHtml) => {
-                        const nextLampiran = [...effectiveLampiran];
-                        nextLampiran[idx] = { ...nextLampiran[idx], isi: newHtml };
-                        if (form.jenis_naskah === 'UNDANGAN') {
-                          onUpdateForm?.({ undangan_lampiran_items: nextLampiran });
-                        } else if (form.jenis_naskah === 'NOTA_DINAS') {
-                          onUpdateForm?.({ nota_lampiran_items: nextLampiran });
-                        } else {
-                          onUpdateForm?.({ lampiran_items: nextLampiran });
-                        }
-                      }}
-                    />
+                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                      <DocumentPreviewTable
+                        key={item.id || `lamp-table-${idx}`}
+                        initialContent={textContent}
+                        onChangeContent={(newHtml) => updateLampiranField({ isi: newHtml })}
+                      />
+                    </div>
                   );
                 }
 
                 return (
                   <div
                     style={{
-                      fontSize: '10pt',
-                      lineHeight: '1.6',
-                      textAlign: 'justify',
-                      whiteSpace: 'pre-line',
+                      fontSize: '10.5pt',
+                      lineHeight: '1.55',
                       color: '#000000',
                       marginTop: '10px',
                     }}
                   >
-                    <MarkupText text={textContent} />
+                    <RichEditable
+                      value={item.isi || item.extracted_text || ''}
+                      onCommit={(v) => updateLampiranField({ isi: v })}
+                      style={{
+                        minHeight: '300px',
+                        lineHeight: '1.55',
+                      }}
+                    />
                   </div>
                 );
               })()}
-
-              {/* Fallback Jika Tidak Ada Teks/Halaman yang Terbaca */}
-              {!item.file_type?.startsWith('image/') && !item.isi && !item.extracted_text && (
-                <div
-                  style={{
-                    border: '1px dashed #94a3b8',
-                    borderRadius: '8px',
-                    padding: '32px 20px',
-                    backgroundColor: '#f8fafc',
-                    textAlign: 'center',
-                    marginTop: '20px',
-                  }}
-                >
-                  <div style={{ fontSize: '11pt', fontWeight: 'bold', color: '#0f172a', marginBottom: '8px' }}>
-                    Dokumen Terlampir: {item.file_name || 'Berkas Lampiran'}
-                  </div>
-                  <div style={{ fontSize: '9.5pt', color: '#64748b', marginBottom: '16px' }}>
-                    Ukuran Berkas: {item.file_size ? `${(item.file_size / 1024).toFixed(1)} KB` : 'Dokumen Digital'}
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}

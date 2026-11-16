@@ -160,23 +160,20 @@ export function serializeTableToHtml(rawModel: TableModel): string {
   const model = normalizeTableModel(rawModel);
   const { columns, rows } = model;
   let html =
-    '<table data-lampiran-table="true" style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9.5pt; margin-top: 10px; border: 1px solid #000;">\n';
-  html += '  <thead>\n    <tr style="background-color: #f8fafc;">\n';
-  columns.forEach((col, idx) => {
-    html += `      <th style="border: 1px solid #000; padding: 6px 8px; font-weight: bold; text-align: ${
-      idx === 0 ? 'center' : 'left'
-    };">${col || ''}</th>\n`;
+    '<table data-lampiran-table="true" style="width: 100%; margin: 10px auto; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9.5pt; border: 1px solid #000;">\n';
+  html += '  <thead>\n    <tr style="background-color: #ffffff;">\n';
+  columns.forEach((col) => {
+    html += `      <th style="border: 1px solid #000; padding: 6px 8px; font-weight: bold; text-align: center; vertical-align: middle;">${col || ''}</th>\n`;
   });
   html += '    </tr>\n  </thead>\n  <tbody>\n';
 
   rows.forEach((row) => {
     html += '    <tr>\n';
-    row.forEach((cell, cIdx) => {
+    row.forEach((cell) => {
       if (cell.isHidden) return;
       const colSpanAttr = cell.colSpan && cell.colSpan > 1 ? ` colspan="${cell.colSpan}"` : '';
       const rowSpanAttr = cell.rowSpan && cell.rowSpan > 1 ? ` rowspan="${cell.rowSpan}"` : '';
-      const align = cIdx === 0 && (!cell.colSpan || cell.colSpan === 1) ? 'center' : 'left';
-      html += `      <td${colSpanAttr}${rowSpanAttr} style="border: 1px solid #000; padding: 6px 8px; text-align: ${align}; vertical-align: top;">${
+      html += `      <td${colSpanAttr}${rowSpanAttr} style="border: 1px solid #000; padding: 6px 8px; text-align: center; vertical-align: middle;">${
         cell.text || ''
       }</td>\n`;
     });

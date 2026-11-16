@@ -953,35 +953,79 @@ export function smartLocalExtractNotaDinas(
     hal = hal.charAt(0).toUpperCase() + hal.slice(1);
   }
 
-  // Ekstraksi kalimat-kalimat temuan pokok dari dokumen
-  const lines = text
+  // Ekstraksi mendalam poin-poin atau paragraf temuan pokok dari laporan/kajian yang diunggah
+  const rawLines = text
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 25 && !l.startsWith('[Halaman'));
-  const candidateFindings = lines.filter((l) =>
-    /(?:hasil|evaluasi|capaian|pelaksanaan|indikator|koordinasi|kendala|rekomendasi|kebijakan|persen|%|\d{4}|strategi|regulasi)/i.test(
-      l
-    )
+    .filter((l) => l.length > 20 && !l.startsWith('[Halaman') && !l.startsWith('[Dokumen'));
+
+  // 1) Cek apakah di dalam laporan sudah terdapat poin-poin bernomor (1., 2., 3., dst.)
+  const explicitNumberedPoints: string[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const ln = rawLines[i];
+    const numMatch = ln.match(/^(\d+)[\.\)]\s+(.+)$/);
+    if (numMatch && numMatch[2].length > 20) {
+      let body = numMatch[2].trim();
+      // Gabungkan baris kelanjutan jika baris berikutnya bukan poin baru
+      while (
+        i + 1 < rawLines.length &&
+        !/^(\d+[\.\)]|[a-zA-Z][\.\)]|Demikian|Tembusan|Jakarta)/i.test(rawLines[i + 1]) &&
+        body.length < 550
+      ) {
+        body += ' ' + rawLines[i + 1];
+        i++;
+      }
+      // Pastikan frasa pembuka poin ditebalkan (**...**)
+      if (!body.includes('**')) {
+        const colonIdx = body.indexOf(':');
+        const dotIdx = body.indexOf('.');
+        if (colonIdx > 3 && colonIdx < 95) {
+          body = `**${body.slice(0, colonIdx)}**:${body.slice(colonIdx + 1)}`;
+        } else if (dotIdx > 10 && dotIdx < 110) {
+          body = `**${body.slice(0, dotIdx)}.**${body.slice(dotIdx + 1)}`;
+        }
+      }
+      explicitNumberedPoints.push(`${explicitNumberedPoints.length + 1}. ${body}`);
+      if (explicitNumberedPoints.length >= 4) break;
+    }
+  }
+
+  const candidateFindings = rawLines.filter(
+    (l) =>
+      l.length > 40 &&
+      !/(?:KEMENTERIAN KOMUNIKASI|SEKRETARIAT JENDERAL|PUSAT KEBIJAKAN|NOTA DINAS|Kepada Yth|Demikian disampaikan)/i.test(l) &&
+      /(?:hasil|evaluasi|capaian|pelaksanaan|indikator|koordinasi|kendala|rekomendasi|kebijakan|persen|%|\d{4}|strategi|regulasi|peraturan|implementasi|pengawasan|data|sistem)/i.test(
+        l
+      )
   );
 
-  // Formula 1 jika ada rujukan ND, atau Formula 3 (Mandat Arahan Pimpinan / Rapim)
+  // Formula 1 jika ada rujukan ND, atau Formula 3 (Mandat Arahan Pimpinan / Rapim / Telaah)
   const pembuka = ctx.refNomorND
     ? `Menindaklanjuti Nota Dinas ${ctx.refPengirimND || 'Sekretaris Jenderal'} Nomor: ${ctx.refNomorND}${ctx.refTanggalND ? ` tanggal ${ctx.refTanggalND}` : ''} perihal ${ctx.refPerihalND || hal}, bersama ini dengan hormat kami sampaikan hasil telaah dan rekomendasi kebijakan sebagai berikut:`
-    : `Berdasarkan arahan pimpinan dan hasil pelaksanaan telaah strategis pada Pusat Kebijakan Strategis terkait ${hal.replace(/^Penyampaian\s+/i, '')}, bersama ini dengan hormat kami sampaikan pokok-pokok telaah dan rekomendasi kebijakan sebagai berikut:`;
+    : `Sehubungan dengan pelaksanaan tugas dan fungsi Pusat Kebijakan Strategis dalam perumusan analisis serta rekomendasi kebijakan terkait ${hal.replace(/^Penyampaian\s+/i, '')}, bersama ini dengan hormat kami sampaikan pokok-pokok hasil telaah dan rekomendasi kebijakan sebagai berikut:`;
 
-  // Format 3: Poin-Poin Narasi Eksekutif (1., 2., 3.) sesuai Panduan Bagian 3.2 Format 3
-  const temuan1 =
-    candidateFindings[0] ||
-    `Pelaksanaan analisis dan evaluasi kebijakan terkait ${e.namaAcara || hal.replace(/^Penyampaian\s+/i, '')} menunjukkan perlunya penguatan tata kelola regulasi serta akselerasi infrastruktur dan ekosistem digital nasional secara terpadu.`;
-  const temuan2 =
-    candidateFindings[1] ||
-    `Dari sisi implementasi lintas sektor, diperlukan penyelarasan indikator kinerja dan sinkronisasi program prioritas antar-satuan kerja agar target transformasi digital kementerian tercapai secara efektif dan terukur.`;
+  // Format 3: Poin-Poin Narasi Eksekutif (1., 2., 3., 4.) dengan penebalan pada sub-judul aspek
+  let poinEksekutif = '';
+  if (explicitNumberedPoints.length >= 2) {
+    poinEksekutif = explicitNumberedPoints.join('\n\n') + klausulTautan;
+  } else {
+    const temuan1 =
+      candidateFindings[0] ||
+      `Pelaksanaan analisis dan evaluasi kebijakan terkait ${e.namaAcara || hal.replace(/^Penyampaian\s+/i, '')} menunjukkan perlunya penguatan tata kelola regulasi, pedoman implementasi operasional, serta standar kepatuhan yang terukur.`;
+    const temuan2 =
+      candidateFindings[1] ||
+      `Dari sisi implementasi lintas sektor, diperlukan penyederhanaan mekanisme koordinasi dan penyelarasan indikator kinerja antar-satuan kerja agar target transformasi digital kementerian tercapai secara efektif dan akuntabel.`;
+    const temuan3 =
+      candidateFindings[2] ||
+      `Penguatan aspek tata kelola data, pelindungan data pribadi, serta mitigasi risiko penyelenggaraan sistem elektronik perlu diselaraskan dengan ketentuan peraturan perundang-undangan yang berlaku.`;
 
-  const poinEksekutif = [
-    `1. Evaluasi Konteks dan Temuan Substantif: ${temuan1}`,
-    `2. Analisis Dampak dan Sinkronisasi Kebijakan: ${temuan2}`,
-    `3. Rekomendasi Strategis dan Tindak Lanjut: Mengusulkan penetapan langkah koordinasi lanjutan serta penyusunan instrumen kebijakan teknis sebagai acuan operasional bagi unit kerja terkait di lingkungan Kementerian Komunikasi dan Digital.${klausulTautan}`,
-  ].join('\n\n');
+    poinEksekutif = [
+      `1. **Evaluasi Konteks dan Temuan Substantif**: ${temuan1}`,
+      `2. **Analisis Implementasi dan Sinkronisasi Kebijakan**: ${temuan2}`,
+      `3. **Penguatan Tata Kelola dan Mitigasi Risiko**: ${temuan3}`,
+      `4. **Rekomendasi Strategis dan Tindak Lanjut**: Mengusulkan penguatan sistem dan sumber daya pelaksanaan kebijakan, penetapan prioritas pengawasan, serta kolaborasi lintas pemangku kepentingan di lingkungan Kementerian Komunikasi dan Digital.${klausulTautan}`,
+    ].join('\n\n');
+  }
 
   const penutup = selectNotaDinasClosing(kepada, 'ND_KEBIJAKAN', lowerInput);
 

@@ -32,12 +32,12 @@ var CONFIG = {
   // Baris tempat judul kolom/header berada (pada format kantor Anda adalah baris 5)
   DEFAULT_HEADER_ROW: 5,
 
-  // ID Folder Utama Google Drive untuk Arsip PDF Surat Tugas:
+  // ID Folder Utama Google Drive untuk Arsip Surat:
   // URL: https://drive.google.com/drive/folders/11qtu8wXAqElbXG2Zr47M7SydcpiLC0_H
   DRIVE_PARENT_FOLDER_ID: '11qtu8wXAqElbXG2Zr47M7SydcpiLC0_H',
 
   // Nama sheet untuk akun pengguna (Login)
-  SHEET_PENGGUNA: 'Pengguna',
+  SHEET_PENGGUNA: 'Pengguna'
 };
 
 // ════════════════════════════════════════════
@@ -314,8 +314,8 @@ function handleAction(action, payload) {
           result: {
             service: 'API Penomoran Surat PUSAKA Komdigi',
             timestamp: new Date().toISOString(),
-            lastNomor: getLastNomor(),
-          },
+            lastNomor: getLastNomor()
+          }
         });
 
       case 'testDrive':
@@ -482,7 +482,7 @@ function findHeaderMapping(sheet) {
 
   return {
     headerRow: headerRowIndex,
-    colMap: colMap,
+    colMap: colMap
   };
 }
 
@@ -525,7 +525,7 @@ function getLastNomor() {
   return {
     nomor_urut: maxNomor,
     tahun: currentYear,
-    next_nomor: maxNomor + 1,
+    next_nomor: maxNomor + 1
   };
 }
 
@@ -588,33 +588,68 @@ function getOrCreateMonthFolder(parentFolder, year, monthIndex) {
 }
 
 /**
- * Simpan file PDF (dari Base64) ke dalam folder bulan di Google Drive.
- * Mengembalikan objek berisi URL file dan ID file.
+ * Simpan file Word (.docx) / Google Docs (dari Base64) ke dalam folder bulan di Google Drive.
+ * Mengembalikan objek berisi URL Google Docs (agar langsung terbuka di Google Docs / Word dengan format 100% utuh) dan ID file.
  */
-function uploadPdfToDrive(targetFolder, pdfBase64, fileName) {
-  if (!pdfBase64) return null;
+function uploadPdfToDrive(targetFolder, fileBase64, fileName, mimeType) {
+  if (!fileBase64) return null;
 
-  var cleanBase64 = pdfBase64;
+  var cleanBase64 = fileBase64;
   if (cleanBase64.indexOf('base64,') !== -1) {
     cleanBase64 = cleanBase64.split('base64,')[1];
   }
 
   var bytes = Utilities.base64Decode(cleanBase64);
-  var blob = Utilities.newBlob(bytes, 'application/pdf', fileName);
-  var file = targetFolder.createFile(blob);
+  var DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  // Set file viewable by anyone with link jika lingkungan mengizinkan
-  try {
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  } catch (e) {
-    // Di domain kementerian yang dibatasi, izin diturunkan langsung dari folder induk
+  // Deteksi apakah file adalah Word (.docx) berdasarkan ekstensi, mimeType, atau magic bytes PK (80, 75)
+  var isZipHeader = bytes && bytes.length > 4 && bytes[0] === 80 && bytes[1] === 75;
+  var isDocxName = /\.docx$/i.test(fileName || '');
+  var isDocxMime = mimeType && mimeType.indexOf('wordprocessingml') !== -1;
+  var isDocx = isDocxName || isDocxMime || isZipHeader;
+
+  var effectiveMime = isDocx ? DOCX_MIME : (mimeType || 'application/pdf');
+  var finalFileName = fileName || 'Dokumen_Surat.docx';
+  if (isDocx && !/\.docx$/i.test(finalFileName)) {
+    finalFileName = finalFileName.replace(/\.pdf$/i, '') + '.docx';
   }
 
+  // Hapus berkas lama dengan nama yang sama di folder bulan ini (terutama jika sebelumnya terunggah sebagai PDF)
+  try {
+    var existingFiles = targetFolder.getFilesByName(finalFileName);
+    while (existingFiles.hasNext()) {
+      var oldF = existingFiles.next();
+      oldF.setTrashed(true);
+    }
+  } catch (eClean) {}
+
+  var blob = Utilities.newBlob(bytes, effectiveMime, finalFileName);
+  var file = targetFolder.createFile(blob);
+
+  // Set file viewable/editable by anyone with link jika lingkungan mengizinkan
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.EDIT);
+  } catch (eEdit) {
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (e) {
+      // Di domain kementerian yang dibatasi, izin diturunkan langsung dari folder induk
+    }
+  }
+
+  var fileId = file.getId();
+  // Untuk berkas .docx, gunakan URL Google Docs Editor agar saat diklik langsung terbuka sebagai Google Docs / Word dengan format 100% tetap utuh
+  var directUrl = isDocx
+    ? ('https://docs.google.com/document/d/' + fileId + '/edit')
+    : file.getUrl();
+
   return {
-    fileId: file.getId(),
-    fileUrl: file.getUrl(),
-    fileName: fileName,
+    fileId: fileId,
+    fileUrl: directUrl,
+    driveViewUrl: file.getUrl(),
+    fileName: finalFileName,
     folderName: targetFolder.getName(),
+    isDocx: isDocx
   };
 }
 
@@ -649,11 +684,13 @@ function appendNomorSurat(record) {
   var monthIndex = dateVal.getMonth(); // 0-11
 
   var monthPad = (monthIndex + 1 < 10 ? '0' : '') + (monthIndex + 1);
-  var defaultPdfFileName = record.pdf_filename || (
-    'Surat_Tugas_' + nomorUrut + '_SJ.9_KP.01.06_' + monthPad + '_' + year + '.pdf'
+  var defaultPdfFileName = record.docx_filename || record.pdf_filename || (
+    'Surat_Tugas_' + nomorUrut + '_SJ.9_KP.01.06_' + monthPad + '_' + year + '.docx'
   );
+  var payloadBase64 = record.docx_base64 || record.pdf_base64;
+  var payloadMime = record.file_mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  // ── Pengelolaan Folder Google Drive & Upload Berkas PDF ──
+  // ── Pengelolaan Folder Google Drive & Upload Berkas Word (.docx) / Google Docs ──
   var driveUploadInfo = null;
   var targetMonthFolder = null;
   var driveErrorMsg = null;
@@ -663,28 +700,31 @@ function appendNomorSurat(record) {
     // Otomatis cari atau buat folder bulan di dalam folder arsip (misal: "10 - Oktober 2026")
     targetMonthFolder = getOrCreateMonthFolder(parentFolder, year, monthIndex);
 
-    if (record.pdf_base64 && record.pdf_base64.length > 50) {
-      // 1. Simpan file PDF asli hasil konversi
-      driveUploadInfo = uploadPdfToDrive(targetMonthFolder, record.pdf_base64, defaultPdfFileName);
+    if (payloadBase64 && payloadBase64.length > 50) {
+      // 1. Simpan file Word (.docx) asli dengan tata letak resmi 100% utuh
+      driveUploadInfo = uploadPdfToDrive(targetMonthFolder, payloadBase64, defaultPdfFileName, payloadMime);
+      if (driveUploadInfo && driveUploadInfo.fileName) {
+        defaultPdfFileName = driveUploadInfo.fileName;
+      }
     } else {
-      // 2. Jika base64 belum terkirim dari browser, buat file arsip PDF resmi di folder bulan
+      // 2. Jika base64 belum terkirim dari browser, buat file arsip di folder bulan
       var fileContent = 'KEMENTERIAN KOMUNIKASI DAN DIGITAL RI\n' +
         'PUSAT KEBIJAKAN STRATEGIS\n\n' +
         'SURAT TUGAS RESMI\n' +
         'Nomor: ' + (record.nomor_lengkap || (nomorUrut + '/SJ.9/KP.01.06/' + monthPad + '/' + year)) + '\n' +
-        'Tanggal: ' + tanggalStr + '\n' +
+        'Tanggal: ' + tanggalDisplayStr + '\n' +
         'Perihal: ' + (record.perihal || record.hal || record.nama_acara || '-') + '\n' +
         'Kepada: ' + (record.kepada || record.nama_pegawai || 'Terlampir') + '\n';
-      var fallbackBlob = Utilities.newBlob(fileContent, 'application/pdf', defaultPdfFileName);
+      var fallbackBlob = Utilities.newBlob(fileContent, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', defaultPdfFileName);
       var createdFile = targetMonthFolder.createFile(fallbackBlob);
       try {
         createdFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       } catch (shareErr) {}
       driveUploadInfo = {
         fileId: createdFile.getId(),
-        fileUrl: createdFile.getUrl(),
+        fileUrl: 'https://docs.google.com/document/d/' + createdFile.getId() + '/edit',
         fileName: defaultPdfFileName,
-        folderName: targetMonthFolder.getName(),
+        folderName: targetMonthFolder.getName()
       };
     }
   } catch (driveErr) {
@@ -702,8 +742,8 @@ function appendNomorSurat(record) {
   // G: TOPIK TIM
   // H: KONSEPTOR
   // I: STATUS SURAT
-  // J: Link Berkas PDF (Dulu Kolom K, kini resmi ditempatkan di Kolom J)
-  // K: Link Berkas TTE / Cadangan
+  // J: Link Berkas Word (Diisi dengan tautan Google Docs hasil upload)
+  // K: Link Berkas TTE Pdf (TIDAK diisi link saat penerbitan surat, dikosongkan)
 
   var jenis = record.jenis || 'ST';
   var kepada = record.kepada || (record.jumlah_pegawai > 3 ? 'Daftar Terlampir' : (record.nama_pegawai || 'Terlampir'));
@@ -712,11 +752,11 @@ function appendNomorSurat(record) {
   var topikTim = record.topik_tim || record.unit_kerja || 'TU';
   var konseptor = record.konseptor || record.dibuat_oleh || '';
   var statusSurat = driveErrorMsg ? ('Err Drive: ' + driveErrorMsg.slice(0, 35)) : (record.status_surat || 'OK');
-  var linkTte = record.link_tte || record.link_word || '-';
+  var linkTte = ''; // Kolom K (Link Berkas TTE Pdf) dikosongkan sesuai instruksi
 
   // Masukkan teks nama file biasa ke newRow agar setValues tidak pernah menghasilkan #ERROR!
-  // Kolom 10 (J): defaultPdfFileName
-  // Kolom 11 (K): linkTte
+  // Kolom 10 (J - Link Berkas Word): defaultPdfFileName
+  // Kolom 11 (K - Link Berkas TTE Pdf): kosong ('')
   var newRow = [
     nomorUrut,
     dateVal,
@@ -727,8 +767,8 @@ function appendNomorSurat(record) {
     topikTim,
     konseptor,
     statusSurat,
-    defaultPdfFileName, // Kolom J (Kolom 10)
-    linkTte,            // Kolom K (Kolom 11)
+    defaultPdfFileName,
+    linkTte
   ];
 
   // Cari baris kosong berikutnya di kolom A
@@ -742,6 +782,11 @@ function appendNomorSurat(record) {
 
   sheet.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
 
+  // Pastikan Kolom K (Link Berkas TTE Pdf) benar-benar bersih
+  try {
+    sheet.getRange(targetRow, 11).clearContent();
+  } catch (eClearK) {}
+
   // 1. Format kolom tanggal (Kolom B / index 2) sebagai Date dan Date Picker kalender
   try {
     var dateCell = sheet.getRange(targetRow, 2);
@@ -752,24 +797,24 @@ function appendNomorSurat(record) {
     Logger.log('Gagal set validasi/format tanggal: ' + errDate.message);
   }
 
-  // 2. Pasang Tautan PDF ke Kolom J (Kolom 10) - Aman dari error formula HYPERLINK
+  // 2. Pasang Tautan Google Docs / Word ke Kolom J (Kolom 10 - Link Berkas Word)
   if (driveUploadInfo && driveUploadInfo.fileUrl) {
-    var pdfCell = sheet.getRange(targetRow, 10);
+    var wordCell = sheet.getRange(targetRow, 10);
     try {
-      // Pasang RichTextValue: Teks nama berkas langsung menjadi hyperlink aktif yang bisa diklik
+      // Pasang RichTextValue: Teks nama berkas langsung menjadi hyperlink Google Docs aktif yang bisa diklik
       var richText = SpreadsheetApp.newRichTextValue()
         .setText(defaultPdfFileName)
         .setLinkUrl(driveUploadInfo.fileUrl)
         .build();
-      pdfCell.setValue(defaultPdfFileName);
-      pdfCell.setRichTextValue(richText);
+      wordCell.setValue(defaultPdfFileName);
+      wordCell.setRichTextValue(richText);
     } catch (errRtv) {
       // Fallback formula sesuai locale
       try {
-        pdfCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '"; "' + defaultPdfFileName + '")');
+        wordCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '"; "' + defaultPdfFileName + '")');
       } catch (e1) {
         try {
-          pdfCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '", "' + defaultPdfFileName + '")');
+          wordCell.setFormula('=HYPERLINK("' + driveUploadInfo.fileUrl + '", "' + defaultPdfFileName + '")');
         } catch (e2) {}
       }
     }
@@ -782,13 +827,14 @@ function appendNomorSurat(record) {
     tanggal_dibuat: tanggalDisplayStr,
     perihal: hal,
     status: driveUploadInfo
-      ? 'Tersimpan di Spreadsheet & File Terunggah di Google Drive'
+      ? 'Tersimpan di Spreadsheet & Dokumen Word/GDocs Terunggah di Google Drive'
       : (targetMonthFolder ? 'Tersimpan di Spreadsheet & Terhubung Folder Drive' : ('Gagal Drive: ' + (driveErrorMsg || 'Unknown'))),
     row_number: targetRow,
     drive_url: (driveUploadInfo && driveUploadInfo.fileUrl) || (targetMonthFolder ? targetMonthFolder.getUrl() : null),
     drive_file_id: driveUploadInfo ? driveUploadInfo.fileId : null,
     drive_folder: (driveUploadInfo && driveUploadInfo.folderName) || (targetMonthFolder ? targetMonthFolder.getName() : null),
     drive_error: driveErrorMsg,
+    code_version: 'v2_docx'
   };
 }
 
@@ -837,11 +883,13 @@ function updateNomorSurat(record) {
   var year = record.tahun || dateVal.getFullYear();
   var monthIndex = dateVal.getMonth();
   var monthPad = (monthIndex + 1 < 10 ? '0' : '') + (monthIndex + 1);
-  var defaultPdfFileName = record.pdf_filename || (
-    'Surat_Tugas_' + nomorUrut + '_SJ.9_KP.01.06_' + monthPad + '_' + year + '.pdf'
+  var defaultPdfFileName = record.docx_filename || record.pdf_filename || (
+    'Surat_Tugas_' + nomorUrut + '_SJ.9_KP.01.06_' + monthPad + '_' + year + '.docx'
   );
+  var payloadBase64 = record.docx_base64 || record.pdf_base64;
+  var payloadMime = record.file_mime_type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  // Upload/Perbarui PDF di Google Drive jika ada data Base64 baru
+  // Upload/Perbarui Word (.docx) / Google Docs di Google Drive jika ada data Base64 baru
   var driveUploadInfo = null;
   var driveErrorMsg = null;
   var targetMonthFolder = null;
@@ -850,12 +898,15 @@ function updateNomorSurat(record) {
     var parentFolder = getTargetDriveParentFolder();
     targetMonthFolder = getOrCreateMonthFolder(parentFolder, year, monthIndex);
 
-    if (record.pdf_base64 && record.pdf_base64.length > 50) {
-      driveUploadInfo = uploadPdfToDrive(targetMonthFolder, record.pdf_base64, defaultPdfFileName);
+    if (payloadBase64 && payloadBase64.length > 50) {
+      driveUploadInfo = uploadPdfToDrive(targetMonthFolder, payloadBase64, defaultPdfFileName, payloadMime);
+      if (driveUploadInfo && driveUploadInfo.fileName) {
+        defaultPdfFileName = driveUploadInfo.fileName;
+      }
     }
   } catch (driveErr) {
     driveErrorMsg = driveErr.message || String(driveErr);
-    Logger.log('Gagal upload update PDF ke Google Drive: ' + driveErrorMsg);
+    Logger.log('Gagal upload update dokumen ke Google Drive: ' + driveErrorMsg);
   }
 
   var jenis = record.jenis || 'ST';
@@ -865,7 +916,7 @@ function updateNomorSurat(record) {
   var topikTim = record.topik_tim || record.unit_kerja || 'TU';
   var konseptor = record.konseptor || record.dibuat_oleh || '';
   var statusSurat = driveErrorMsg ? ('Err Drive: ' + driveErrorMsg.slice(0, 35)) : (record.status_surat || 'OK');
-  var linkTte = record.link_tte || record.link_word || '-';
+  var linkTte = ''; // Kolom K (Link Berkas TTE Pdf) dikosongkan
 
   var updatedRow = [
     nomorUrut,
@@ -877,11 +928,15 @@ function updateNomorSurat(record) {
     topikTim,
     konseptor,
     statusSurat,
-    defaultPdfFileName, // Kolom J (Kolom 10)
-    linkTte,            // Kolom K (Kolom 11)
+    defaultPdfFileName,
+    linkTte
   ];
 
   sheet.getRange(targetRow, 1, 1, updatedRow.length).setValues([updatedRow]);
+
+  try {
+    sheet.getRange(targetRow, 11).clearContent();
+  } catch (eClearK) {}
 
   // Format kolom tanggal (Kolom B / index 2)
   try {
@@ -891,23 +946,23 @@ function updateNomorSurat(record) {
     dateCell.setDataValidation(dateValidation);
   } catch (errDate) {}
 
-  // Pasang Tautan PDF ke Kolom J (Kolom 10)
+  // Pasang Tautan Google Docs / Word ke Kolom J (Kolom 10 - Link Berkas Word)
   var fileUrlToUse = (driveUploadInfo && driveUploadInfo.fileUrl) || record.drive_url;
   if (fileUrlToUse) {
-    var pdfCell = sheet.getRange(targetRow, 10);
+    var wordCell = sheet.getRange(targetRow, 10);
     try {
       var richText = SpreadsheetApp.newRichTextValue()
         .setText(defaultPdfFileName)
         .setLinkUrl(fileUrlToUse)
         .build();
-      pdfCell.setValue(defaultPdfFileName);
-      pdfCell.setRichTextValue(richText);
+      wordCell.setValue(defaultPdfFileName);
+      wordCell.setRichTextValue(richText);
     } catch (eRtv) {
       try {
-        pdfCell.setFormula('=HYPERLINK("' + fileUrlToUse + '"; "' + defaultPdfFileName + '")');
+        wordCell.setFormula('=HYPERLINK("' + fileUrlToUse + '"; "' + defaultPdfFileName + '")');
       } catch (e1) {
         try {
-          pdfCell.setFormula('=HYPERLINK("' + fileUrlToUse + '", "' + defaultPdfFileName + '")');
+          wordCell.setFormula('=HYPERLINK("' + fileUrlToUse + '", "' + defaultPdfFileName + '")');
         } catch (e2) {}
       }
     }
@@ -925,6 +980,7 @@ function updateNomorSurat(record) {
     drive_file_id: driveUploadInfo ? driveUploadInfo.fileId : null,
     drive_folder: (driveUploadInfo && driveUploadInfo.folderName) || (targetMonthFolder ? targetMonthFolder.getName() : null),
     drive_error: driveErrorMsg,
+    code_version: 'v2_docx'
   };
 }
 
@@ -1022,10 +1078,10 @@ function getNomorSurat() {
       dibuat_oleh: String(row[7] || ''),
       konseptor: String(row[7] || ''),
       status_surat: String(row[8] || ''),
-      link_word: String(row[10] || '-'),
+      link_word: String(row[10] || ''),
       link_pdf: cleanLinkPdf,
       drive_url: driveUrl,
-      tahun: 2026,
+      tahun: 2026
     });
   }
 
@@ -1170,7 +1226,7 @@ function loginUser(username, password) {
         role: String(row[5] || 'staff').toLowerCase(),
         unit_kerja: String(row[6] || 'Pusat Kebijakan Strategis'),
         status: rowStatus,
-        token: 'auth-' + Utilities.getUuid(),
+        token: 'auth-' + Utilities.getUuid()
       };
     }
   }
@@ -1196,7 +1252,7 @@ function getUsers() {
       nip: String(row[4] || ''),
       role: String(row[5] || 'staff').toLowerCase(),
       unit_kerja: String(row[6] || 'Pusat Kebijakan Strategis'),
-      status: String(row[7] || 'Aktif'),
+      status: String(row[7] || 'Aktif')
     });
   }
   return users;
@@ -1234,7 +1290,7 @@ function saveUser(userData) {
     String(userData.nip || '').trim(),
     String(userData.role || 'staff').toLowerCase(),
     String(userData.unit_kerja || 'Pusat Kebijakan Strategis').trim(),
-    String(userData.status || 'Aktif').trim(),
+    String(userData.status || 'Aktif').trim()
   ];
 
   if (targetRow > 1) {
@@ -1250,7 +1306,7 @@ function saveUser(userData) {
     nip: rowVals[4],
     role: rowVals[5],
     unit_kerja: rowVals[6],
-    status: rowVals[7],
+    status: rowVals[7]
   };
 }
 

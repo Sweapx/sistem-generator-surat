@@ -122,7 +122,7 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
   const [hoveredRowBorder, setHoveredRowBorder] = useState<number | null>(null);
 
   const debounceTimer = useRef<number | undefined>(undefined);
-  const lastCommittedHtmlRef = useRef<string>(initialContent);
+  const lastCommittedHtmlRef = useRef<string>(serializeTableToHtml(model));
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
 
@@ -133,8 +133,10 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
     if (initialContent === lastCommittedHtmlRef.current) return;
     const parsed = parseTableFromText(initialContent);
     if (parsed) {
-      setModel(normalizeTableModel(parsed));
-      lastCommittedHtmlRef.current = initialContent;
+      const normalized = normalizeTableModel(parsed);
+      const canonical = serializeTableToHtml(normalized);
+      lastCommittedHtmlRef.current = canonical;
+      setModel((prev) => (serializeTableToHtml(prev) === canonical ? prev : normalized));
     }
   }, [initialContent]);
 
@@ -150,18 +152,21 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.clearTimeout(debounceTimer.current);
+    };
   }, []);
 
   const commitModel = (nextRawModel: TableModel) => {
     const nextModel = normalizeTableModel(nextRawModel);
     setModel(nextModel);
     window.clearTimeout(debounceTimer.current);
-    debounceTimer.current = window.setTimeout(() => {
-      const html = serializeTableToHtml(nextModel);
+    const html = serializeTableToHtml(nextModel);
+    if (html !== lastCommittedHtmlRef.current) {
       lastCommittedHtmlRef.current = html;
       onChangeContent(html);
-    }, 100);
+    }
   };
 
   // ── Penanganan Multi-Selection Drag ────────────────────────────────────────
@@ -319,10 +324,12 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
   // Inline edit
   const handleCellBlur = (rIdx: number, cIdx: number, text: string) => {
     if (readOnly) return;
+    const trimmed = text.trim();
+    if ((model.rows[rIdx]?.[cIdx]?.text || '') === trimmed) return;
     const nextRows = model.rows.map((row, rI) => {
       if (rI !== rIdx) return row;
       const cells = [...row];
-      cells[cIdx] = { ...cells[cIdx], text: text.trim() };
+      cells[cIdx] = { ...cells[cIdx], text: trimmed };
       return cells;
     });
     commitModel({ ...model, rows: nextRows });
@@ -331,7 +338,9 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
 
   const handleHeaderBlur = (cIdx: number, text: string) => {
     if (readOnly) return;
-    const nextCols = model.columns.map((col, i) => (i === cIdx ? text.trim() : col));
+    const trimmed = text.trim();
+    if ((model.columns[cIdx] || '') === trimmed) return;
+    const nextCols = model.columns.map((col, i) => (i === cIdx ? trimmed : col));
     commitModel({ ...model, columns: nextCols });
     updateMetrics();
   };
@@ -504,12 +513,13 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
             </div>
           ))}
 
-        {/* ── TABEL RESMI NASKAH DINAS KOMDIGI PADA LEMBAR A4 ── */}
+        {/* ── TABEL RESMI NASKAH DINAS KOMDIGI PADA LEMBAR A4 (CENTER) ── */}
         <table
           ref={tableRef}
           data-lampiran-table="true"
           style={{
             width: '100%',
+            margin: '0 auto',
             borderCollapse: 'collapse',
             fontSize: '9.5pt',
             fontFamily: 'Arial, sans-serif',
@@ -527,8 +537,9 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                     border: '1px solid #000000',
                     padding: '6px 8px',
                     fontWeight: 'bold',
-                    textAlign: cIdx === 0 ? 'center' : 'left',
-                    backgroundColor: '#f8fafc',
+                    textAlign: 'center',
+                    verticalAlign: 'middle',
+                    backgroundColor: '#ffffff',
                     position: 'relative',
                   }}
                   className="group/th select-none"
@@ -536,14 +547,24 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                   {readOnly ? (
                     col || ''
                   ) : (
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="relative flex items-center justify-center w-full">
                       <div
                         contentEditable
                         suppressContentEditableWarning
-                        onInput={updateMetrics}
+                        onInput={(e) => {
+                          updateMetrics();
+                          const val = (e.currentTarget.textContent || '').trim();
+                          const nextCols = model.columns.map((c, i) => (i === cIdx ? val : c));
+                          const nextModel = normalizeTableModel({ ...model, columns: nextCols });
+                          const html = serializeTableToHtml(nextModel);
+                          if (html !== lastCommittedHtmlRef.current) {
+                            lastCommittedHtmlRef.current = html;
+                            onChangeContent(html);
+                          }
+                        }}
                         onBlur={(e) => handleHeaderBlur(cIdx, e.currentTarget.textContent || '')}
-                        className="outline-none hover:bg-amber-50 focus:bg-amber-100 rounded px-1 transition-colors min-h-[16px] flex-1"
-                        title="Klik langsung untuk mengedit judul kolom"
+                        style={{ textAlign: 'center', width: '100%' }}
+                        className="outline-none min-h-[16px] w-full text-center"
                       >
                         {col}
                       </div>
@@ -551,7 +572,7 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                         <button
                           type="button"
                           onClick={() => commitModel(deleteColumnAt(model, cIdx))}
-                          className="no-print opacity-0 group-hover/th:opacity-100 p-0.5 text-red-500 hover:bg-red-50 rounded transition-opacity cursor-pointer shrink-0"
+                          className="no-print absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/th:opacity-100 p-0.5 text-red-500 hover:bg-red-50 rounded transition-opacity cursor-pointer"
                           title="Hapus kolom ini"
                         >
                           <X className="w-3 h-3" />
@@ -568,9 +589,7 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
               <tr key={`prev-tr-${rIdx}`}>
                 {row.map((cell, cIdx) => {
                   if (cell.isHidden) return null;
-                  const isNoCol = cIdx === 0 && (!cell.colSpan || cell.colSpan === 1);
                   const isSelected = isCellSelected(rIdx, cIdx);
-                  const cellMerged = (cell.colSpan || 1) > 1 || (cell.rowSpan || 1) > 1;
 
                   return (
                     <td
@@ -582,13 +601,9 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                       style={{
                         border: '1px solid #000000',
                         padding: '6px 8px',
-                        textAlign: isNoCol ? 'center' : 'left',
-                        verticalAlign: 'top',
-                        backgroundColor: isSelected
-                          ? '#dbeafe'
-                          : cellMerged
-                          ? '#fefce8'
-                          : 'transparent',
+                        textAlign: 'center',
+                        verticalAlign: 'middle',
+                        backgroundColor: isSelected ? '#dbeafe' : 'transparent',
                         outline: isSelected ? '2px solid #2563eb' : 'none',
                         outlineOffset: '-1px',
                         userSelect: isDraggingSelection ? 'none' : 'text',
@@ -601,7 +616,22 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                         <div
                           contentEditable
                           suppressContentEditableWarning
-                          onInput={updateMetrics}
+                          onInput={(e) => {
+                            updateMetrics();
+                            const val = (e.currentTarget.textContent || '').trim();
+                            const nextRows = model.rows.map((row, rI) => {
+                              if (rI !== rIdx) return row;
+                              const cells = [...row];
+                              cells[cIdx] = { ...cells[cIdx], text: val };
+                              return cells;
+                            });
+                            const nextModel = normalizeTableModel({ ...model, rows: nextRows });
+                            const html = serializeTableToHtml(nextModel);
+                            if (html !== lastCommittedHtmlRef.current) {
+                              lastCommittedHtmlRef.current = html;
+                              onChangeContent(html);
+                            }
+                          }}
                           onBlur={(e) => handleCellBlur(rIdx, cIdx, e.currentTarget.textContent || '')}
                           style={{
                             outline: 'none',
@@ -609,9 +639,8 @@ export const DocumentPreviewTable: React.FC<DocumentPreviewTableProps> = ({
                             width: '100%',
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
+                            textAlign: 'center',
                           }}
-                          className="hover:bg-amber-50/70 focus:bg-amber-100/70 rounded transition-colors"
-                          title="Klik untuk mengetik atau tahan & geser (drag) untuk multi-select sel"
                         >
                           {cell.text}
                         </div>
@@ -738,7 +767,7 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
   const [hoveredRowBorder, setHoveredRowBorder] = useState<number | null>(null);
 
   const debounceTimer = useRef<number | undefined>(undefined);
-  const lastCommittedHtmlRef = useRef<string>(initialContent);
+  const lastCommittedHtmlRef = useRef<string>(serializeTableToHtml(model));
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   const { metrics, updateMetrics } = useTableBorderMetrics(tableRef, model);
@@ -748,20 +777,28 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
     if (initialContent === lastCommittedHtmlRef.current) return;
     const parsed = parseTableFromText(initialContent);
     if (parsed) {
-      setModel(normalizeTableModel(parsed));
-      lastCommittedHtmlRef.current = initialContent;
+      const normalized = normalizeTableModel(parsed);
+      const canonical = serializeTableToHtml(normalized);
+      lastCommittedHtmlRef.current = canonical;
+      setModel((prev) => (serializeTableToHtml(prev) === canonical ? prev : normalized));
     }
   }, [initialContent]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(debounceTimer.current);
+    };
+  }, []);
 
   const commitModel = (nextRawModel: TableModel) => {
     const nextModel = normalizeTableModel(nextRawModel);
     setModel(nextModel);
     window.clearTimeout(debounceTimer.current);
-    debounceTimer.current = window.setTimeout(() => {
-      const html = serializeTableToHtml(nextModel);
+    const html = serializeTableToHtml(nextModel);
+    if (html !== lastCommittedHtmlRef.current) {
       lastCommittedHtmlRef.current = html;
       onChangeContent(html);
-    }, 100);
+    }
   };
 
   // ── Penanganan Seleksi Multi-Cell ──────────────────────────────────────────
@@ -1211,6 +1248,7 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
             data-lampiran-table="true"
             style={{
               width: '100%',
+              margin: '0 auto',
               borderCollapse: 'collapse',
               fontSize: '9.5pt',
               fontFamily: 'Arial, sans-serif',
@@ -1226,7 +1264,8 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
                       border: '1px solid #000000',
                       padding: '6px 8px',
                       fontWeight: 'bold',
-                      textAlign: cIdx === 0 ? 'center' : 'left',
+                      textAlign: 'center',
+                      verticalAlign: 'middle',
                       position: 'relative',
                     }}
                     className="group/th select-none bg-slate-50"
@@ -1234,19 +1273,19 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
                     {readOnly ? (
                       col
                     ) : (
-                      <div className="flex items-center justify-between gap-1">
+                      <div className="relative flex items-center justify-center w-full">
                         <input
                           type="text"
                           value={col}
                           onChange={(e) => handleRenameColumn(cIdx, e.target.value)}
-                          className="font-bold text-xs bg-transparent border-none outline-none focus:bg-white focus:ring-1 focus:ring-teal-500 px-1 py-0.5 rounded w-full"
+                          className="font-bold text-xs text-center bg-transparent border-none outline-none focus:bg-white focus:ring-1 focus:ring-teal-500 py-0.5 rounded w-full"
                           title="Klik untuk mengubah judul kolom"
                         />
                         {model.columns.length > 1 && (
                           <button
                             type="button"
                             onClick={() => commitModel(deleteColumnAt(model, cIdx))}
-                            className="no-print opacity-0 group-hover/th:opacity-100 p-0.5 text-red-500 hover:bg-red-50 rounded transition-opacity cursor-pointer shrink-0"
+                            className="no-print absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/th:opacity-100 p-0.5 text-red-500 hover:bg-red-50 rounded transition-opacity cursor-pointer"
                             title="Hapus Kolom Ini"
                           >
                             <X className="w-3 h-3" />
@@ -1276,8 +1315,8 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
                         style={{
                           border: '1px solid #000000',
                           padding: '4px 6px',
-                          textAlign: cIdx === 0 && (!cell.colSpan || cell.colSpan === 1) ? 'center' : 'left',
-                          verticalAlign: 'top',
+                          textAlign: 'center',
+                          verticalAlign: 'middle',
                           backgroundColor: isSelected
                             ? '#dbeafe'
                             : cellMerged
@@ -1297,7 +1336,7 @@ export const InteractiveDocumentTable: React.FC<InteractiveDocumentTableProps> =
                             updateMetrics();
                           }}
                           placeholder="Ketik isi..."
-                          className="w-full p-1 text-xs border border-transparent hover:border-slate-300 focus:border-teal-500 focus:bg-white rounded resize-y leading-tight font-sans bg-transparent outline-none"
+                          className="w-full p-1 text-xs text-center border border-transparent hover:border-slate-300 focus:border-teal-500 focus:bg-white rounded resize-y leading-tight font-sans bg-transparent outline-none"
                         />
                       </td>
                     );

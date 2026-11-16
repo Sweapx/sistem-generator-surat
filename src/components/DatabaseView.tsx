@@ -783,14 +783,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                           </span>
                           {rec.drive_url && (
                             <a
-                              href={rec.drive_url}
+                              href={
+                                rec.drive_url.includes('docs.google.com/document/d/')
+                                  ? rec.drive_url
+                                  : (rec.link_pdf || rec.link_word || '').toLowerCase().endsWith('.docx') &&
+                                    /\/file\/d\/([a-zA-Z0-9_-]+)/.test(rec.drive_url)
+                                  ? `https://docs.google.com/document/d/${rec.drive_url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)![1]}/edit`
+                                  : rec.drive_url
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded text-[10px] font-semibold inline-flex items-center space-x-1 transition-colors"
-                              title="Buka berkas PDF di Google Drive"
+                              className="text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-semibold inline-flex items-center space-x-1 transition-colors"
+                              title="Buka dokumen Word / Google Docs di Google Drive"
                             >
                               <ExternalLink className="w-2.5 h-2.5" />
-                              <span>PDF Drive</span>
+                              <span>
+                                {(rec.link_pdf || '').toLowerCase().endsWith('.pdf') && !rec.drive_url.includes('docs.google.com/document/d/')
+                                  ? 'PDF Drive'
+                                  : 'Word / GDocs'}
+                              </span>
                             </a>
                           )}
                         </div>

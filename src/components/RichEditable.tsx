@@ -9,8 +9,8 @@ import {
   visibleTotal,
 } from '../services/richText';
 
-/** Penyerahan kursor antar editor dalam satu grup (mis. halaman 1 -> halaman 2 nota dinas). */
-let pendingHandoff: { group: string; abs: number } | null = null;
+/** Penyerahan kursor antar editor dalam satu grup (mis. halaman 1 -> halaman 2). */
+let pendingHandoff: { group: string; abs: number; fromStart: number; overflowChars: number } | null = null;
 let handoffTimer: number | undefined;
 
 interface RichEditableProps {
@@ -54,6 +54,8 @@ export const RichEditable: React.FC<RichEditableProps> = ({
   const ref = useRef<HTMLDivElement>(null);
   const timer = useRef<number | undefined>(undefined);
   const composing = useRef(false);
+  const isDirtyRef = useRef(false);
+  const isMountedRef = useRef(true);
   const valueRef = useRef(value);
   const commitRef = useRef(onCommit);
   const startRef = useRef(groupStart);
@@ -61,12 +63,20 @@ export const RichEditable: React.FC<RichEditableProps> = ({
   commitRef.current = onCommit;
   startRef.current = groupStart;
 
-  const [isEmpty, setIsEmpty] = useState(() => normMarkup(value || '').trim() === '');
-  const [commitTick, setCommitTick] = useState(0);
+  const isEmptyRef = useRef(normMarkup(value || '').trim() === '');
+  const [isEmpty, setIsEmpty] = useState(isEmptyRef.current);
+
+  const setEmptySafe = (nextEmpty: boolean) => {
+    if (isEmptyRef.current !== nextEmpty) {
+      isEmptyRef.current = nextEmpty;
+      setIsEmpty(nextEmpty);
+    }
+  };
 
   const refreshEmpty = (el: HTMLElement) => {
     const rawText = (el.textContent || '').replace(/\u200b/g, '').trim();
-    setIsEmpty(rawText === '' && !el.querySelector('[data-list]'));
+    const nextEmpty = rawText === '' && !el.querySelector('[data-list]');
+    setEmptySafe(nextEmpty);
   };
 
   // Sinkronkan DOM dengan value (termasuk saat reset isi atau saat dipotong ke halaman berikutnya)
@@ -78,10 +88,12 @@ export const RichEditable: React.FC<RichEditableProps> = ({
     // Jika value kosong (misal saat reset), bersihkan seluruh isi DOM secara mutlak
     if (isValBlank) {
       window.clearTimeout(timer.current);
+      timer.current = undefined;
+      isDirtyRef.current = false;
       if (el.innerHTML !== '') {
         el.innerHTML = '';
       }
-      setIsEmpty(true);
+      setEmptySafe(true);
       return;
     }
 
@@ -91,17 +103,24 @@ export const RichEditable: React.FC<RichEditableProps> = ({
 
     if (currentMarkup !== targetMarkup) {
       window.clearTimeout(timer.current);
+      timer.current = undefined;
+      isDirtyRef.current = false;
       const caret = focused ? getVisibleOffset(el) : null;
       el.innerHTML = markupToHtml(value || '', { rich, variant });
       if (focused && caret !== null) {
         const newTotal = visibleTotal(el);
         if (groupId && caret > newTotal) {
           // Teks meluber ke halaman berikutnya -> oper fokus dan kursor ke editor halaman berikutnya
-          pendingHandoff = { group: groupId, abs: startRef.current + caret };
+          pendingHandoff = {
+            group: groupId,
+            abs: startRef.current + caret,
+            fromStart: startRef.current,
+            overflowChars: caret - newTotal,
+          };
           window.clearTimeout(handoffTimer);
           handoffTimer = window.setTimeout(() => {
             pendingHandoff = null;
-          }, 350);
+          }, 400);
         } else {
           const p = Math.min(caret, newTotal);
           setVisibleRange(el, p, p);
@@ -109,7 +128,7 @@ export const RichEditable: React.FC<RichEditableProps> = ({
       }
     }
     refreshEmpty(el);
-  }, [value, rich, variant, commitTick]);
+  }, [value, rich, variant]);
 
   // Terima kursor yang "dioper" dari editor lain dalam grup
   useLayoutEffect(() => {
@@ -120,11 +139,15 @@ export const RichEditable: React.FC<RichEditableProps> = ({
     const myStart = groupStart;
     const myTotal = visibleTotal(el);
     const myEnd = myStart + myTotal;
-    if (req >= myStart && req <= myEnd + 5) {
+    const isNextPageTarget = myStart > pendingHandoff.fromStart && myTotal > 0;
+    if ((req >= myStart && req <= myEnd + 25) || isNextPageTarget) {
+      const overflowOffset = pendingHandoff.overflowChars;
       pendingHandoff = null;
       window.clearTimeout(handoffTimer);
       el.focus();
-      const local = Math.max(0, Math.min(myTotal, req - myStart));
+      const local = isNextPageTarget
+        ? Math.max(0, Math.min(myTotal, overflowOffset))
+        : Math.max(0, Math.min(myTotal, req - myStart));
       setVisibleRange(el, local, local);
       try {
         el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -134,25 +157,36 @@ export const RichEditable: React.FC<RichEditableProps> = ({
 
   const commit = () => {
     window.clearTimeout(timer.current);
+    timer.current = undefined;
+    if (!isDirtyRef.current) return;
+    isDirtyRef.current = false;
     const el = ref.current;
     if (!el) return;
     const next = htmlToMarkup(el, { rich });
     if (normMarkup(next) !== normMarkup(valueRef.current || '')) {
       commitRef.current(next);
-      setCommitTick((t) => t + 1);
     }
-    refreshEmpty(el);
+    if (isMountedRef.current) {
+      refreshEmpty(el);
+    }
   };
 
-  // Pastikan perubahan di-commit saat unmount / tab berpindah
+  // Pastikan perubahan yang sedang diketik di-commit saat unmount / tab berpindah
   useEffect(() => {
+    isMountedRef.current = true;
     const handleBeforeUnload = () => {
       commit();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
+      isMountedRef.current = false;
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      commit();
+      if (isDirtyRef.current) {
+        commit();
+      } else {
+        window.clearTimeout(timer.current);
+        timer.current = undefined;
+      }
     };
   }, []);
 
@@ -160,6 +194,7 @@ export const RichEditable: React.FC<RichEditableProps> = ({
     if (composing.current) return;
     const el = ref.current;
     if (!el) return;
+    isDirtyRef.current = true;
     ensureBlocks(el);
     refreshEmpty(el);
     window.clearTimeout(timer.current);
@@ -208,7 +243,6 @@ export const RichEditable: React.FC<RichEditableProps> = ({
         spellCheck={false}
         data-rich={rich ? 'true' : undefined}
         data-variant={variant}
-        title={title}
         className={`editable-text-field rt-root rt-${variant}`}
         style={{
           gridArea: '1 / 1 / 2 / 2',
@@ -222,6 +256,7 @@ export const RichEditable: React.FC<RichEditableProps> = ({
           background: 'transparent',
           position: 'relative',
           zIndex: 2,
+          cursor: 'text',
         }}
         onInput={handleInput}
         onBlur={commit}
@@ -233,7 +268,65 @@ export const RichEditable: React.FC<RichEditableProps> = ({
           handleInput();
         }}
         onKeyDown={(e) => {
-          if (singleLine && e.key === 'Enter') e.preventDefault();
+          const el = ref.current;
+          if (!el) return;
+
+          const moveFocusToSiblingEditable = (direction: 'prev' | 'next') => {
+            const page = el.closest('.print-page') || document;
+            const allEditables = Array.from(
+              page.querySelectorAll<HTMLElement>('.editable-text-field[contenteditable="true"]')
+            );
+            const idx = allEditables.indexOf(el);
+            if (idx === -1) return false;
+            const target = direction === 'next' ? allEditables[idx + 1] : allEditables[idx - 1];
+            if (!target) return false;
+            target.focus();
+            const total = visibleTotal(target);
+            const pos = direction === 'next' ? 0 : total;
+            setVisibleRange(target, pos, pos);
+            return true;
+          };
+
+          if (singleLine && e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+            moveFocusToSiblingEditable('next');
+            return;
+          }
+
+          if (e.key === 'ArrowDown' && !e.shiftKey) {
+            const caret = getVisibleOffset(el);
+            const total = visibleTotal(el);
+            const textAfter = (el.textContent || '').slice(caret);
+            if (!textAfter.includes('\n') && caret >= total) {
+              if (moveFocusToSiblingEditable('next')) {
+                e.preventDefault();
+              }
+            }
+          } else if (e.key === 'ArrowUp' && !e.shiftKey) {
+            const caret = getVisibleOffset(el);
+            const textBefore = (el.textContent || '').slice(0, caret);
+            if (!textBefore.includes('\n') && caret <= 0) {
+              if (moveFocusToSiblingEditable('prev')) {
+                e.preventDefault();
+              }
+            }
+          } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+            const caret = getVisibleOffset(el);
+            const total = visibleTotal(el);
+            if (caret >= total) {
+              if (moveFocusToSiblingEditable('next')) {
+                e.preventDefault();
+              }
+            }
+          } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+            const caret = getVisibleOffset(el);
+            if (caret <= 0) {
+              if (moveFocusToSiblingEditable('prev')) {
+                e.preventDefault();
+              }
+            }
+          }
         }}
       />
     </div>

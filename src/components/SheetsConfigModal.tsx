@@ -20,6 +20,7 @@ import {
   SyncStatus,
   DriveTestResult,
 } from '../services/sheetsService';
+import codeGsRaw from '../../google-apps-script/Code.gs?raw';
 
 interface SheetsConfigModalProps {
   isOpen: boolean;
@@ -87,12 +88,11 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
     setIsTestingDrive(false);
   };
 
-  const handleCopySpreadsheetId = async () => {
-    const text = 'GANTI_DENGAN_ID_SPREADSHEET_ANDA';
+  const handleCopyCodeGs = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(codeGsRaw);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 3000);
     } catch {
       /* ignore */
     }
@@ -131,7 +131,7 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
     },
     {
       num: '7',
-      title: '⭐ Aktifkan Izin Google Drive (WAJIB untuk fitur arsip PDF)',
+      title: '⭐ Aktifkan Izin Google Drive (WAJIB untuk fitur arsip Word / Google Docs)',
       desc: 'Di editor Apps Script, pilih fungsi "testDriveOtorisasi" dari dropdown, lalu klik ▶ Run. Setujui semua permintaan akses (popup Google). Setelah selesai, kembali ke aplikasi dan klik tombol "Test Google Drive" di bawah untuk memverifikasi.',
     },
   ];
@@ -190,6 +190,32 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
                 </>
               )}
             </div>
+          </div>
+
+          {/* Box Pembaruan Code.gs untuk Arsip Word / Google Docs */}
+          <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/70 space-y-2.5 text-xs text-blue-950">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-bold text-blue-900">
+                📄 Pembaruan Script: Arsip Word (.docx) / Link Google Docs
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyCodeGs}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs transition-colors cursor-pointer shrink-0"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>{copied ? '✓ Code.gs Tersalin!' : 'Salin Kode Code.gs Terbaru'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-blue-800 leading-relaxed">
+              Agar hasil upload di Google Drive berformat <strong>Word / Google Docs</strong> (bukan PDF) dan hanya mengisi kolom <strong>Link Berkas Word</strong>:
+              <br />
+              1. Klik tombol <strong>&quot;Salin Kode Code.gs Terbaru&quot;</strong> di atas.
+              <br />
+              2. Buka Google Spreadsheet &rarr; <strong>Extensions &rarr; Apps Script</strong> &rarr; hapus kode lama, Paste (Ctrl+V), lalu Simpan (Ctrl+S).
+              <br />
+              3. <strong>WAJIB:</strong> Klik tombol biru <strong>Deploy</strong> (kanan atas) &rarr; <strong>Manage deployments</strong> &rarr; klik ikon <strong>Pensil (Edit)</strong> &rarr; pada <strong>Version</strong> pilih <strong>&quot;New version&quot;</strong> &rarr; klik <strong>Deploy</strong>.
+            </p>
           </div>
 
           {/* URL Input */}
@@ -272,7 +298,7 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
               ) : (
                 <ExternalLink className="w-3.5 h-3.5" />
               )}
-              <span>{isTestingDrive ? 'Menguji Google Drive...' : '☁️ Test Google Drive (Arsip PDF)'}</span>
+              <span>{isTestingDrive ? 'Menguji Google Drive...' : '☁️ Test Google Drive (Arsip Word / GDocs)'}</span>
             </button>
 
             {/* Drive Test Result */}

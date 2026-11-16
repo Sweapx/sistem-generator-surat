@@ -266,11 +266,16 @@ export function htmlToMarkup(root: HTMLElement, opts: RichOpts = {}): string {
   return lines.join('\n');
 }
 
-/** Normalisasi untuk perbandingan: buang baris kosong & spasi akhir. */
+/** Normalisasi untuk perbandingan: samakan kelipatan indent spasi awal, buang baris kosong & spasi akhir. */
 export const normMarkup = (text: string): string =>
   (text || '')
     .split('\n')
-    .map((l) => l.replace(/\s+$/, ''))
+    .map((l) => {
+      const trimmedRight = l.replace(/\s+$/, '');
+      const spaces = (trimmedRight.match(/^ */) || [''])[0].length;
+      const normalizedIndent = ' '.repeat(Math.min(MAX_INDENT, Math.floor(spaces / 2)) * 2);
+      return normalizedIndent + trimmedRight.slice(spaces);
+    })
     .filter((l) => l.trim() !== '')
     .join('\n');
 

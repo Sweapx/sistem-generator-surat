@@ -48,9 +48,13 @@ export interface NomorSuratRecord {
   link_word?: string;
   link_pdf?: string;
   drive_url?: string;
+  drive_file_id?: string;
   drive_folder?: string;
   pdf_base64?: string;
   pdf_filename?: string;
+  docx_base64?: string;
+  docx_filename?: string;
+  file_mime_type?: string;
   form_state?: SuratTugasFormState;
   pegawai_ids?: string[];
   pejabat_id?: string;
@@ -172,6 +176,8 @@ export interface SuratTugasFormState {
   undangan_tipe_tempat?: 'offline' | 'online' | 'hybrid';
   undangan_tempat_offline?: string; // 'Ruang Rapat Pusat Kebijakan Strategis...'
   undangan_tempat_online?: string; // 'https://s.komdigi.go.id/...'
+  undangan_tempat_online_custom?: string; // Teks baris tempat online hasil edit langsung di kanvas kertas
+  undangan_tempat_offline_custom?: string; // Teks baris tempat offline hasil edit langsung di kanvas kertas
   undangan_agenda?: string; // 'Pembahasan dan Asistensi...'
   undangan_penutup?: string; // Paragraf penutup
   undangan_meeting_id?: string; // '890 1234 5678'
@@ -192,6 +198,12 @@ export interface SuratTugasFormState {
   // Konseptor & Tanda Tangan
   konseptor: string;
   ttd_image?: string;
+  custom_jabatan_ttd?: string;
+  custom_nama_ttd?: string;
+  custom_tanggal_surat_text?: string;
+  custom_kalimat_penutup_tugas?: string;
+  custom_kepada_tugas?: string;
+  custom_pegawai_overrides?: Record<string, Partial<Pegawai>>;
 
   // Lampiran Tambahan per jenis naskah (terpisah agar tidak saling kontaminasi antar tab)
   lampiran_items?: LampiranItem[];          // backward compat / Surat Tugas

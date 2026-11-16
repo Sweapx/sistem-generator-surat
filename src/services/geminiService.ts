@@ -10,13 +10,17 @@ const STORAGE_KEY_GEMINI_KEY = 'pusaka_gemini_api_key';
 
 export function getStoredGeminiApiKey(): string {
   try {
-    return (
-      localStorage.getItem(STORAGE_KEY_GEMINI_KEY) ||
+    const envKey =
       (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) ||
       (typeof import.meta !== 'undefined' && (import.meta as any).env?.GEMINI_API_KEY) ||
+      (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
       (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-      ''
-    );
+      localStorage.getItem(STORAGE_KEY_GEMINI_KEY) ||
+      '';
+    if (envKey === 'YOUR_GEMINI_API_KEY_HERE' || envKey === 'MY_GEMINI_API_KEY') {
+      return '';
+    }
+    return envKey.trim();
   } catch {
     return '';
   }
@@ -26,6 +30,18 @@ export function setStoredGeminiApiKey(key: string): void {
   try {
     localStorage.setItem(STORAGE_KEY_GEMINI_KEY, key.trim());
   } catch {}
+}
+
+/**
+ * Inisialisasi client GoogleGenAI yang mendukung baik Gemini Developer API Key (AIza...)
+ * maupun Google Cloud Vertex AI Express Mode API Key (AQ....) dari file .env.
+ */
+function createGeminiClient(apiKey: string): GoogleGenAI {
+  const cleanKey = apiKey.trim();
+  if (cleanKey.startsWith('AQ.')) {
+    return new GoogleGenAI({ vertexai: true, apiKey: cleanKey });
+  }
+  return new GoogleGenAI({ apiKey: cleanKey });
 }
 
 export interface FileAttachment {
@@ -109,7 +125,7 @@ export async function extractInvitationWithGemini(
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = createGeminiClient(apiKey);
 
     const promptText = `Anda adalah Analis Tata Usaha (TU) Senior Kementerian Komunikasi dan Digital RI (Komdigi).
 Tugas Anda adalah menelaah, men-screening, dan menganalisa dokumen surat undangan resmi kedinasan dan/atau perintah pengguna secara SANGAT MENDALAM, RINCI, DAN PRESISI untuk pembuatan Surat Tugas resmi.
@@ -167,8 +183,8 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
       });
     }
 
-    // Try available Gemini models (gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash)
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Gunakan kandidat model tercepat dengan thinkingBudget: 0 pada 2.5-flash agar ekstraksi JSON selesai dalam ~1 detik
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
     let lastError: any = null;
 
     for (const modelName of candidateModels) {
@@ -177,6 +193,7 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
           model: modelName,
           contents: [{ role: 'user', parts }],
           config: {
+            ...(modelName.includes('2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -518,7 +535,7 @@ export async function extractSuratUndanganWithGemini(
 
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = createGeminiClient(apiKey);
       const prompt = `Anda adalah Analis Tata Naskah Dinas Kementerian Komunikasi dan Digital RI (PUSAKA).
 Telaah dokumen acuan berikut dan/atau perintah pengguna untuk menyusun SURAT UNDANGAN RESMI:
 
@@ -552,6 +569,7 @@ ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI I
         model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts }],
         config: {
+          thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -611,7 +629,7 @@ export async function extractNotaDinasWithGemini(
 
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = createGeminiClient(apiKey);
       const prompt = `Anda adalah Analis Tata Naskah Dinas Pusat Kebijakan Strategis (PUSAKA), Sekretariat Jenderal Kementerian Komunikasi dan Digital RI.
 Tugas Anda adalah menelaah dokumen acuan dan/atau perintah pengguna untuk menyusun NOTA DINAS RESMI sesuai "Panduan Struktur dan Otomatisasi Nota Dinas PUSAKA Komdigi":
 
@@ -659,11 +677,13 @@ Pilih format isi yang sesuai dengan tipologi naskah (JANGAN mengulang kalimat pe
 
   Sebagai kelengkapan administrasi pengajuan {Jenis_Urusan} dimaksud, turut kami lampirkan berkas persyaratan yang dibutuhkan.
 - Format 2 (Narasi Rekapitulasi Multi-Pegawai / Rincian Anggaran & Aset): Rincian terstruktur disertai kalimat pengantar lampiran berkas/matriks.
-- Format 3 (Poin-Poin Narasi Eksekutif - Khusus Policy Brief / Laporan Kajian / Evaluasi / Hasil Reviu):
-  Gunakan penomoran angka Arab (1., 2., 3.) dengan sub-judul aspek diikuti titik dua dan narasi analitis:
-  1. {Judul Aspek Pertama}: {Narasi ringkasan temuan, angka kuantitatif, dan analisis kebijakan}.
-  2. {Judul Aspek Kedua}: {Narasi ringkasan temuan dan sinkronisasi kebijakan}.
-  3. {Judul Aspek Ketiga / Rekomendasi}: {Narasi rekomendasi strategis dan arah tindak lanjut}.
+- Format 3 (Poin-Poin Narasi Eksekutif - Khusus Laporan Hasil Telaah / Policy Brief / Laporan Kajian / Evaluasi / Hasil Reviu Regulasi):
+   Analisis secara mendalam seluruh isi laporan/dokumen yang diunggah (termasuk permasalahan utama, kerangka regulasi/hukum seperti UU/PP/Permen, data capaian, dan rekomendasi kebijakan).
+  Sajikan dalam 3 s.d. 4 poin bernomor angka Arab (1., 2., 3., 4.) di mana kalimat/frasa utama di awal setiap poin ditebalkan dengan **...** seperti standar Nota Dinas Komdigi:
+  1. **{Frasa/Judul Inti Poin Pertama}**: {Narasi analitis mendalam mengenai temuan pertama, konteks regulasi, dan rincian operasional}.
+  2. **{Frasa/Judul Inti Poin Kedua}**: {Narasi analitis mendalam mengenai temuan kedua, mekanisme pelaksanaan, atau evaluasi substansi}.
+  3. **{Frasa/Judul Inti Poin Ketiga}**: {Narasi analitis mendalam mengenai prinsip tata kelola, pelindungan data/mitigasi risiko, atau sinkronisasi lintas sektor}.
+  4. **{Frasa/Judul Inti Poin Keempat / Rekomendasi Strategis}**: {Narasi penguatan strategi pelaksanaan, rekomendasi tindak lanjut, dan kolaborasi pemangku kepentingan}.
 - Format 4 (Klausul Tautan Digital / Email): Jika ada link cloud atau email, tambahkan: "Seluruh data dukung dan kelengkapan berkas sebagaimana dimaksud dapat diakses/diunduh melalui tautan berikut: {URL_Link}."
 - Format 5 (Narasi Permohonan Koordinasi Lintas Unit / PIC): Memuat mekanisme penyampaian usulan nama PIC/perwakilan unit kerja.
 
@@ -691,6 +711,7 @@ Pilih variasi yang sesuai dengan hirarki penerima:
         model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts }],
         config: {
+          thinkingConfig: { thinkingBudget: 0 },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
