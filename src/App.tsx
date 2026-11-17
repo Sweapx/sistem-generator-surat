@@ -28,6 +28,8 @@ import {
   EkstraksiUndangan,
   EkstraksiSuratUndangan,
   EkstraksiNotaDinas,
+  GeneratedLampiranDraft,
+  LampiranItem,
   SuratTugasFormState,
   AuthState,
   User,
@@ -48,7 +50,7 @@ import { DatabaseView } from './components/DatabaseView';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { KlasifikasiPickerModal } from './components/KlasifikasiPickerModal';
 import { FloatingToolbar } from './components/FloatingToolbar';
-import { LampiranManager } from './components/LampiranManager';
+import { LampiranManager, toRoman, getInternalPusakaJabatanKhusus } from './components/LampiranManager';
 import { KLASIFIKASI_SURAT } from './data/klasifikasiData';
 import {
   formatNomorNaskah,
@@ -437,48 +439,159 @@ export function App() {
   }, [form.selectedPejabatId, pejabatList, defaultPejabat]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
+  const buildLampiranItemsFromAi = (
+    drafts: GeneratedLampiranDraft[] | undefined,
+    romanOffset = 0
+  ): LampiranItem[] | undefined => {
+    if (!drafts || drafts.length === 0) return undefined;
+    return drafts.map((d, idx) => {
+      let isiFinal = d.isi || '';
+      if (d.include_internal_pusaka && pegawaiList.length > 0) {
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const sectionMatches = isiFinal.match(/^\*\*[A-Z]\.\s+/gm) || [];
+        const nextLetter = letters[sectionMatches.length % letters.length];
+        const internalLines = [
+          `**${nextLetter}. Pusat Kebijakan Strategis**`,
+          ...pegawaiList.map((p, pIdx) => {
+            const jbt = getInternalPusakaJabatanKhusus(p.nama);
+            return `  ${pIdx + 1}. ${jbt ? `${p.nama}, ${jbt}` : p.nama}`;
+          }),
+        ].join('\n');
+        isiFinal = isiFinal ? `${isiFinal.trim()}\n\n${internalLines}` : internalLines;
+      }
+      return {
+        id: `lamp-ai-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        tipe: 'buat' as const,
+        label_mark: `Lampiran ${toRoman(idx + 1 + romanOffset)}`,
+        judul: d.judul || 'LAMPIRAN',
+        sub_judul: d.sub_judul,
+        isi: isiFinal,
+      };
+    });
+  };
+
   const handleApplyExtraction = (extracted: EkstraksiUndangan) => {
-    setForm((prev) => ({
-      ...prev,
-      nama_acara: extracted.nama_acara,
-      nomor_surat_undangan: extracted.nomor_surat_undangan,
-      instansi_pengundang: extracted.instansi_pengundang,
-      tanggal_surat_undangan:
-        extracted.tanggal_surat_undangan || prev.tanggal_surat,
-      tanggal_mulai: extracted.tanggal_mulai,
-      tanggal_selesai: extracted.tanggal_selesai,
-      waktu_kegiatan: extracted.waktu_pelaksanaan || prev.waktu_kegiatan,
-      hari_tanggal_pelaksanaan: extracted.hari_tanggal_pelaksanaan,
-      lokasi_kegiatan: extracted.lokasi,
-      kota_kegiatan: extracted.kota_kegiatan,
-      perihal_undangan: extracted.perihal_undangan || `Undangan ${extracted.nama_acara}`,
-      kriteria_peserta: extracted.kriteria_peserta,
-      // Terapkan formulasi klausul hasil analisa AI
-      menimbang_custom: extracted.narasi_menimbang,
-      dasar_custom: extracted.narasi_dasar,
-      untuk_custom: extracted.narasi_untuk,
-    }));
+    let nextSelectedPegawaiIds: string[] | undefined = undefined;
+    if (extracted.pegawai_nama_list && extracted.pegawai_nama_list.length > 0) {
+      const matchedIds: string[] = [];
+      const newPegawaiToAdd: Pegawai[] = [];
+      extracted.pegawai_nama_list.forEach((rawName, idx) => {
+        const cleanName = rawName.trim();
+        if (!cleanName) return;
+        const lower = cleanName.toLowerCase();
+        const found = pegawaiList.find(
+          (p) =>
+            p.nama.toLowerCase() === lower ||
+            p.nama.toLowerCase().includes(lower) ||
+            lower.includes(p.nama.toLowerCase())
+        );
+        if (found) {
+          if (!matchedIds.includes(found.id)) matchedIds.push(found.id);
+        } else {
+          const newId = `peg-ai-${Date.now()}-${idx}`;
+          newPegawaiToAdd.push({
+            id: newId,
+            nama: cleanName,
+            nip: '-',
+            pangkat_golongan: '-',
+            jabatan: 'Pegawai Pusat Kebijakan Strategis',
+            unit_kerja: 'Pusat Kebijakan Strategis',
+            status: 'Aktif',
+          });
+          matchedIds.push(newId);
+        }
+      });
+      if (newPegawaiToAdd.length > 0) {
+        setPegawaiList((prev) => [...prev, ...newPegawaiToAdd]);
+      }
+      if (matchedIds.length > 0) {
+        nextSelectedPegawaiIds = matchedIds;
+      }
+    }
+
+    setForm((prev) => {
+      const effectivePegawaiIds = nextSelectedPegawaiIds ?? prev.selectedPegawaiIds;
+      const aiLampiran = buildLampiranItemsFromAi(
+        extracted.lampiran_generated,
+        effectivePegawaiIds.length > 3 ? 1 : 0
+      );
+      return {
+        ...prev,
+        nama_acara: extracted.nama_acara,
+        nomor_surat_undangan: extracted.nomor_surat_undangan,
+        instansi_pengundang: extracted.instansi_pengundang,
+        tanggal_surat_undangan:
+          extracted.tanggal_surat_undangan || prev.tanggal_surat,
+        tanggal_mulai: extracted.tanggal_mulai,
+        tanggal_selesai: extracted.tanggal_selesai,
+        waktu_kegiatan: extracted.waktu_pelaksanaan || prev.waktu_kegiatan,
+        hari_tanggal_pelaksanaan: extracted.hari_tanggal_pelaksanaan,
+        lokasi_kegiatan: extracted.lokasi,
+        kota_kegiatan: extracted.kota_kegiatan,
+        perihal_undangan: extracted.perihal_undangan || `Undangan ${extracted.nama_acara}`,
+        kriteria_peserta: extracted.kriteria_peserta,
+        selectedPegawaiIds: effectivePegawaiIds,
+        ...(aiLampiran ? { lampiran_items: aiLampiran } : {}),
+        // Terapkan formulasi klausul hasil analisa AI
+        menimbang_custom: extracted.narasi_menimbang,
+        dasar_custom: extracted.narasi_dasar,
+        untuk_custom: extracted.narasi_untuk,
+      };
+    });
     setIsSavedToDB(false);
   };
 
   const handleApplyUndanganExtraction = (data: EkstraksiSuratUndangan) => {
-    setForm((prev) => ({
-      ...prev,
-      undangan_hal: data.undangan_hal,
-      undangan_agenda: data.undangan_agenda,
-      hari_tanggal_pelaksanaan: data.hari_tanggal_pelaksanaan,
-      undangan_waktu: data.undangan_waktu,
-      undangan_tipe_tempat: data.undangan_tipe_tempat,
-      undangan_tempat_offline: data.undangan_tempat_offline || prev.undangan_tempat_offline,
-      undangan_tempat_online: data.undangan_tempat_online || prev.undangan_tempat_online,
-      undangan_pembuka: data.undangan_pembuka || prev.undangan_pembuka,
-      undangan_kepada: data.undangan_kepada || prev.undangan_kepada,
-      undangan_sifat: data.undangan_sifat || prev.undangan_sifat || 'Biasa',
-    }));
+    const aiLampiran = buildLampiranItemsFromAi(data.lampiran_generated, 0);
+    setForm((prev) => {
+      const finalLampiranItems = aiLampiran ?? prev.undangan_lampiran_items ?? [];
+      const lCount = finalLampiranItems.length;
+      const computedLampStr =
+        lCount === 0
+          ? data.undangan_lampiran || '-'
+          : `${lCount} (${lCount === 1 ? 'satu' : lCount === 2 ? 'dua' : lCount}) berkas`;
+
+      const matchedKlas = data.rekomendasi_kode_klasifikasi
+        ? KLASIFIKASI_SURAT.find((k) => k.kode_lengkap === data.rekomendasi_kode_klasifikasi)
+        : undefined;
+      const nextKode = matchedKlas?.kode_lengkap || prev.kode_klasifikasi || 'PR.01.01';
+      const nextNomor = formatNomorNaskah(
+        'UNDANGAN',
+        prev.nomor_urut || nextNomorUrut,
+        nextKode,
+        prev.bulan || simulatedMonth,
+        prev.tahun || simulatedYear
+      );
+
+      return {
+        ...prev,
+        undangan_hal: data.undangan_hal,
+        undangan_agenda: data.undangan_agenda,
+        hari_tanggal_pelaksanaan: data.hari_tanggal_pelaksanaan,
+        undangan_waktu: data.undangan_waktu,
+        undangan_tipe_tempat: data.undangan_tipe_tempat,
+        undangan_tempat_offline: data.undangan_tempat_offline || prev.undangan_tempat_offline,
+        undangan_tempat_online: data.undangan_tempat_online || prev.undangan_tempat_online,
+        undangan_pembuka: data.undangan_pembuka || prev.undangan_pembuka,
+        undangan_kepada: data.undangan_kepada || prev.undangan_kepada,
+        undangan_sifat: data.undangan_sifat || prev.undangan_sifat || 'Biasa',
+        undangan_lampiran: computedLampStr,
+        undangan_lampiran_items: finalLampiranItems,
+        ...(matchedKlas
+          ? {
+              kode_klasifikasi: matchedKlas.kode_lengkap,
+              kategori_klasifikasi: matchedKlas.kategori_utama,
+              uraian_klasifikasi: matchedKlas.uraian,
+              nomor_lengkap: nextNomor,
+            }
+          : {}),
+      };
+    });
     setIsSavedToDB(false);
   };
 
   const handleApplyNotaDinasExtraction = (data: EkstraksiNotaDinas) => {
+    const aiLampiran = buildLampiranItemsFromAi(data.lampiran_generated, 0);
     setForm((prev) => {
       const unifiedBody = combineNotaDinasSections(
         data.nota_pembuka,
@@ -496,6 +609,8 @@ export function App() {
         prev.bulan || simulatedMonth,
         prev.tahun || simulatedYear
       );
+      const finalLampiranItems = aiLampiran ?? prev.nota_lampiran_items ?? [];
+      const lCount = finalLampiranItems.length;
 
       return {
         ...prev,
@@ -504,12 +619,13 @@ export function App() {
         nota_dari: data.nota_dari || 'Kepala Pusat Kebijakan Strategis',
         nota_sifat: data.nota_sifat || 'Biasa',
         nota_lampiran:
-          (prev.nota_lampiran_items || []).length > 0
-            ? prev.nota_lampiran
+          lCount > 0
+            ? `${lCount === 1 ? 'Satu' : lCount} berkas`
             : data.nota_lampiran || prev.nota_lampiran || '-',
         nota_pembuka: '',
         nota_isi: unifiedBody,
         nota_penutup: '',
+        nota_lampiran_items: finalLampiranItems,
         ...(matchedKlas
           ? {
               kode_klasifikasi: matchedKlas.kode_lengkap,
@@ -2904,13 +3020,8 @@ export function App() {
                 }}
                 onOpenAiScanner={() => {
                   const jenis = form.jenis_naskah || 'TUGAS';
-                  if (jenis === 'NOTA_DINAS') {
-                    setExtractionModalMode('NOTA_DINAS');
-                    setIsExtractionModalOpen(true);
-                  } else if (jenis === 'TUGAS') {
-                    setExtractionModalMode('TUGAS');
-                    setIsExtractionModalOpen(true);
-                  }
+                  setExtractionModalMode(jenis);
+                  setIsExtractionModalOpen(true);
                 }}
                 onGenerateGeneralTemplate={() => {
                   const jenis = form.jenis_naskah || 'TUGAS';

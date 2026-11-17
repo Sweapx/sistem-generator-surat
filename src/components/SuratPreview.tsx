@@ -613,23 +613,41 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               </button>
             )}
 
-            {onOpenAiScanner && (isTugas || isNotaDinas) && (
+            {onOpenAiScanner && (
               <button
                 type="button"
                 onClick={onOpenAiScanner}
                 className={`flex items-center space-x-1.5 text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xs transition-all cursor-pointer whitespace-nowrap ${
                   isNotaDinas
                     ? 'bg-gradient-to-r from-indigo-700 to-indigo-600 hover:from-indigo-800 hover:to-indigo-700'
+                    : form.jenis_naskah === 'UNDANGAN'
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600'
                     : 'bg-gradient-to-r from-teal-800 to-teal-700 hover:from-teal-900 hover:to-teal-800'
                 }`}
                 title={
                   isNotaDinas
                     ? 'Pindai dokumen laporan atau ketik prompt AI untuk menyusun Nota Dinas otomatis'
+                    : form.jenis_naskah === 'UNDANGAN'
+                    ? 'Pindai dokumen acuan atau ketik prompt AI untuk menyusun Surat Undangan beserta lampirannya'
                     : 'Pindai surat undangan atau ketik prompt AI untuk menyusun Surat Tugas otomatis'
                 }
               >
-                <Sparkles className={`w-3.5 h-3.5 shrink-0 ${isNotaDinas ? 'text-indigo-200' : 'text-teal-300'}`} />
-                <span>{isNotaDinas ? 'Pindai Laporan (AI)' : 'Pindai Undangan (AI)'}</span>
+                <Sparkles
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    isNotaDinas
+                      ? 'text-indigo-200'
+                      : form.jenis_naskah === 'UNDANGAN'
+                      ? 'text-amber-100'
+                      : 'text-teal-300'
+                  }`}
+                />
+                <span>
+                  {isNotaDinas
+                    ? 'Pindai Laporan (AI)'
+                    : form.jenis_naskah === 'UNDANGAN'
+                    ? 'Analisa / Buat Undangan (AI)'
+                    : 'Pindai Undangan (AI)'}
+                </span>
               </button>
             )}
           </div>

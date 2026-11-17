@@ -1,10 +1,60 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { EkstraksiUndangan, EkstraksiSuratUndangan, EkstraksiNotaDinas } from '../types';
+import {
+  EkstraksiUndangan,
+  EkstraksiSuratUndangan,
+  EkstraksiNotaDinas,
+  GeneratedLampiranDraft,
+} from '../types';
 import {
   smartLocalExtractSuratTugas,
   smartLocalExtractSuratUndangan,
   smartLocalExtractNotaDinas,
 } from './localDocumentIntelligence';
+import { parseTableFromText, serializeTableToHtml, normalizeTableModel } from './tableService';
+
+/**
+ * Normalisasi array lampiran_generated dari Gemini AI agar tabel HTML selalu rapi, valid,
+ * dan langsung kompatibel dengan DocumentPreviewTable & docxService.
+ */
+function normalizeLampiranGenerated(rawList: any): GeneratedLampiranDraft[] | undefined {
+  if (!Array.isArray(rawList) || rawList.length === 0) return undefined;
+  const out: GeneratedLampiranDraft[] = [];
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    let isi = typeof item.isi === 'string' ? item.isi.trim() : '';
+    const tipeKonten = item.tipe_konten === 'tabel' || item.tipe_konten === 'daftar_undangan' ? item.tipe_konten : 'teks';
+    if (tipeKonten === 'tabel' || isi.includes('<table') || (isi.includes('|') && isi.includes('\n'))) {
+      const parsed = parseTableFromText(isi);
+      if (parsed) {
+        isi = serializeTableToHtml(normalizeTableModel(parsed));
+      }
+    }
+    if (!isi && !item.include_internal_pusaka) continue;
+    out.push({
+      judul: (item.judul || 'LAMPIRAN').trim(),
+      sub_judul: item.sub_judul ? String(item.sub_judul).trim() : undefined,
+      tipe_konten: tipeKonten,
+      isi,
+      include_internal_pusaka: Boolean(item.include_internal_pusaka),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+const LAMPIRAN_GENERATED_SCHEMA = {
+  type: Type.ARRAY,
+  items: {
+    type: Type.OBJECT,
+    properties: {
+      judul: { type: Type.STRING },
+      sub_judul: { type: Type.STRING },
+      tipe_konten: { type: Type.STRING },
+      isi: { type: Type.STRING },
+      include_internal_pusaka: { type: Type.BOOLEAN },
+    },
+    required: ['judul', 'tipe_konten', 'isi'],
+  },
+};
 
 const STORAGE_KEY_GEMINI_KEY = 'pusaka_gemini_api_key';
 
@@ -205,7 +255,11 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
 11. Rekomendasi Klausul Naskah Dinas Resmi Komdigi (DILARANG keras menulis placeholder seperti "[Instansi]", "[Nomor]", "[Tanggal]", atau "Tidak diketahui"):
     - narasi_menimbang: Konsideran Menimbang resmi Surat Tugas yang mengaitkan urgensi acara dengan tugas fungsi Komdigi (diawali "Bahwa dalam rangka...").
     - narasi_dasar: Jika ada surat undangan acuan, kutip resmi: "Surat Undangan <Nama Instansi> Nomor : <Nomor> tanggal <Tanggal>.". Jika hanya dari perintah/prompt pengguna tanpa surat undangan, tulis: "Arahan pimpinan terkait pelaksanaan kegiatan <Nama Kegiatan>."
-    - narasi_untuk: Diktum Untuk resmi yang merinci tugas pegawai, nama acara, tanggal/waktu pelaksanaan, dan lokasi/kota.`;
+    - narasi_untuk: Diktum Untuk resmi yang merinci tugas pegawai, nama acara, tanggal/waktu pelaksanaan, dan lokasi/kota.
+12. Daftar Pegawai yang Ditugaskan (pegawai_nama_list):
+    - Jika pengguna menyebutkan nama-nama pegawai pada perintah/prompt atau dokumen (misal: "5 pegawai dengan nama a, b, c, d dan e" atau "Oki Suryowahono, Dyah Purwaningrum"), ekstrak seluruh nama pegawai tersebut ke dalam array string pegawai_nama_list (misal: ["a", "b", "c", "d", "e"]). Jika tidak disebutkan nama pegawai, kosongkan array [].
+13. Lampiran Tambahan (lampiran_generated):
+    - Jika pengguna meminta dibuatkan lampiran tambahan selain daftar pegawai (misalnya jadwal/rundown acara atau catatan lampiran), buatkan pada array lampiran_generated (tipe_konten: "tabel" dengan tag HTML <table><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table> atau "teks"). Jika tidak diminta, kosongkan [].`;
 
     const parts: any[] = [{ text: promptText }];
 
@@ -224,8 +278,8 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
       });
     }
 
-    // Gunakan kandidat model tercepat dengan thinkingBudget: 0 pada 2.5-flash agar ekstraksi JSON selesai dalam ~1 detik
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    // Gunakan kandidat model aktif dengan fallback otomatis bila salah satu mengalami lonjakan trafik (503)
+    const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
     let lastError: any = null;
 
     for (const modelName of candidateModels) {
@@ -257,6 +311,11 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
                 narasi_dasar: { type: Type.STRING },
                 narasi_untuk: { type: Type.STRING },
                 keterangan_tambahan: { type: Type.STRING },
+                pegawai_nama_list: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                lampiran_generated: LAMPIRAN_GENERATED_SCHEMA,
               },
               required: [
                 'nama_acara',
@@ -320,6 +379,10 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
               parsed.narasi_untuk ||
               `Mengikuti kegiatan ${namaAcara} yang dilaksanakan pada ${waktu} bertempat di ${lokasi}, ${kota}.`,
             keterangan_tambahan: `Analisa Mendalam Gemini AI (${modelName})`,
+            pegawai_nama_list: Array.isArray(parsed.pegawai_nama_list)
+              ? parsed.pegawai_nama_list.map((s: any) => String(s).trim()).filter(Boolean)
+              : undefined,
+            lampiran_generated: normalizeLampiranGenerated(parsed.lampiran_generated),
           };
         }
       } catch (err) {
@@ -592,16 +655,30 @@ Telaah dokumen acuan berikut dan/atau perintah pengguna untuk menyusun SURAT UND
 
 ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI INI):\n"""\n${userPrompt}\n"""\n` : ''}
 
-1. Perihal / Hal Undangan: Judul/perihal surat undangan yang ringkas dan jelas.
-2. Agenda Pembahasan: Poin-poin atau uraian agenda rapat yang akan dibahas.
-3. Hari dan Tanggal Pelaksanaan: Contoh "Senin, 27 Oktober 2026"
-4. Waktu Pelaksanaan: Contoh "09.00 WIB s.d. selesai"
-5. Tipe Tempat: "hybrid", "offline", atau "online"
-6. Tempat Fisik (Offline): Ruang rapat, nama gedung, dan alamat jika ada.
-7. Tempat Daring (Online): Link video conference jika ada.
-8. Paragraf Pengantar/Pembuka: Paragraf pengantar resmi tata naskah dinas Komdigi (diawali "Dalam rangka..." atau "Menindaklanjuti...", TANPA kata "Dengan hormat,").
-9. Daftar Pihak yang Diundang (undangan_kepada): Daftar nama pejabat/satker yang diundang (format: "(Daftar Terlampir)\\ndi Tempat" atau rincian pejabat).
-10. Sifat Surat: Pilih tepat satu dari "Biasa", "Segera", atau "Sangat Segera"`;
+1. Perihal / Hal Undangan (undangan_hal): Judul/perihal surat undangan yang ringkas dan jelas (misal: "Undangan Event Tahunan Rakyat").
+2. Agenda Pembahasan (undangan_agenda): Poin-poin atau uraian agenda acara/rapat yang akan dilaksanakan.
+3. Hari dan Tanggal Pelaksanaan (hari_tanggal_pelaksanaan): Format Indonesia lengkap, contoh "Kamis, 12 November ${new Date().getFullYear()}". Jika pengguna tidak menyebut tahun, gunakan tahun ${new Date().getFullYear()}.
+4. Waktu Pelaksanaan (undangan_waktu): Format jam resmi Indonesia, contoh "19.00 WIB s.d. selesai" (jika jam 7 malam = 19.00 WIB).
+5. Tipe Tempat (undangan_tipe_tempat): "hybrid", "offline", atau "online".
+6. Tempat Fisik (undangan_tempat_offline): Ruang rapat, nama gedung, dan alamat jika ada (misal: "Balai Kota DKI Jakarta, Jl. Medan Merdeka Selatan No. 8-9, Jakarta Pusat").
+7. Tempat Daring (undangan_tempat_online): Link video conference jika ada/hybrid/online.
+8. Paragraf Pengantar/Pembuka (undangan_pembuka): Paragraf pengantar resmi tata naskah dinas Komdigi (diawali "Dalam rangka..." atau "Menindaklanjuti...", TANPA kata "Dengan hormat,").
+9. Daftar Pihak yang Diundang (undangan_kepada): Jika tamu undangan > 2 pihak/satker atau ada lampiran daftar undangan, isi "(Daftar Terlampir)\\ndi Tempat". Jika hanya 1-2 pejabat spesifik tanpa lampiran, tulis jabatannya.
+10. Sifat Surat (undangan_sifat): Pilih tepat satu dari "Biasa", "Segera", atau "Sangat Segera".
+11. Keterangan Lampiran (undangan_lampiran): "-" jika tidak ada lampiran, atau "1 (satu) berkas" / "2 (dua) berkas" sesuai jumlah lampiran pada lampiran_generated.
+12. Lampiran Otomatis (lampiran_generated):
+   - Jika pengguna menyebutkan daftar tamu undangan beberapa instansi/satker/internal (contoh: "tamu undangannya Sekjen, BPSDM, dan seluruh internal Pusaka"), buatkan 1 item lampiran dengan:
+     * judul: "DAFTAR UNDANGAN"
+     * sub_judul: Nama acara/kegiatan
+     * tipe_konten: "daftar_undangan"
+     * include_internal_pusaka: true (jika pengguna menyebut seluruh/internal Pusaka atau Pusat Kebijakan Strategis)
+     * isi: Daftar pihak eksternal terstruktur dengan huruf kapital tebal, contoh:
+       "**A. Sekretariat Jenderal**\\n  1. Sekretaris Jenderal Kementerian Komunikasi dan Digital\\n\\n**B. Badan Pengembangan Sumber Daya Manusia Komunikasi dan Digital (BPSDM)**\\n  1. Kepala Badan Pengembangan Sumber Daya Manusia Komunikasi dan Digital"
+   - Jika pengguna meminta dibuatkan rundown / susunan acara / jadwal pada lampiran (contoh: "rundownnya tolong buatkan juga pada lampirannya"), buatkan 1 item lampiran dengan:
+     * judul: "SUSUNAN ACARA / RUNDOWN KEGIATAN"
+     * sub_judul: Nama acara beserta hari/tanggalnya
+     * tipe_konten: "tabel"
+     * isi: Tabel HTML lengkap yang rapi dengan kolom <thead><tr><th>No</th><th>Waktu</th><th>Kegiatan</th><th>Keterangan / Pengisi</th></tr></thead><tbody>...</tbody> berisi susunan acara yang realistis dan sesuai dengan jam mulai & jenis acara yang diminta pengguna!`;
 
       const parts: any[] = [{ text: prompt }];
       if (fileAttachment && fileAttachment.base64) {
@@ -616,32 +693,51 @@ ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI I
         parts.push({ text: `Dokumen Acuan:\n"""\n${cleanText}\n"""` });
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts }],
-        config: {
-          thinkingConfig: { thinkingBudget: 0 },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              undangan_hal: { type: Type.STRING },
-              undangan_agenda: { type: Type.STRING },
-              hari_tanggal_pelaksanaan: { type: Type.STRING },
-              undangan_waktu: { type: Type.STRING },
-              undangan_tipe_tempat: { type: Type.STRING },
-              undangan_tempat_offline: { type: Type.STRING },
-              undangan_tempat_online: { type: Type.STRING },
-              undangan_pembuka: { type: Type.STRING },
-              undangan_kepada: { type: Type.STRING },
-              undangan_sifat: { type: Type.STRING },
+      const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
+      let parsed: any = null;
+      for (const modelName of candidateModels) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: [{ role: 'user', parts }],
+            config: {
+              ...(modelName.includes('2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  undangan_hal: { type: Type.STRING },
+                  undangan_agenda: { type: Type.STRING },
+                  hari_tanggal_pelaksanaan: { type: Type.STRING },
+                  undangan_waktu: { type: Type.STRING },
+                  undangan_tipe_tempat: { type: Type.STRING },
+                  undangan_tempat_offline: { type: Type.STRING },
+                  undangan_tempat_online: { type: Type.STRING },
+                  undangan_pembuka: { type: Type.STRING },
+                  undangan_kepada: { type: Type.STRING },
+                  undangan_sifat: { type: Type.STRING },
+                  undangan_lampiran: { type: Type.STRING },
+                  rekomendasi_kode_klasifikasi: { type: Type.STRING },
+                  lampiran_generated: LAMPIRAN_GENERATED_SCHEMA,
+                },
+                required: ['undangan_hal', 'undangan_agenda', 'hari_tanggal_pelaksanaan', 'undangan_waktu'],
+              },
             },
-            required: ['undangan_hal', 'undangan_agenda', 'hari_tanggal_pelaksanaan', 'undangan_waktu'],
-          },
-        },
-      });
+          });
+          if (response.text) {
+            parsed = JSON.parse(response.text);
+            break;
+          }
+        } catch (modelErr) {
+          console.warn(`Undangan Gemini model ${modelName} failed, trying fallback...`, modelErr);
+        }
+      }
+      if (!parsed) throw new Error('Semua model Gemini Undangan gagal merespons');
+      const genLampiran = normalizeLampiranGenerated(parsed.lampiran_generated);
+      const lampCount = genLampiran ? genLampiran.length : 0;
+      const defaultLampStr =
+        lampCount === 0 ? '-' : `${lampCount} (${lampCount === 1 ? 'satu' : lampCount === 2 ? 'dua' : lampCount}) berkas`;
 
-      const parsed = JSON.parse(response.text || '{}');
       return {
         undangan_hal: parsed.undangan_hal || 'Undangan Rapat Pembahasan',
         undangan_agenda: parsed.undangan_agenda || 'Pembahasan agenda strategis dan asistensi substansi kebijakan.',
@@ -651,8 +747,14 @@ ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI I
         undangan_tempat_offline: parsed.undangan_tempat_offline || 'Ruang Rapat Pusat Kebijakan Strategis, Gd Sapta Pesona Lt. 5, Jl. Medan Merdeka Barat No. 17-19, Jakarta Pusat',
         undangan_tempat_online: parsed.undangan_tempat_online || 'https://s.komdigi.go.id/zoom-rapat',
         undangan_pembuka: parsed.undangan_pembuka || 'Dalam rangka mendukung pelaksanaan tugas dan fungsi Pusat Kebijakan Strategis, bersama ini kami bermaksud menyelenggarakan rapat yang akan diselenggarakan pada:',
-        undangan_kepada: parsed.undangan_kepada || '(Daftar Terlampir)\ndi Jakarta',
-        undangan_sifat: parsed.undangan_sifat || 'Biasa',
+        undangan_kepada: parsed.undangan_kepada || '(Daftar Terlampir)\ndi Tempat',
+        undangan_sifat:
+          parsed.undangan_sifat === 'Segera' || parsed.undangan_sifat === 'Sangat Segera'
+            ? parsed.undangan_sifat
+            : 'Biasa',
+        undangan_lampiran: parsed.undangan_lampiran || defaultLampStr,
+        rekomendasi_kode_klasifikasi: parsed.rekomendasi_kode_klasifikasi || 'PR.01.01',
+        lampiran_generated: genLampiran,
       };
     } catch (err) {
       console.warn('Gemini screening Undangan failed, using heuristic fallback:', err);
@@ -755,7 +857,10 @@ ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
    - Tipe 1 (Horizontal ke Kepala Biro / Inspektur / Sesditjen / Kapusdatin): "Demikian kami sampaikan. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih."
    - Tipe 2 (Vertikal ke Sekretaris Jenderal — laporan/telaah/policy brief): "Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih." (Khusus tanda tangan SK Sekjen: "Demikian kami sampaikan. Apabila Bapak Sekretaris Jenderal tidak berpendapat lain, mohon perkenan Bapak Sekretaris Jenderal untuk menandatangani Keputusan Sekretaris Jenderal dimaksud. Atas perhatian dan perkenan Bapak Sekretaris Jenderal, kami ucapkan terima kasih.")
    - Tipe 3 (Permohonan Persetujuan Anggaran / MCU ke Sekjen / PSP BMN): "Demikian permohonan ini kami sampaikan. Atas perkenan dan arahan Bapak/Ibu, kami ucapkan terima kasih."
-   - Tipe 4 (Mendesak / Distribusi Cepat Bukti Potong Pajak): "Kami mohon agar dokumen tersebut dapat segera disampaikan kepada kami untuk selanjutnya didistribusikan kepada pegawai yang bersangkutan. Demikian kami sampaikan, atas perhatian dan kerja samanya kami ucapkan terima kasih."`;
+   - Tipe 4 (Mendesak / Distribusi Cepat Bukti Potong Pajak): "Kami mohon agar dokumen tersebut dapat segera disampaikan kepada kami untuk selanjutnya didistribusikan kepada pegawai yang bersangkutan. Demikian kami sampaikan, atas perhatian dan kerja samanya kami ucapkan terima kasih."
+
+6. LAMPIRAN OTOMATIS NOTA DINAS (lampiran_generated):
+   - Jika pengguna meminta dibuatkan lampiran (misal matriks tindak lanjut, tabel rincian anggaran, daftar pegawai kolektif, jadwal, atau dokumen teks lampiran), buatkan pada array lampiran_generated (tipe_konten: "tabel" dengan tag HTML <table><thead><tr><th>...</th></tr></thead><tbody>...</tbody></table> atau "teks"). Jika tidak diminta lampiran, kosongkan [].`;
 
       const parts: any[] = [{ text: prompt }];
       if (fileAttachment && fileAttachment.base64) {
@@ -770,7 +875,7 @@ ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
         parts.push({ text: `Dokumen Acuan:\n"""\n${cleanText}\n"""` });
       }
 
-      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      const candidateModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash-lite'];
       let parsed: any = null;
       for (const modelName of candidateModels) {
         try {
@@ -792,6 +897,7 @@ ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
                   nota_isi: { type: Type.STRING },
                   nota_penutup: { type: Type.STRING },
                   rekomendasi_kode_klasifikasi: { type: Type.STRING },
+                  lampiran_generated: LAMPIRAN_GENERATED_SCHEMA,
                 },
                 required: ['nota_hal', 'nota_kepada', 'nota_pembuka', 'nota_isi', 'nota_penutup'],
               },
@@ -823,6 +929,7 @@ ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
             (parsed.nota_penutup || '').trim() ||
             'Demikian disampaikan, mohon arahan Bapak Sekjen lebih lanjut. Atas perhatian dan kerja sama Bapak Sekjen, kami ucapkan terima kasih.',
           rekomendasi_kode_klasifikasi: parsed.rekomendasi_kode_klasifikasi || 'PR.01.02',
+          lampiran_generated: normalizeLampiranGenerated(parsed.lampiran_generated),
         };
       }
     } catch (err) {

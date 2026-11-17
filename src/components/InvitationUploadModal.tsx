@@ -545,6 +545,23 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
                     className="w-full p-2 bg-white border border-slate-300 rounded-md"
                   />
                 </div>
+
+                {extractedUndangan.lampiran_generated && extractedUndangan.lampiran_generated.length > 0 && (
+                  <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg space-y-1.5">
+                    <div className="font-bold text-amber-900 text-[11px] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Lampiran Otomatis yang Akan Dibuat ({extractedUndangan.lampiran_generated.length} Berkas):</span>
+                    </div>
+                    <ul className="list-disc pl-4 text-[11px] text-amber-900 space-y-0.5">
+                      {extractedUndangan.lampiran_generated.map((l, idx) => (
+                        <li key={idx}>
+                          <strong>{l.judul}</strong> ({l.tipe_konten === 'tabel' ? 'Tabel / Rundown' : l.tipe_konten === 'daftar_undangan' ? 'Daftar Undangan' : 'Teks'}
+                          {l.include_internal_pusaka ? ' + Seluruh Internal Pusaka' : ''})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -756,6 +773,24 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
                       placeholder="Redaksi klausul Untuk..."
                     />
                   </div>
+
+                  {((extractedData.pegawai_nama_list && extractedData.pegawai_nama_list.length > 0) ||
+                    (extractedData.lampiran_generated && extractedData.lampiran_generated.length > 0)) && (
+                    <div className="p-2.5 bg-teal-50/70 border border-teal-200 rounded-lg space-y-1.5">
+                      {extractedData.pegawai_nama_list && extractedData.pegawai_nama_list.length > 0 && (
+                        <div className="text-[11px] text-teal-900">
+                          <strong>Pegawai Ditugaskan Otomatis ({extractedData.pegawai_nama_list.length} Orang):</strong>{' '}
+                          {extractedData.pegawai_nama_list.join(', ')}
+                        </div>
+                      )}
+                      {extractedData.lampiran_generated && extractedData.lampiran_generated.length > 0 && (
+                        <div className="text-[11px] text-teal-900">
+                          <strong>Lampiran Tambahan ({extractedData.lampiran_generated.length} Berkas):</strong>{' '}
+                          {extractedData.lampiran_generated.map((l) => l.judul).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

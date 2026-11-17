@@ -60,6 +60,14 @@ export interface NomorSuratRecord {
   pejabat_id?: string;
 }
 
+export interface GeneratedLampiranDraft {
+  judul: string;
+  sub_judul?: string;
+  tipe_konten?: 'daftar_undangan' | 'tabel' | 'teks';
+  isi: string;
+  include_internal_pusaka?: boolean;
+}
+
 export interface EkstraksiUndangan {
   nama_acara: string;
   nomor_surat_undangan: string;
@@ -78,6 +86,8 @@ export interface EkstraksiUndangan {
   narasi_dasar?: string;
   narasi_untuk?: string;
   keterangan_tambahan?: string;
+  pegawai_nama_list?: string[];
+  lampiran_generated?: GeneratedLampiranDraft[];
 }
 
 export interface EkstraksiSuratUndangan {
@@ -91,6 +101,9 @@ export interface EkstraksiSuratUndangan {
   undangan_pembuka: string;
   undangan_kepada: string;
   undangan_sifat?: string;
+  undangan_lampiran?: string;
+  rekomendasi_kode_klasifikasi?: string;
+  lampiran_generated?: GeneratedLampiranDraft[];
 }
 
 export interface EkstraksiNotaDinas {
@@ -104,6 +117,7 @@ export interface EkstraksiNotaDinas {
   nota_penutup: string;
   rekomendasi_kode_klasifikasi?: string;
   tipologi?: 'ND_SDM' | 'ND_KEBIJAKAN' | 'ND_ANGGARAN' | 'ND_KOORDINASI' | 'ND_FASILITAS';
+  lampiran_generated?: GeneratedLampiranDraft[];
 }
 
 export type JenisNaskah = 'TUGAS' | 'UNDANGAN' | 'NOTA_DINAS';
