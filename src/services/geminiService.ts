@@ -202,10 +202,10 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
    - Jelaskan isi pokok, maksud, dan tujuan diselenggarakannya kegiatan secara mendalam dan jelas.
 10. Kriteria atau Sasaran Peserta:
     - Kriteria peserta atau jabatan pegawai yang diminta hadir (contoh: "Pejabat Administrator/Pengawas dan Analis Kebijakan yang membidangi regulasi dan pemetaan digital").
-11. Rekomendasi Klausul Naskah Dinas Resmi Komdigi:
-    - narasi_menimbang: Konsideran Menimbang resmi Surat Tugas yang mengaitkan urgensi acara dengan tugas fungsi Komdigi.
-    - narasi_dasar: Konsideran Dasar resmi naskah dinas mengutip Surat Undangan [Instansi] Nomor : [Nomor] tanggal [Tanggal].
-    - narasi_untuk: Diktum Untuk resmi yang merinci tugas pegawai, nama acara, waktu pelaksanaan, alamat lengkap tempat, dan kota.`;
+11. Rekomendasi Klausul Naskah Dinas Resmi Komdigi (DILARANG keras menulis placeholder seperti "[Instansi]", "[Nomor]", "[Tanggal]", atau "Tidak diketahui"):
+    - narasi_menimbang: Konsideran Menimbang resmi Surat Tugas yang mengaitkan urgensi acara dengan tugas fungsi Komdigi (diawali "Bahwa dalam rangka...").
+    - narasi_dasar: Jika ada surat undangan acuan, kutip resmi: "Surat Undangan <Nama Instansi> Nomor : <Nomor> tanggal <Tanggal>.". Jika hanya dari perintah/prompt pengguna tanpa surat undangan, tulis: "Arahan pimpinan terkait pelaksanaan kegiatan <Nama Kegiatan>."
+    - narasi_untuk: Diktum Untuk resmi yang merinci tugas pegawai, nama acara, tanggal/waktu pelaksanaan, dan lokasi/kota.`;
 
     const parts: any[] = [{ text: promptText }];
 
@@ -276,17 +276,27 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
         if (contentText) {
           const parsed = JSON.parse(contentText);
           const namaAcara = parsed.nama_acara || 'Kegiatan Rapat Kedinasan';
-          const nomorSurat = parsed.nomor_surat_undangan || '-';
-          const instansi = parsed.instansi_pengundang || 'Penyelenggara Kegiatan';
-          const tglSurat = parsed.tanggal_surat_undangan || new Date().toISOString().split('T')[0];
+          const rawNomor = (parsed.nomor_surat_undangan || '').trim();
+          const nomorSurat = !rawNomor || /tidak diketahui|undangan dari pengguna|\[nomor\]/i.test(rawNomor) ? '-' : rawNomor;
+          const rawInstansi = (parsed.instansi_pengundang || '').trim();
+          const instansi = !rawInstansi || /tidak diketahui|\[instansi\]/i.test(rawInstansi) ? 'Pusat Kebijakan Strategis' : rawInstansi;
+          const rawTglSurat = (parsed.tanggal_surat_undangan || '').trim();
+          const tglSurat = !rawTglSurat || /tidak diketahui|\[tanggal\]/i.test(rawTglSurat) ? new Date().toISOString().split('T')[0] : rawTglSurat;
           const tglMulai = parsed.tanggal_mulai || new Date().toISOString().split('T')[0];
           const tglSelesai = parsed.tanggal_selesai || tglMulai;
-          const waktu = parsed.waktu_pelaksanaan || '09.00 WIB s.d. Selesai';
+          const rawWaktu = (parsed.waktu_pelaksanaan || '').trim();
+          const waktu = !rawWaktu || /tidak diketahui/i.test(rawWaktu) ? '09.00 WIB s.d. Selesai' : rawWaktu;
           const lokasi = parsed.lokasi || 'Tempat Penyelenggara';
           const kota = parsed.kota_kegiatan || 'Jakarta Pusat';
           // Gunakan perihal_ringkasan jika tersedia, lalu perihal_undangan, lalu topik, lalu nama acara
           const perihal = parsed.perihal_ringkasan || parsed.perihal_undangan || parsed.topik || `Menghadiri ${namaAcara} di ${lokasi}`;
           const kriteriaPeserta = parsed.kriteria_peserta || 'Pegawai yang membidangi substansi kegiatan';
+          const cleanNarasiDasar =
+            parsed.narasi_dasar && !/\[(?:Instansi|Nomor|Tanggal)\]/i.test(parsed.narasi_dasar)
+              ? parsed.narasi_dasar
+              : nomorSurat !== '-'
+              ? `Surat Undangan ${instansi} Nomor : ${nomorSurat} tanggal ${tglSurat}.`
+              : `Arahan pimpinan perihal pelaksanaan kegiatan ${namaAcara}.`;
 
           return {
             nama_acara: namaAcara,
@@ -305,9 +315,7 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
             narasi_menimbang:
               parsed.narasi_menimbang ||
               `Bahwa dalam rangka mendukung kelancaran pelaksanaan dan arah kebijakan ${perihal}, perlu menugaskan pegawai untuk mengikuti kegiatan dimaksud.`,
-            narasi_dasar:
-              parsed.narasi_dasar ||
-              `Surat Undangan ${instansi} Nomor : ${nomorSurat} tanggal ${tglSurat}.`,
+            narasi_dasar: cleanNarasiDasar,
             narasi_untuk:
               parsed.narasi_untuk ||
               `Mengikuti kegiatan ${namaAcara} yang dilaksanakan pada ${waktu} bertempat di ${lokasi}, ${kota}.`,
@@ -323,7 +331,7 @@ BACА DAN ANALISA SELURUH BAGIAN DOKUMEN DENGAN TELITI:
     throw lastError || new Error('Semua model Gemini gagal merespons');
   } catch (err) {
     console.warn('Gemini AI extraction unavailable, performing smart local document intelligence:', err);
-    return smartLocalExtractSuratTugas(cleanText || textOrPrompt, fileAttachment?.name);
+    return smartLocalExtractSuratTugas(cleanText || textOrPrompt, fileAttachment?.name, userPrompt);
   }
 }
 
@@ -591,9 +599,9 @@ ${userPrompt ? `INSTRUKSI/PERINTAH KHUSUS DARI PENGGUNA (PRIORITASKAN & PATUHI I
 5. Tipe Tempat: "hybrid", "offline", atau "online"
 6. Tempat Fisik (Offline): Ruang rapat, nama gedung, dan alamat jika ada.
 7. Tempat Daring (Online): Link video conference jika ada.
-8. Paragraf Pengantar/Pembuka: Paragraf pengantar yang sopan sesuai tata naskah dinas Komdigi.
+8. Paragraf Pengantar/Pembuka: Paragraf pengantar resmi tata naskah dinas Komdigi (diawali "Dalam rangka..." atau "Menindaklanjuti...", TANPA kata "Dengan hormat,").
 9. Daftar Pihak yang Diundang (undangan_kepada): Daftar nama pejabat/satker yang diundang (format: "(Daftar Terlampir)\\ndi Tempat" atau rincian pejabat).
-10. Sifat Surat: "Biasa", "Segera", atau "Penting"`;
+10. Sifat Surat: Pilih tepat satu dari "Biasa", "Segera", atau "Sangat Segera"`;
 
       const parts: any[] = [{ text: prompt }];
       if (fileAttachment && fileAttachment.base64) {
@@ -734,8 +742,9 @@ ATURAN GAYA BAHASA & SUDUT PANDANG WAJIB:
      Jabatan : {Jabatan} (atau "Jabatan Baru" untuk Tukin/SPMT; atau "Jabatan saat ini" & "Jabatan yang dituju" untuk Ujikom)
      Unit Kerja : Pusat Kebijakan Strategis
    - Format 2 (Rekapitulasi Kolektif / Rincian Anggaran & Matriks Reviu): Jika >1 pegawai atau rincian angka anggaran/RO.
-   - Format 3 (Poin Narasi Eksekutif — WAJIB untuk Dokumen Laporan, Kajian, Policy Brief, Evaluasi, Reviu Regulasi):
-     Ekstrak secara MENDALAM seluruh temuan nyata, angka statistik/kuantitatif, pasal/regulasi yang dibahas, kendala, dan rekomendasi spesifik dari dokumen! JANGAN menulis kalimat umum/klise.
+   - Format 3 (Poin Narasi Eksekutif — untuk Dokumen Laporan, Kajian, Policy Brief, Evaluasi, Reviu Regulasi):
+     Jika ada dokumen laporan terlampir, ekstrak secara MENDALAM seluruh temuan nyata, angka statistik/kuantitatif, pasal/regulasi yang dibahas, kendala, dan rekomendasi spesifik dari dokumen!
+     Jika HANYA dari perintah/prompt pengguna tanpa dokumen lampiran, JANGAN mengarang angka fiktif atau nama proyek fiktif seperti "Aplikasi Y" / "Modul X" — susunlah poin-poin substantif yang formal dan relevan sesuai topik perintah pengguna.
      Sajikan dalam 3 s.d. 5 poin bernomor angka Arab (1., 2., 3., ...) dengan format persis:
      1. **{Judul_Aspek_Kajian_atau_Temuan}**: {Narasi temuan utama, angka capaian kuantitatif/fakta spesifik dari dokumen, serta dampak/rekomendasi tindak lanjut}.
      2. **{Judul_Aspek_Kedua}**: {Narasi temuan spesifik dari dokumen...}.
