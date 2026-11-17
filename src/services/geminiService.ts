@@ -98,6 +98,49 @@ export function parseIndonesianDate(text: string): string | null {
 }
 
 /**
+ * Transkrip cepat seluruh teks dari PDF pindaian atau gambar menggunakan Gemini Multimodal AI
+ * agar kolom "Teks Transkrip Dokumen" langsung terisi akurat.
+ */
+export async function transcribeDocumentWithGemini(
+  fileAttachment: FileAttachment,
+  apiKeyOverride?: string
+): Promise<string> {
+  const apiKey = apiKeyOverride?.trim() || getStoredGeminiApiKey()?.trim() || '';
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || !fileAttachment?.base64) {
+    return '';
+  }
+  try {
+    const ai = createGeminiClient(apiKey);
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: 'Transkripsikan seluruh isi teks penting, judul, nomor surat, tanggal, angka statistik, poin-poin temuan, dan rekomendasi dari dokumen terlampir secara lengkap, rapi, dan akurat dalam bahasa aslinya (tanpa komentar tambahan).',
+            },
+            {
+              inlineData: {
+                mimeType: fileAttachment.mimeType || 'application/pdf',
+                data: fileAttachment.base64,
+              },
+            },
+          ],
+        },
+      ],
+      config: {
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+    return (response.text || '').trim();
+  } catch (err) {
+    console.warn('Gemini document transcription failed:', err);
+    return '';
+  }
+}
+
+/**
  * Service to extract structured invitation data using Gemini AI model.
  * Supports text input and multimodal file attachments (PDF/Images).
  * Falls back to deep heuristic parser if API key is not provided or fails.
@@ -113,7 +156,9 @@ export async function extractInvitationWithGemini(
     getStoredGeminiApiKey()?.trim() ||
     '';
 
-  const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
+  const cleanText = (textOrPrompt || '')
+    .replace(/^\[(?:Dokumen|Gambar)[^\]]*\]\s*/i, '')
+    .trim();
 
   // If no Gemini API key or set to placeholder, use deep heuristic extraction with prompt support
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
@@ -527,7 +572,9 @@ export async function extractSuratUndanganWithGemini(
   userPrompt?: string
 ): Promise<EkstraksiSuratUndangan> {
   const apiKey = apiKeyOverride?.trim() || getStoredGeminiApiKey()?.trim() || '';
-  const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
+  const cleanText = (textOrPrompt || '')
+    .replace(/^\[(?:Dokumen|Gambar)[^\]]*\]\s*/i, '')
+    .trim();
 
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {
@@ -621,7 +668,9 @@ export async function extractNotaDinasWithGemini(
   userPrompt?: string
 ): Promise<EkstraksiNotaDinas> {
   const apiKey = apiKeyOverride?.trim() || getStoredGeminiApiKey()?.trim() || '';
-  const cleanText = (textOrPrompt || '').replace(/^\[Dokumen terlampir:[^\]]*\]\s*/i, '').trim();
+  const cleanText = (textOrPrompt || '')
+    .replace(/^\[(?:Dokumen|Gambar)[^\]]*\]\s*/i, '')
+    .trim();
 
   if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {

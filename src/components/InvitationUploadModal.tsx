@@ -30,8 +30,8 @@ import {
   extractInvitationWithGemini,
   extractSuratUndanganWithGemini,
   extractNotaDinasWithGemini,
+  transcribeDocumentWithGemini,
   getStoredGeminiApiKey,
-  setStoredGeminiApiKey,
   FileAttachment,
 } from '../services/geminiService';
 import { formatNumberedPoints, combineNotaDinasSections } from '../services/naskahFormatter';
@@ -133,11 +133,12 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
           readAsBase64(file),
         ]);
 
-        setUploadedFile({
+        const pdfAttachment: FileAttachment = {
           base64: base64Data,
           mimeType: 'application/pdf',
           name: file.name,
-        });
+        };
+        setUploadedFile(pdfAttachment);
 
         // Ekstraksi teks PDF secara paralel super cepat
         const { text, pageCount, isScanned } = await extractTextFromPdfBuffer(arrayBuffer.slice(0));
@@ -145,9 +146,25 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
           setInputText(text);
           setTextExtractionMsg(`✓ Berhasil memindai ${pageCount} halaman PDF secara instan`);
         } else if (hasAiKey) {
-          // Jika menggunakan Gemini Multimodal via .env, PDF scan/gambar langsung dibaca secara native oleh AI tanpa menunggu OCR lambat!
-          setInputText((prev) => prev || `[Dokumen PDF Pindaian (${pageCount} halaman): ${file.name} — Siap dianalisis langsung oleh Multimodal AI]`);
-          setTextExtractionMsg(`✓ Berkas PDF (${pageCount} halaman) siap dianalisis langsung oleh Multimodal AI`);
+          // PDF pindaian/gambar: transkrip langsung via Gemini Multimodal AI agar Teks Transkrip Dokumen terisi lengkap!
+          setTextExtractionMsg(`Mentranskrip isi PDF pindaian (${pageCount} halaman) via Gemini AI...`);
+          const aiTranscribed = await transcribeDocumentWithGemini(pdfAttachment, envApiKey);
+          if (aiTranscribed) {
+            setInputText(aiTranscribed);
+            setTextExtractionMsg(`✓ Berhasil mentranskrip ${pageCount} halaman PDF via Gemini Multimodal AI`);
+          } else {
+            // Fallback OCR lokal jika transkrip Gemini gagal
+            setTextExtractionMsg(`Memindai teks gambar/scan (${Math.min(pageCount, 5)} halaman) via OCR...`);
+            const ocrResult = await extractOcrFromScannedPdf(arrayBuffer.slice(0), file.name, 5, (m) =>
+              setTextExtractionMsg(m)
+            );
+            if (ocrResult.text && ocrResult.text.trim()) {
+              setInputText(ocrResult.text);
+              setTextExtractionMsg(`✓ Berhasil memindai teks ${ocrResult.pagesProcessed} halaman via OCR`);
+            } else {
+              setTextExtractionMsg(`✓ Berkas PDF (${pageCount} halaman) siap dianalisis oleh AI`);
+            }
+          }
         } else {
           // Fallback OCR cepat (maksimal 5 halaman pertama agar selesai cepat)
           setTextExtractionMsg(`Memindai teks gambar/scan (${ Math.min(pageCount, 5) } halaman)...`);
@@ -188,16 +205,24 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
       } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif)$/i.test(fileNameLower)) {
         const base64Data = await readAsBase64(file);
         const fullDataUrl = `data:${file.type || 'image/jpeg'};base64,${base64Data}`;
-        setUploadedFile({
+        const imgAttachment: FileAttachment = {
           base64: base64Data,
           mimeType: file.type || 'image/jpeg',
           name: file.name,
-        });
+        };
+        setUploadedFile(imgAttachment);
 
         if (hasAiKey) {
-          // Langsung siap dianalisis secara native oleh Gemini Multimodal Vision dalam < 0.1 detik!
-          setInputText((prev) => prev || `[Gambar Dokumen Terlampir: ${file.name} — Siap dianalisis langsung oleh Multimodal Vision AI]`);
-          setTextExtractionMsg('✓ Gambar dokumen siap dianalisis langsung oleh Multimodal AI');
+          setTextExtractionMsg('Membaca isi teks dari gambar via Gemini Vision AI...');
+          const aiTranscribed = await transcribeDocumentWithGemini(imgAttachment, envApiKey);
+          if (aiTranscribed) {
+            setInputText(aiTranscribed);
+            setTextExtractionMsg('✓ Berhasil mentranskrip teks gambar via Gemini Vision AI');
+          } else {
+            const ocrText = await performOcrOnImageFile(fullDataUrl, (m) => setTextExtractionMsg(m));
+            setInputText(ocrText || `[Gambar Dokumen Terlampir: ${file.name}]`);
+            setTextExtractionMsg(ocrText ? '✓ Berhasil mentranskrip teks gambar via OCR' : '✓ Gambar siap dianalisis oleh AI');
+          }
         } else {
           setTextExtractionMsg('Membaca teks dari gambar pindaian...');
           try {
@@ -775,7 +800,7 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
                 className="flex items-center space-x-1.5 text-xs font-semibold bg-teal-800 hover:bg-teal-900 text-white px-4 py-2 rounded-md shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5 text-teal-300" />
-                <span>{isProcessing ? 'Menganalisa Dokumen...' : 'Analisa &amp; Screening Inti Dokumen'}</span>
+                <span>{isProcessing ? 'Menganalisa Dokumen...' : 'Analisa & Screening Inti Dokumen'}</span>
               </button>
             ) : (
               <button
