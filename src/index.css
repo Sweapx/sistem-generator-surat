@@ -1,9 +1,19 @@
 @import "tailwindcss";
 
-/* Base font */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SOFT NEO-BRUTALISM (CORPORATE EDITION) DESIGN SYSTEM
+   - Soft Canvas: #F8F9FA
+   - Slate Dark Outline & Text: #1E293B (1.5px - 2px solid)
+   - Hard Shadow (3D Offset): 3px 3px 0px #1E293B / 4px 4px 0px #1E293B
+   - Headings: Space Grotesk | Body/Form: Plus Jakarta Sans
+   - Kertas Surat Resmi (#surat-tugas-document): Terisolasi 100%
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 @layer base {
   html {
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    color: #1E293B;
+    background-color: #F8F9FA;
   }
 
   * {
@@ -11,8 +21,86 @@
   }
 
   body {
-    @apply bg-slate-100 text-slate-900 antialiased;
+    background-color: #F8F9FA;
+    color: #1E293B;
+    @apply antialiased;
   }
+
+  /* Tipografi Space Grotesk untuk seluruh Header / Judul Section di luar kertas dokumen */
+  h1:not(#surat-tugas-document *),
+  h2:not(#surat-tugas-document *),
+  h3:not(#surat-tugas-document *),
+  h4:not(#surat-tugas-document *),
+  .nb-heading {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ─── Kartu Modular & Panel Formulir (Card-Based Neo-Brutalism) ─── */
+.nb-card,
+.lg\:col-span-5 > div.bg-white,
+.lg\:col-span-5 > div.bg-amber-50 {
+  border: 2px solid #1E293B !important;
+  border-radius: 8px !important;
+  box-shadow: 4px 4px 0px #1E293B !important;
+}
+
+/* ─── Form Controls (Input, Select, Textarea) di luar kertas surat ─── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *),
+select:not(#surat-tugas-document *),
+textarea:not(#surat-tugas-document *) {
+  border: 1.5px solid #1E293B !important;
+  border-radius: 6px !important;
+  color: #1E293B !important;
+  font-weight: 500;
+  transition: box-shadow 0.12s ease, transform 0.08s ease, background-color 0.12s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *):focus,
+select:not(#surat-tugas-document *):focus,
+textarea:not(#surat-tugas-document *):focus {
+  background-color: #FFFFFF !important;
+  box-shadow: 3px 3px 0px #1E293B !important;
+  outline: none !important;
+}
+
+/* ─── Tombol Taktil & Responsif (Efek Tombol "Masuk" Saat Ditekan) ─── */
+button:not(#surat-tugas-document *):not(.nb-flat) {
+  border: 1.5px solid #1E293B !important;
+  border-radius: 6px !important;
+  box-shadow: 2.5px 2.5px 0px #1E293B;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.12s ease;
+}
+
+button:not(#surat-tugas-document *):not(.nb-flat):hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0px #1E293B;
+}
+
+button:not(#surat-tugas-document *):not(.nb-flat):active:not(:disabled) {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 0px 0px 0px #1E293B !important;
+}
+
+button:not(#surat-tugas-document *):not(.nb-flat):disabled {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* ─── Bingkai Kanvas Pratinjau & Kertas A4 di Layar ─── */
+.preview-scroll-container {
+  background-color: #E2E8F0 !important;
+  background-image: radial-gradient(#94A3B8 1px, transparent 1px);
+  background-size: 16px 16px;
+  border: 2px solid #1E293B !important;
+  border-radius: 8px !important;
+  box-shadow: 4px 4px 0px #1E293B !important;
+}
+
+#surat-tugas-document .print-page {
+  border: 2px solid #1E293B;
+  box-shadow: 6px 6px 0px #1E293B;
 }
 
 /* ─── Panel Kiri Form: scroll independen ─────────────────── */

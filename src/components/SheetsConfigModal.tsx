@@ -137,28 +137,28 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[6px_6px_0px_#1E293B] w-full max-w-xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 pt-4 pb-3.5 border-b-2 border-[#1E293B] bg-[#F8F9FA]">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-md bg-[#A7F3D0] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center">
               {isSheetsConfigured() ? (
-                <Wifi className="w-4.5 h-4.5 text-emerald-700" />
+                <Wifi className="w-4.5 h-4.5 text-[#1E293B]" />
               ) : (
-                <WifiOff className="w-4.5 h-4.5 text-amber-600" />
+                <WifiOff className="w-4.5 h-4.5 text-[#1E293B]" />
               )}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">
+              <h2 className="text-sm font-bold text-[#1E293B]">
                 Konfigurasi Google Sheets
               </h2>
-              <p className="text-xs text-slate-500">Sinkronisasi nomor surat & database pegawai</p>
+              <p className="text-xs text-slate-600 font-medium">Sinkronisasi nomor surat & database pegawai</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+            className="p-1.5 rounded-md bg-white hover:bg-[#FFE4E6] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

@@ -1379,7 +1379,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F8F9FA] text-[#1E293B] flex flex-col font-sans">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -1394,12 +1394,12 @@ export function App() {
       {/* Sync Status Bar */}
       {(isSyncingSheets || lastSyncMsg) && (
         <div
-          className={`w-full text-center text-[11px] py-1 px-4 no-print print:hidden ${
+          className={`w-full text-center text-[11px] font-bold py-1.5 px-4 no-print print:hidden border-b-2 border-[#1E293B] ${
             isSyncingSheets
-              ? 'bg-teal-50 text-teal-700 border-b border-teal-200'
+              ? 'bg-[#99F6E4] text-[#1E293B]'
               : lastSyncMsg.includes('Gagal') || lastSyncMsg.includes('gagal')
-              ? 'bg-amber-50 text-amber-700 border-b border-amber-200'
-              : 'bg-emerald-50 text-emerald-700 border-b border-emerald-200'
+              ? 'bg-[#FEF08A] text-[#1E293B]'
+              : 'bg-[#A7F3D0] text-[#1E293B]'
           }`}
         >
           {isSyncingSheets ? (
@@ -1415,7 +1415,7 @@ export function App() {
                   href={lastSavedDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-bold underline hover:text-teal-950 inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-white/70 px-2 py-0.5 rounded shadow-2xs"
+                  className="font-bold underline hover:bg-[#1E293B] hover:text-white inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-white px-2 py-0.5 rounded border border-[#1E293B] shadow-[2px_2px_0px_#1E293B]"
                 >
                   <ExternalLink className="w-3 h-3" />
                   <span>Buka Dokumen (GDocs / Word)</span>
@@ -1432,22 +1432,22 @@ export function App() {
         {activeTab === 'generator' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:block print:w-full print:gap-0">
             {/* Left Column: Form & Selection (5 cols) */}
-            <div className="lg:col-span-5 space-y-4 no-print print:hidden" style={{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: '2px' }}>
+            <div className="lg:col-span-5 space-y-4 no-print print:hidden" style={{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: '6px', paddingBottom: '8px' }}>
               {/* Banner Mode Edit di Kolom Form */}
               {editingRecord && (
-                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-900 shadow-2xs">
+                <div className="bg-[#FEF08A] border-2 border-[#1E293B] rounded-lg p-3.5 flex items-center justify-between text-xs text-[#1E293B] shadow-[4px_4px_0px_#1E293B]">
                   <div>
-                    <div className="font-bold flex items-center space-x-1.5 text-amber-900">
-                      <Edit3 className="w-4 h-4 text-amber-700" />
+                    <div className="font-bold flex items-center space-x-1.5 text-[#1E293B]">
+                      <Edit3 className="w-4 h-4 text-[#1E293B]" />
                       <span>Mode Edit Surat Tugas #{editingRecord.nomor_urut}</span>
                     </div>
-                    <div className="text-[11px] text-amber-800 mt-0.5">
+                    <div className="text-[11px] text-slate-800 mt-0.5 font-medium">
                       {editingRecord.nomor_lengkap} • Nomor urut tetap dipertahankan
                     </div>
                   </div>
                   <button
                     onClick={handleCancelEdit}
-                    className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+                    className="px-2.5 py-1 bg-white hover:bg-[#FFE4E6] text-[#1E293B] border-[1.5px] border-[#1E293B] rounded-md text-xs font-bold cursor-pointer transition-colors shadow-[2px_2px_0px_#1E293B]"
                   >
                     Batal Edit
                   </button>
@@ -1455,18 +1455,18 @@ export function App() {
               )}
 
               {/* Selector Jenis Naskah Dinas */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-2">
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-1 pb-1.5 flex items-center justify-between">
+              <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] p-2.5">
+                <div className="text-[11px] font-bold text-[#1E293B] uppercase tracking-wider px-1 pb-2 flex items-center justify-between" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   <span>Pilih Jenis Naskah Dinas:</span>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => handleChangeJenisNaskah('TUGAS')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
                       (form.jenis_naskah || 'TUGAS') === 'TUGAS'
-                        ? 'bg-teal-900 text-white shadow-xs'
-                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                        ? 'bg-[#99F6E4] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
+                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
                     }`}
                   >
                     <FileText className="w-3.5 h-3.5" />
@@ -1476,10 +1476,10 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => handleChangeJenisNaskah('UNDANGAN')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
                       form.jenis_naskah === 'UNDANGAN'
-                        ? 'bg-amber-600 text-white shadow-xs'
-                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                        ? 'bg-[#FDE68A] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
+                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
                     }`}
                   >
                     <Mail className="w-3.5 h-3.5" />
@@ -1489,10 +1489,10 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => handleChangeJenisNaskah('NOTA_DINAS')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
                       form.jenis_naskah === 'NOTA_DINAS'
-                        ? 'bg-indigo-700 text-white shadow-xs'
-                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200/60'
+                        ? 'bg-[#C7D2FE] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
+                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
                     }`}
                   >
                     <ScrollText className="w-3.5 h-3.5" />
@@ -1503,19 +1503,19 @@ export function App() {
 
               {/* Card Klasifikasi & Nomor Surat (Disembunyikan untuk Surat Tugas karena kode tetap KP.01.06) */}
               {form.jenis_naskah && form.jenis_naskah !== 'TUGAS' && (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b-2 border-[#1E293B]/15 pb-2.5">
                     <div className="flex items-center space-x-2">
                       <span
-                        className={`w-5 h-5 rounded flex items-center justify-center font-bold text-xs ${
+                        className={`w-6 h-6 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center font-bold text-xs text-[#1E293B] ${
                           form.jenis_naskah === 'NOTA_DINAS'
-                            ? 'bg-indigo-100 text-indigo-800'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-[#C7D2FE]'
+                            : 'bg-[#FDE68A]'
                         }`}
                       >
                         <Tag className="w-3 h-3" />
                       </span>
-                      <h3 className="text-sm font-bold text-slate-900">
+                      <h3 className="text-sm font-bold text-[#1E293B]">
                         Penomoran &amp; Klasifikasi Surat
                       </h3>
                     </div>
@@ -1523,10 +1523,10 @@ export function App() {
                     <button
                       type="button"
                       onClick={() => setIsKlasifikasiModalOpen(true)}
-                      className={`flex items-center space-x-1 text-white text-xs font-semibold px-2.5 py-1 rounded-md shadow-xs transition-all cursor-pointer ${
+                      className={`flex items-center space-x-1 text-[#1E293B] text-xs font-bold px-2.5 py-1 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-all cursor-pointer ${
                         form.jenis_naskah === 'NOTA_DINAS'
-                          ? 'bg-indigo-600 hover:bg-indigo-700'
-                          : 'bg-amber-600 hover:bg-amber-700'
+                          ? 'bg-[#C7D2FE] hover:bg-[#A5B4FC]'
+                          : 'bg-[#FDE68A] hover:bg-[#FCD34D]'
                       }`}
                     >
                       <Tag className="w-3 h-3" />

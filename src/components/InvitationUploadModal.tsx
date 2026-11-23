@@ -331,17 +331,17 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-lg shadow-[6px_6px_0px_#1E293B] max-w-3xl w-full overflow-hidden border-2 border-[#1E293B] animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center space-x-2.5">
+        <div className="px-6 py-4 border-b-2 border-[#1E293B] flex items-center justify-between bg-[#F8F9FA]">
+          <div className="flex items-center space-x-3">
             <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+              className={`w-9 h-9 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center font-bold text-xs text-[#1E293B] ${
                 mode === 'UNDANGAN'
-                  ? 'bg-amber-100 text-amber-800'
+                  ? 'bg-[#FDE68A]'
                   : mode === 'NOTA_DINAS'
-                  ? 'bg-indigo-100 text-indigo-800'
-                  : 'bg-teal-100 text-teal-800'
+                  ? 'bg-[#C7D2FE]'
+                  : 'bg-[#99F6E4]'
               }`}
             >
               {mode === 'UNDANGAN' ? (
@@ -353,15 +353,15 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
               )}
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">{modalTitle}</h2>
-              <p className="text-xs text-slate-500">{modalDesc}</p>
+              <h2 className="text-base font-bold text-[#1E293B]">{modalTitle}</h2>
+              <p className="text-xs text-slate-600 font-medium">{modalDesc}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-md hover:bg-slate-100 cursor-pointer"
+            className="text-[#1E293B] hover:bg-[#FFE4E6] transition-colors p-1.5 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] bg-white cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -798,18 +798,18 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <div className="px-6 py-3.5 bg-[#F8F9FA] border-t-2 border-[#1E293B] flex items-center justify-between">
           {step === 'review' ? (
             <button
               type="button"
               onClick={() => setStep('input')}
-              className="text-xs text-slate-600 hover:text-slate-800 px-3 py-1.5 rounded font-medium cursor-pointer"
+              className="text-xs text-[#1E293B] bg-white hover:bg-slate-100 px-3 py-1.5 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] font-bold cursor-pointer"
             >
               &larr; Pindai Ulang Dokumen
             </button>
           ) : (
-            <div className="text-[11px] text-slate-500 font-medium flex items-center space-x-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <div className="text-[11px] text-[#1E293B] font-bold flex items-center space-x-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 border border-[#1E293B]"></span>
               <span>
                 {envApiKey && envApiKey !== 'YOUR_GEMINI_API_KEY_HERE'
                   ? 'Mode: Gemini AI Multimodal Deep Analysis (.env Aktif)'
@@ -818,11 +818,11 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
             </div>
           )}
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="text-xs text-slate-600 hover:bg-slate-200 px-3.5 py-1.5 rounded-md font-medium transition-colors cursor-pointer"
+              className="text-xs text-[#1E293B] bg-white hover:bg-slate-100 px-3.5 py-1.5 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] font-bold transition-colors cursor-pointer"
             >
               Batal
             </button>
@@ -832,18 +832,18 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
                 type="button"
                 onClick={handleRunExtraction}
                 disabled={isProcessing}
-                className="flex items-center space-x-1.5 text-xs font-semibold bg-teal-800 hover:bg-teal-900 text-white px-4 py-2 rounded-md shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center space-x-1.5 text-xs font-bold bg-[#99F6E4] hover:bg-[#5EEAD4] text-[#1E293B] px-4 py-2 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-colors cursor-pointer disabled:opacity-50"
               >
-                <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                <Sparkles className="w-3.5 h-3.5 text-[#1E293B]" />
                 <span>{isProcessing ? 'Menganalisa Dokumen...' : 'Analisa & Screening Inti Dokumen'}</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleConfirmAndApply}
-                className="flex items-center space-x-1.5 text-xs font-semibold bg-teal-800 hover:bg-teal-900 text-white px-4 py-2 rounded-md shadow-xs transition-colors cursor-pointer"
+                className="flex items-center space-x-1.5 text-xs font-bold bg-[#A7F3D0] hover:bg-[#6EE7B7] text-[#1E293B] px-4 py-2 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-colors cursor-pointer"
               >
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
+                <CheckCircle className="w-3.5 h-3.5 text-[#1E293B]" />
                 <span>
                   {mode === 'UNDANGAN'
                     ? 'Terapkan ke Surat Undangan'
