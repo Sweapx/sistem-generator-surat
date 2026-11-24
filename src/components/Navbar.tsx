@@ -1,4 +1,5 @@
 import {
+  Home,
   FileText,
   Database,
   CheckCircle2,
@@ -12,8 +13,8 @@ import {
 import { User } from '../types';
 
 interface NavbarProps {
-  activeTab: 'generator' | 'database';
-  setActiveTab: (tab: 'generator' | 'database') => void;
+  activeTab: 'home' | 'generator' | 'database';
+  setActiveTab: (tab: 'home' | 'generator' | 'database') => void;
   nextNomorLengkap: string;
   isSheetsConnected?: boolean;
   onOpenSheetsConfig?: () => void;
@@ -35,9 +36,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand */}
-          <div className="flex flex-col justify-center">
+          <div
+            onClick={() => setActiveTab('home')}
+            className="flex flex-col justify-center cursor-pointer group"
+            title="Kembali ke Beranda PUSAKA"
+          >
             <div className="flex items-center space-x-2.5">
-              <span className="nb-heading text-base font-bold text-[#1E293B] tracking-tight leading-tight">
+              <span className="nb-heading text-base font-bold text-[#1E293B] group-hover:underline tracking-tight leading-tight">
                 Sistem Generator Surat
               </span>
               <span className="text-[11px] bg-[#99F6E4] text-[#1E293B] px-2.5 py-0.5 rounded-md font-bold border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] tracking-wide">
@@ -51,6 +56,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Center Navigation Tabs */}
           <nav className="flex items-center gap-2 p-1.5 bg-[#F8F9FA] border-2 border-[#1E293B] rounded-lg shadow-[3px_3px_0px_#1E293B]">
+            <button
+              onClick={() => setActiveTab('home')}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs rounded-md cursor-pointer ${
+                activeTab === 'home'
+                  ? 'bg-[#99F6E4] text-[#1E293B] font-bold'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 font-semibold'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5 text-[#1E293B]" />
+              <span>Beranda</span>
+            </button>
+
             <button
               onClick={() => setActiveTab('generator')}
               className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs rounded-md cursor-pointer ${

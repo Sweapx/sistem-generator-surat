@@ -44,6 +44,7 @@ import {
 } from './data/initialData';
 import { Navbar } from './components/Navbar';
 import { LoginView } from './components/LoginView';
+import { HomeView, buildFormStateFromRecord } from './components/HomeView';
 import { InvitationUploadModal } from './components/InvitationUploadModal';
 import { SuratPreview } from './components/SuratPreview';
 import { DatabaseView } from './components/DatabaseView';
@@ -133,7 +134,7 @@ function saveToStorage<T>(key: string, value: T): void {
 }
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'generator' | 'database'>('generator');
+  const [activeTab, setActiveTab] = useState<'home' | 'generator' | 'database'>('home');
 
   // ─── Authentication & User State ───────────────────────────────────────────
   const [auth, setAuth] = useState<AuthState>(() => getCurrentAuth());
@@ -893,71 +894,87 @@ export function App() {
     setIsSavedToDB(false);
   };
 
-  // ─── Edit Surat Handlers ───────────────────────────────────────────────────
+  // ─── Edit Surat & Home Navigation Handlers ─────────────────────────────────
   const handleEditSurat = (rec: NomorSuratRecord) => {
     setEditingRecord(rec);
     setIsSavedToDB(false);
     setLastSavedDriveUrl(rec.drive_url || null);
 
-    if (rec.form_state) {
-      setForm(rec.form_state);
-    } else {
-      let matchedPegawaiIds: string[] = rec.pegawai_ids || [];
-      if (matchedPegawaiIds.length === 0 && rec.kepada && rec.kepada !== 'Daftar Terlampir') {
-        const names = rec.kepada.split(',').map((s) => s.trim().toLowerCase());
-        matchedPegawaiIds = pegawaiList
-          .filter((p) => names.some((n) => p.nama.toLowerCase().includes(n) || n.includes(p.nama.toLowerCase())))
-          .map((p) => p.id);
-      }
+    const reconstructed = buildFormStateFromRecord(
+      rec,
+      pegawaiList,
+      pejabatList,
+      simulatedMonth,
+      simulatedYear
+    );
+    setForm(reconstructed);
 
-      let matchedPejabatId = rec.pejabat_id || defaultPejabat.id;
-      if (!rec.pejabat_id && rec.penandatangan_nama) {
-        const pej = pejabatList.find((p) =>
-          p.nama.toLowerCase().includes(rec.penandatangan_nama!.toLowerCase())
-        );
-        if (pej) matchedPejabatId = pej.id;
-      }
+    setActiveTab('generator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-      let tanggalSurat = rec.tanggal || rec.tanggal_surat || new Date().toISOString().split('T')[0];
-      if (tanggalSurat && !/^\d{4}-\d{2}-\d{2}$/.test(tanggalSurat)) {
-        const d = new Date(tanggalSurat);
-        if (!isNaN(d.getTime())) {
-          tanggalSurat = d.toISOString().split('T')[0];
-        }
-      }
+  /**
+   * Opsi B pada kartu Recent di Beranda:
+   * Gunakan seluruh isi dokumen yang sudah diterbitkan sebagai Template Surat Baru
+   * (isi sama persis 100%, namun mendapat Nomor Urut berikutnya sebagai surat baru).
+   */
+  const handleDuplicateAsNewTemplate = (rec: NomorSuratRecord) => {
+    setEditingRecord(null);
+    setIsSavedToDB(false);
+    setLastSavedDriveUrl(null);
 
-      setForm({
-        nomor_urut: rec.nomor_urut,
-        tahun: rec.tahun || simulatedYear,
-        bulan: rec.bulan || simulatedMonth,
-        nomor_lengkap: rec.nomor_lengkap || `${rec.nomor_urut}/SJ.9/KP.01.06/${simulatedMonth}/${simulatedYear}`,
-        tanggal_surat: tanggalSurat,
-        kota_surat: 'Jakarta',
+    const reconstructed = buildFormStateFromRecord(
+      rec,
+      pegawaiList,
+      pejabatList,
+      simulatedMonth,
+      simulatedYear
+    );
+    const jenis = reconstructed.jenis_naskah || 'TUGAS';
+    const defaultKlas = getDefaultKlasifikasi(jenis);
+    const kode = reconstructed.kode_klasifikasi || defaultKlas.kode_lengkap;
+    const newNomorLengkap = formatNomorNaskah(
+      jenis,
+      nextNomorUrut,
+      kode,
+      simulatedMonth,
+      simulatedYear
+    );
 
-        nama_acara: rec.perihal || '',
-        nomor_surat_undangan: '',
-        tanggal_surat_undangan: '',
-        instansi_pengundang: '',
-        perihal_undangan: rec.perihal || '',
+    setForm({
+      ...reconstructed,
+      nomor_urut: nextNomorUrut,
+      bulan: simulatedMonth,
+      tahun: simulatedYear,
+      nomor_lengkap: newNomorLengkap,
+      tanggal_surat: new Date().toISOString().split('T')[0],
+      custom_tanggal_surat_text: undefined,
+    });
 
-        tanggal_mulai: '',
-        tanggal_selesai: '',
-        waktu_kegiatan: '',
-        hari_tanggal_pelaksanaan: '',
-        lokasi_kegiatan: rec.tujuan_lokasi || '',
-        kota_kegiatan: '',
-        tujuan_tugas: '',
-        pembebanan_anggaran:
-          'DIPA Sekretariat Jenderal Kementerian Komunikasi dan Digital Tahun Anggaran 2026',
+    setActiveTab('generator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-        selectedPegawaiIds: matchedPegawaiIds,
-        selectedPejabatId: matchedPejabatId,
-        kriteria_peserta: '',
-        konseptor: rec.konseptor || '',
-        ttd_image: undefined,
-      });
+  /**
+   * Mulai buat naskah dari Card Choice di Beranda (Manual atau langsung buka Modal AI)
+   */
+  const handleStartCreateFromHome = (jenis: JenisNaskah, openAiModal = false) => {
+    setEditingRecord(null);
+    setIsSavedToDB(false);
+    setLastSavedDriveUrl(null);
+    handleChangeJenisNaskah(jenis);
+    setActiveTab('generator');
+    if (openAiModal) {
+      setExtractionModalMode(jenis);
+      setIsExtractionModalOpen(true);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
+  const handleContinueDraftFromHome = (jenis: JenisNaskah) => {
+    setEditingRecord(null);
+    setIsSavedToDB(false);
+    handleChangeJenisNaskah(jenis);
     setActiveTab('generator');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1320,6 +1337,7 @@ export function App() {
       isAuthenticated: true,
       user,
     });
+    setActiveTab('home');
     if (user.nama && !form.konseptor) {
       setForm((prev) => ({
         ...prev,
@@ -1428,6 +1446,31 @@ export function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:m-0 print:max-w-none print:w-full">
+        {/* TAB 0: BERANDA (HOME WORKSPACE HUB) */}
+        {activeTab === 'home' && (
+          <HomeView
+            currentUser={auth.user}
+            nomorSuratList={nomorSuratList}
+            pegawaiList={pegawaiList}
+            pejabatList={pejabatList}
+            nextNomorUrut={nextNomorInfo.nomor_urut}
+            nextNomorLengkap={nextNomorInfo.nomor_lengkap}
+            simulatedMonth={simulatedMonth}
+            simulatedYear={simulatedYear}
+            isSheetsConnected={isSheetsConnected}
+            activeFormDraft={form}
+            onStartCreateNew={handleStartCreateFromHome}
+            onContinueDraft={handleContinueDraftFromHome}
+            onEditRecentRecord={handleEditSurat}
+            onDuplicateAsNewTemplate={handleDuplicateAsNewTemplate}
+            onOpenDatabase={() => {
+              setActiveTab('database');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onOpenSheetsConfig={() => setIsSheetsModalOpen(true)}
+          />
+        )}
+
         {/* TAB 1: PEMBUATAN SURAT TUGAS */}
         {activeTab === 'generator' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:block print:w-full print:gap-0">
