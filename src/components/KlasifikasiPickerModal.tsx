@@ -111,24 +111,24 @@ export const KlasifikasiPickerModal: React.FC<KlasifikasiPickerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-lg shadow-[6px_6px_0px_#1E293B] border-2 border-[#1E293B] w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2A27]/45 backdrop-blur-sm animate-fade-in">
+      <div className="bg-[#FCFBF8] rounded-2xl shadow-[0_20px_50px_-10px_rgba(43,42,39,0.18)] border border-[#E6E2D8] w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b-2 border-[#1E293B] bg-[#C7D2FE] text-[#1E293B] flex items-center justify-between">
+        <div className="p-5 border-b border-[#E6E2D8] bg-[#F6F4EF] text-[#2B2A27] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-white rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B]">
-              <Tag className="w-5 h-5 text-[#1E293B]" />
+            <div className="p-2.5 bg-[#EDF0F4] rounded-xl border border-[#D3DAE5]">
+              <Tag className="w-5 h-5 text-[#45546B]" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#1E293B]">Pilih Klasifikasi Nomor Surat</h2>
-              <p className="text-xs text-slate-700 font-semibold">
+              <h2 className="text-lg font-bold text-[#2B2A27]">Pilih Klasifikasi Nomor Surat</h2>
+              <p className="text-xs text-[#66625B] font-medium">
                 Tata Naskah Dinas Kementerian Komunikasi dan Digital RI
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-[#1E293B] bg-white hover:bg-[#FFE4E6] rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-colors cursor-pointer"
+            className="p-1.5 text-[#66625B] bg-[#FCFBF8] hover:bg-[#EAE6DD] hover:text-[#2B2A27] rounded-xl border border-[#E2DDD2] transition-colors cursor-pointer"
             title="Tutup Modal"
           >
             <X className="w-4 h-4" />

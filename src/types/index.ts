@@ -122,6 +122,8 @@ export interface EkstraksiNotaDinas {
 
 export type JenisNaskah = 'TUGAS' | 'UNDANGAN' | 'NOTA_DINAS';
 
+export type KopSuratTipe = 'pusaka' | 'sekjen' | 'djed';
+
 export interface KlasifikasiItem {
   kategori_utama: 'FASILITATIF' | 'SUBSTANTIF';
   kode_huruf: string;
@@ -134,8 +136,11 @@ export interface KlasifikasiItem {
 }
 
 export interface SuratTugasFormState {
-  // Jenis Naskah
+  // Jenis Naskah & Judul Kop Surat
   jenis_naskah?: JenisNaskah;
+  kop_tipe?: KopSuratTipe;
+  published_fingerprint?: string;
+  published_nomor_lengkap?: string;
 
   // Klasifikasi Nomor Surat
   kode_klasifikasi?: string;

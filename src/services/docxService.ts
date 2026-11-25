@@ -14,7 +14,7 @@ import {
   UnderlineType,
   VerticalAlign,
 } from 'docx';
-import { SuratTugasFormState, Pegawai, Pejabat, LampiranItem } from '../types';
+import { SuratTugasFormState, Pegawai, Pejabat, LampiranItem, KopSuratTipe } from '../types';
 import { inlineSegments, stripMarkup } from './richText';
 import { parseTableFromText, normalizeTableModel } from './tableService';
 
@@ -476,8 +476,82 @@ function parseHtmlTableToDocx(html: string): Table | null {
 
 // ─── Kop Surat Resmi Komdigi (Logo Kiri + Teks Kanan + Garis Ganda) ──────────
 
-async function buildKop(): Promise<(Paragraph | Table)[]> {
+async function buildKop(kopTipe: KopSuratTipe = 'pusaka'): Promise<(Paragraph | Table)[]> {
   const logoBytes = await fetchKomdigiLogoBytes();
+
+  const headerParagraphs: Paragraph[] =
+    kopTipe === 'sekjen'
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 20, after: 30 },
+            children: [t('KEMENTERIAN KOMUNIKASI DAN DIGITAL RI', { bold: true, size: 14.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 0 },
+            children: [t('SEKRETARIAT JENDERAL', { bold: true, size: 14.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 260, after: 20 },
+            children: [
+              t('Jl. Medan Merdeka Barat No. 9, Jakarta 10110 Telp./Fax. (021) 3503735 ', { size: 8.5 }),
+              t('www.komdigi.go.id', { size: 8.5, underline: true }),
+            ],
+          }),
+        ]
+      : kopTipe === 'djed'
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 10 },
+            children: [t('KEMENTERIAN KOMUNIKASI DAN DIGITAL RI', { bold: true, size: 14 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 10 },
+            children: [t('DIREKTORAT JENDERAL EKOSISTEM DIGITAL', { bold: true, size: 13.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 0 },
+            children: [t('SEKRETARIAT DIREKTORAT JENDERAL EKOSISTEM DIGITAL', { bold: true, size: 10.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 110, after: 20 },
+            children: [
+              t('Jl. Medan Merdeka Barat No. 9, Jakarta 10110 Telp./Fax. (021) 3503735 ', { size: 8.5 }),
+              t('www.komdigi.go.id', { size: 8.5, underline: true }),
+            ],
+          }),
+        ]
+      : [
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 10 },
+            children: [t('KEMENTERIAN KOMUNIKASI DAN DIGITAL RI', { bold: true, size: 14.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 10 },
+            children: [t('SEKRETARIAT JENDERAL', { bold: true, size: 14.5 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 0, after: 0 },
+            children: [t('PUSAT KEBIJAKAN STRATEGIS', { bold: true, size: 14 })],
+          }),
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 110, after: 20 },
+            children: [
+              t('Jl. Medan Merdeka Barat No. 9, Jakarta 10110 Telp./Fax. (021) 3503735 ', { size: 8.5 }),
+              t('www.komdigi.go.id', { size: 8.5, underline: true }),
+            ],
+          }),
+        ];
 
   const kopTable = new Table({
     width: { size: 9600, type: WidthType.DXA },
@@ -525,31 +599,7 @@ async function buildKop(): Promise<(Paragraph | Table)[]> {
               ...CELL_NO_BORDERS,
               bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 18, color: '000000' },
             },
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                spacing: { before: 0, after: 10 },
-                children: [t('KEMENTERIAN KOMUNIKASI DAN DIGITAL RI', { bold: true, size: 14.5 })],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                spacing: { before: 0, after: 10 },
-                children: [t('SEKRETARIAT JENDERAL', { bold: true, size: 14.5 })],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                spacing: { before: 0, after: 0 },
-                children: [t('PUSAT KEBIJAKAN STRATEGIS', { bold: true, size: 14 })],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.LEFT,
-                spacing: { before: 110, after: 20 },
-                children: [
-                  t('Jl. Medan Merdeka Barat No. 9, Jakarta 10110 Telp./Fax. (021) 3503735 ', { size: 8.5 }),
-                  t('www.komdigi.go.id', { size: 8.5, underline: true }),
-                ],
-              }),
-            ],
+            children: headerParagraphs,
           }),
         ],
       }),
@@ -637,7 +687,7 @@ export async function generateSuratTugasDocx(
   const children: (Paragraph | Table)[] = [];
 
   // Kop Surat
-  children.push(...(await buildKop()));
+  children.push(...(await buildKop(form.kop_tipe)));
 
   // Judul "SURAT TUGAS" — Arial 14pt bold underline
   children.push(
@@ -1038,7 +1088,7 @@ export async function generateSuratUndanganDocx(
   const children: (Paragraph | Table)[] = [];
 
   // Kop Surat (Logo Komdigi + Teks Kop + Garis Ganda)
-  children.push(...(await buildKop()));
+  children.push(...(await buildKop(form.kop_tipe)));
 
   // Header 2 Kolom: Kiri (Tabel 3 kolom Nomor/Sifat/Lampiran/Hal), Kanan (Jakarta, Tanggal)
   const leftMetaTable = new Table({
@@ -1622,7 +1672,7 @@ export async function generateNotaDinasDocx(
   const children: (Paragraph | Table)[] = [];
 
   // Kop Surat (Logo Komdigi + Teks Kop + Garis Ganda)
-  children.push(...(await buildKop()));
+  children.push(...(await buildKop(form.kop_tipe)));
 
   // Judul "NOTA DINAS" menggunakan font Arial 14pt
   children.push(

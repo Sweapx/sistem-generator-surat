@@ -484,52 +484,52 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   return (
     <div className="space-y-5">
       {/* ─── Sub-Tab Navigation & Search ──────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#1E293B] pb-3.5">
-        <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-lg border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E6E2D8] pb-3.5">
+        <div className="flex flex-wrap items-center gap-1 bg-[#EFECE5] p-1 rounded-xl border border-[#E2DDD2]">
           <button
             onClick={() => {
               setSubTab('nomor');
               setCurrentPage(1);
             }}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
               subTab === 'nomor'
-                ? 'bg-[#99F6E4] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                : 'text-slate-600 hover:text-[#1E293B] hover:bg-slate-100 border-[1.5px] border-transparent'
+                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
+                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
             }`}
           >
-            <Hash className="w-3.5 h-3.5 text-[#1E293B]" />
+            <Hash className="w-3.5 h-3.5 text-[#3D6356]" />
             <span>Arsip Nomor Surat (Sheets)</span>
-            <span className="text-[11px] text-[#1E293B] font-mono font-bold ml-1">
+            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
               ({nomorSuratList.length})
             </span>
           </button>
 
           <button
             onClick={() => setSubTab('kepegawaian')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
               subTab === 'kepegawaian'
-                ? 'bg-[#BAE6FD] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                : 'text-slate-600 hover:text-[#1E293B] hover:bg-slate-100 border-[1.5px] border-transparent'
+                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
+                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-[#1E293B]" />
+            <Users className="w-3.5 h-3.5 text-[#45546B]" />
             <span>Data Pegawai Pusaka</span>
-            <span className="text-[11px] text-[#1E293B] font-mono font-bold ml-1">
+            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
               ({pegawaiList.length})
             </span>
           </button>
 
           <button
             onClick={() => setSubTab('pejabat')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
               subTab === 'pejabat'
-                ? 'bg-[#FDE68A] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                : 'text-slate-600 hover:text-[#1E293B] hover:bg-slate-100 border-[1.5px] border-transparent'
+                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
+                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
             }`}
           >
-            <Award className="w-3.5 h-3.5 text-[#1E293B]" />
+            <Award className="w-3.5 h-3.5 text-[#9A6B3B]" />
             <span>Pejabat Penandatangan</span>
-            <span className="text-[11px] text-[#1E293B] font-mono font-bold ml-1">
+            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
               ({pejabatList.length})
             </span>
           </button>
@@ -537,15 +537,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
           {currentUser?.role === 'admin' && (
             <button
               onClick={() => setSubTab('pengguna')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
                 subTab === 'pengguna'
-                  ? 'bg-[#A7F3D0] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                  : 'text-slate-600 hover:text-[#1E293B] hover:bg-slate-100 border-[1.5px] border-transparent'
+                  ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
+                  : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#1E293B]" />
+              <ShieldCheck className="w-3.5 h-3.5 text-[#3D6356]" />
               <span>Kelola Akun Pengguna</span>
-              <span className="text-[11px] text-[#1E293B] font-mono font-bold ml-1">
+              <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
                 ({usersList.length})
               </span>
             </button>
@@ -554,7 +554,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
 
         {/* Global Search */}
         <div className="relative w-full sm:w-72">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#1E293B]" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#8A857C]" />
           <input
             type="text"
             placeholder={
@@ -569,7 +569,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full text-xs pl-8 pr-3 py-2 bg-white border-2 border-[#1E293B] rounded-md shadow-[2px_2px_0px_#1E293B] focus:outline-hidden font-medium"
+            className="w-full text-xs pl-8 pr-3 py-2 bg-[#FCFBF8] border border-[#DFDBD0] rounded-xl focus:outline-hidden font-medium"
           />
         </div>
       </div>
@@ -580,9 +580,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
       {subTab === 'nomor' && (
         <div className="space-y-3.5">
           {/* Filter Bar */}
-          <div className="bg-white p-3.5 rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B]">
-            <div className="flex items-center space-x-2 text-xs font-bold text-[#1E293B] mb-2.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              <Filter className="w-3.5 h-3.5 text-[#1E293B]" />
+          <div className="nn-card bg-[#FCFBF8] p-4 rounded-2xl">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-[#2B2A27] mb-2.5">
+              <Filter className="w-3.5 h-3.5 text-[#3D6356]" />
               <span>Filter Data Arsip:</span>
             </div>
 
@@ -708,10 +708,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
           </div>
 
           {/* Tabel Register Spreadsheet Kantor */}
-          <div className="bg-white rounded-lg border-2 border-[#1E293B] overflow-hidden shadow-[4px_4px_0px_#1E293B]">
+          <div className="nn-card bg-[#FCFBF8] rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#E2E8F0] border-b-2 border-[#1E293B] text-[#1E293B] font-bold uppercase text-[10.5px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <thead className="bg-[#F2EFE8] border-b border-[#E4DFD4] text-[#4A4741] font-semibold uppercase text-[10.5px]">
                   <tr>
                     <th className="py-2.5 px-3 whitespace-nowrap">NOMOR</th>
                     <th className="py-2.5 px-3 whitespace-nowrap">TANGGAL</th>

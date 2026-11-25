@@ -562,14 +562,14 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
     <div className="flex flex-col space-y-2.5 h-[calc(100vh-120px)] print:h-auto print:block print:space-y-0">
       {/* ─── BILAH TOMBOL AKSI (NON-SCROLLABLE / TETAP DI ATAS) ─────── */}
       <div className="action-bar-print-hide shrink-0 space-y-2">
-        {/* ─── Action Bar ─────────────────────────────────────────── */}
-        <div className="nb-card bg-white px-3.5 py-2.5 rounded-lg border-2 border-[#1E293B] flex flex-wrap items-center justify-between gap-2">
+        {/* ─── Action Bar (Natural Neutral Soft Floating Card) ──────────── */}
+        <div className="nn-card bg-[#FCFBF8] px-3.5 py-2.5 rounded-2xl border border-[#E6E2D8] flex flex-wrap items-center justify-between gap-2">
           {/* Kelompok Kiri: Utilitas Form & Pindai AI */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {isEditMode && onCancelEdit && (
               <button
                 onClick={onCancelEdit}
-                className="flex items-center space-x-1.5 bg-[#FFE4E6] hover:bg-[#FECDD3] text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#F9ECEA] hover:bg-[#F3DFDC] text-[#8C3B32] border border-[#ECCBC7] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Batalkan pengeditan dan kembali ke formulir surat baru"
               >
                 <RotateCcw className="w-3.5 h-3.5 shrink-0" />
@@ -581,7 +581,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onResetIsiPembuatan}
-                className="flex items-center space-x-1.5 bg-white hover:bg-slate-100 text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#4A4741] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Hapus semua isi form untuk memulai dari awal"
               >
                 <RefreshCw className="w-3.5 h-3.5 shrink-0" />
@@ -593,7 +593,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onGenerateGeneralTemplate}
-                className="flex items-center space-x-1.5 bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#4A4741] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Isi otomatis dengan template general sesuai jenis surat"
               >
                 <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -605,12 +605,12 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onOpenAiScanner}
-                className={`flex items-center space-x-1.5 text-[#1E293B] text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border cursor-pointer whitespace-nowrap ${
                   isNotaDinas
-                    ? 'bg-[#C7D2FE] hover:bg-[#A5B4FC]'
+                    ? 'bg-[#EDF0F4] hover:bg-[#E1E6EE] text-[#3B4A62] border-[#D3DAE5]'
                     : form.jenis_naskah === 'UNDANGAN'
-                    ? 'bg-[#FDE68A] hover:bg-[#FCD34D]'
-                    : 'bg-[#99F6E4] hover:bg-[#5EEAD4]'
+                    ? 'bg-[#F7EFE2] hover:bg-[#F0E3CE] text-[#7A542E] border-[#E8D6BA]'
+                    : 'bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] border-[#CDE0D6]'
                 }`}
                 title={
                   isNotaDinas
@@ -620,7 +620,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
                     : 'Pindai surat undangan atau ketik prompt AI untuk menyusun Surat Tugas otomatis'
                 }
               >
-                <Sparkles className="w-3.5 h-3.5 shrink-0 text-[#1E293B]" />
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
                 <span>
                   {isNotaDinas
                     ? 'Pindai Laporan (AI)'
@@ -633,10 +633,10 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
           </div>
 
           {/* Kelompok Kanan: Cetak, Unduh & Simpan */}
-          <div className="flex flex-wrap items-center gap-2 ml-auto">
+          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
             <button
               onClick={() => window.print()}
-              className="flex items-center space-x-1.5 bg-white hover:bg-slate-100 text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#3F3D38] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
               title="Cetak langsung ke printer atau Simpan sebagai PDF dari browser"
             >
               <Printer className="w-3.5 h-3.5 shrink-0" />
@@ -645,16 +645,16 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             <button
               onClick={onDownloadPdf}
               disabled={isGeneratingPdf}
-              className="flex items-center space-x-1.5 bg-[#BAE6FD] hover:bg-[#7DD3FC] text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-[#FAF8F4] hover:bg-[#EFECE4] text-[#2B2A27] border border-[#DDD8CC] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer disabled:opacity-50 whitespace-nowrap"
               title="Unduh dokumen langsung dalam format file PDF resmi"
             >
-              <Download className="w-3.5 h-3.5 shrink-0" />
+              <Download className="w-3.5 h-3.5 shrink-0 text-[#3D6356]" />
               <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
             </button>
             {onDownloadDocx && (
               <button
                 onClick={onDownloadDocx}
-                className="flex items-center space-x-1.5 bg-[#DDD6FE] hover:bg-[#C4B5FD] text-[#1E293B] text-xs font-bold px-2.5 py-1.5 rounded-md cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#EDF0F4] hover:bg-[#E1E6EE] text-[#3B4A62] border border-[#D3DAE5] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Unduh dokumen dalam format Microsoft Word (.docx)"
               >
                 <FileText className="w-3.5 h-3.5 shrink-0" />
@@ -664,12 +664,12 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             <button
               onClick={onSaveToDatabase}
               disabled={isSaved}
-              className={`flex items-center space-x-1.5 text-xs font-bold px-3 py-1.5 rounded-md cursor-pointer whitespace-nowrap ${
+              className={`flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap ${
                 isSaved
-                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                  ? 'bg-[#E9E6DF] text-[#8A857C] border border-[#DCD7CB] cursor-not-allowed'
                   : isEditMode
-                  ? 'bg-[#FDE68A] hover:bg-[#FCD34D] text-[#1E293B]'
-                  : 'bg-[#A7F3D0] hover:bg-[#6EE7B7] text-[#1E293B]'
+                  ? 'bg-[#9A6B3B] hover:bg-[#82582E] text-[#FAF9F6] shadow-[0_2px_6px_rgba(154,107,59,0.2)]'
+                  : 'bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] shadow-[0_2px_6px_rgba(61,99,86,0.2)]'
               }`}
             >
               <FileCheck className="w-3.5 h-3.5 shrink-0" />
@@ -688,9 +688,9 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
 
         {/* Banner Mode Edit Dokumen */}
         {isEditMode && (
-          <div className="action-bar-print-hide flex items-center justify-between bg-amber-50 border border-amber-300 text-amber-900 px-3.5 py-2 rounded-lg text-xs">
+          <div className="action-bar-print-hide flex items-center justify-between bg-[#F7EFE2] border border-[#E8D6BA] text-[#6E4B26] px-3.5 py-2 rounded-xl text-xs">
             <div className="flex items-center space-x-2">
-              <span className="font-bold text-amber-800 uppercase tracking-wide">✏️ Mode Edit:</span>
+              <span className="font-bold uppercase tracking-wide">✏️ Mode Edit:</span>
               <span>
                 Anda sedang mengedit naskah <strong>{form.nomor_lengkap}</strong>. Nomor urut surat tetap dipertahankan.
               </span>
@@ -698,7 +698,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             {onCancelEdit && (
               <button
                 onClick={onCancelEdit}
-                className="text-xs font-semibold text-amber-800 hover:text-amber-950 underline ml-2 cursor-pointer"
+                className="text-xs font-semibold text-[#6E4B26] hover:text-[#4A3117] underline ml-2 cursor-pointer"
               >
                 Kembali ke Surat Baru
               </button>
@@ -754,7 +754,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             position: 'relative',
           }}
         >
-          {/* ── KOP SURAT RESMI KOMDIGI (Baris alamat dibuat ke bawah mepet garis) ── */}
+          {/* ── KOP SURAT RESMI KOMDIGI (3 Opsi Unit: Pusaka, Sekjen, atau Ditjen Ekosistem Digital) ── */}
           <div className="kop-container" style={{ display: 'flex', alignItems: 'stretch', gap: '14px', marginBottom: '1px' }}>
             <img
               src="/komdigi_logo.png"
@@ -768,49 +768,117 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             />
 
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div>
-                <div
-                  style={{
-                    fontFamily: 'Arial, sans-serif',
-                    fontWeight: 'bold',
-                    fontSize: count === 3 ? '14pt' : '15pt',
-                    lineHeight: '1.2',
-                    color: '#000',
-                    letterSpacing: '0.01em',
-                  }}
-                >
-                  KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+              {form.kop_tipe === 'sekjen' ? (
+                <div style={{ paddingTop: '4px' }}>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '14pt' : '15pt',
+                      lineHeight: '1.25',
+                      color: '#000',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '14pt' : '15pt',
+                      lineHeight: '1.25',
+                      marginTop: '4px',
+                      color: '#000',
+                    }}
+                  >
+                    SEKRETARIAT JENDERAL
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily: 'Arial, sans-serif',
-                    fontWeight: 'bold',
-                    fontSize: count === 3 ? '14pt' : '15pt',
-                    lineHeight: '1.2',
-                    color: '#000',
-                  }}
-                >
-                  SEKRETARIAT JENDERAL
+              ) : form.kop_tipe === 'djed' ? (
+                <div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '13.8pt' : '14.5pt',
+                      lineHeight: '1.22',
+                      color: '#000',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '13.4pt' : '14pt',
+                      lineHeight: '1.22',
+                      color: '#000',
+                    }}
+                  >
+                    DIREKTORAT JENDERAL EKOSISTEM DIGITAL
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '10.3pt' : '10.8pt',
+                      lineHeight: '1.25',
+                      marginTop: '1px',
+                      whiteSpace: 'nowrap',
+                      color: '#000',
+                    }}
+                  >
+                    SEKRETARIAT DIREKTORAT JENDERAL EKOSISTEM DIGITAL
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily: 'Arial, sans-serif',
-                    fontWeight: 'bold',
-                    fontSize: count === 3 ? '13.5pt' : '14.5pt',
-                    lineHeight: '1.2',
-                    color: '#000',
-                  }}
-                >
-                  PUSAT KEBIJAKAN STRATEGIS
+              ) : (
+                <div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '14pt' : '15pt',
+                      lineHeight: '1.2',
+                      color: '#000',
+                      letterSpacing: '0.01em',
+                    }}
+                  >
+                    KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '14pt' : '15pt',
+                      lineHeight: '1.2',
+                      color: '#000',
+                    }}
+                  >
+                    SEKRETARIAT JENDERAL
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'Arial, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: count === 3 ? '13.5pt' : '14.5pt',
+                      lineHeight: '1.2',
+                      color: '#000',
+                    }}
+                  >
+                    PUSAT KEBIJAKAN STRATEGIS
+                  </div>
                 </div>
-              </div>
+              )}
               <div
                 className="kop-alamat-line"
                 style={{
                   fontFamily: 'Arial, sans-serif',
                   fontSize: count === 3 ? '8.2pt' : '8.6pt',
                   lineHeight: '1.15',
-                  marginTop: '12px',
+                  marginTop: '10px',
                   marginBottom: '0px',
                   paddingBottom: '0px',
                   color: '#000',

@@ -17,7 +17,6 @@ import {
   Clock,
   ArrowRight,
   Hash,
-  Users,
   Wifi,
   WifiOff,
   FileCheck2,
@@ -49,12 +48,60 @@ interface HomeViewProps {
   simulatedYear: number;
   isSheetsConnected: boolean;
   activeFormDraft: SuratTugasFormState;
+  isSavedToDB?: boolean;
+  editingRecord?: NomorSuratRecord | null;
   onStartCreateNew: (jenis: JenisNaskah, openAiModal?: boolean) => void;
   onContinueDraft: (jenis: JenisNaskah) => void;
   onEditRecentRecord: (rec: NomorSuratRecord) => void;
   onDuplicateAsNewTemplate: (rec: NomorSuratRecord) => void;
   onOpenDatabase: () => void;
   onOpenSheetsConfig: () => void;
+}
+
+/**
+ * Hitung sidik jari (fingerprint) isi pokok draf naskah untuk mendeteksi secara akurat
+ * apakah draf yang tersimpan di perangkat sudah diterbitkan & disimpan ke database/Sheets.
+ */
+export function getDraftPublishFingerprint(f: SuratTugasFormState): string {
+  const jenis = f.jenis_naskah || 'TUGAS';
+  const kop = f.kop_tipe || 'pusaka';
+  if (jenis === 'UNDANGAN') {
+    return [
+      'UND',
+      kop,
+      (f.undangan_hal || '').trim(),
+      (f.undangan_kepada || '').trim(),
+      (f.undangan_hari_tanggal || f.hari_tanggal_pelaksanaan || '').trim(),
+      (f.undangan_waktu || '').trim(),
+      (f.undangan_agenda || '').trim(),
+      (f.undangan_tempat_offline || '').trim(),
+      (f.undangan_tempat_online || '').trim(),
+    ].join('||');
+  }
+  if (jenis === 'NOTA_DINAS') {
+    return [
+      'ND',
+      kop,
+      (f.nota_hal || '').trim(),
+      (f.nota_kepada || '').trim(),
+      (f.nota_dari || '').trim(),
+      (f.nota_isi || '').trim(),
+      (f.nota_pembuka || '').trim(),
+    ].join('||');
+  }
+  return [
+    'ST',
+    kop,
+    (f.nama_acara || '').trim(),
+    (f.nomor_surat_undangan || '').trim(),
+    (f.instansi_pengundang || '').trim(),
+    (f.tanggal_mulai || '').trim(),
+    (f.lokasi_kegiatan || '').trim(),
+    (f.menimbang_custom || '').trim(),
+    (f.dasar_custom || '').trim(),
+    (f.untuk_custom || '').trim(),
+    (f.selectedPegawaiIds || []).join(','),
+  ].join('||');
 }
 
 /**
@@ -121,6 +168,7 @@ export function buildFormStateFromRecord(
 
   return {
     jenis_naskah: jenisNaskah,
+    kop_tipe: 'pusaka',
     kode_klasifikasi: kodeKlas,
     kategori_klasifikasi: rec.kategori_klasifikasi || defaultKlas.kategori_utama,
     uraian_klasifikasi: defaultKlas.uraian,
@@ -182,7 +230,7 @@ export function buildFormStateFromRecord(
 
 /**
  * Komponen Miniatur Kertas A4 (794x1123px) yang diskalakan secara presisi
- * sehingga menampilkan isi surat sama persis seperti di layar Generator & hasil terbitan.
+ * sehingga menampilkan isi surat beserta opsi Kop Surat sama persis seperti dokumen terbitan.
  */
 const MiniA4Preview: React.FC<{
   form: SuratTugasFormState;
@@ -191,6 +239,7 @@ const MiniA4Preview: React.FC<{
   scale?: number;
 }> = ({ form, pegawaiList, pejabatList, scale = 0.275 }) => {
   const jenis = form.jenis_naskah || 'TUGAS';
+  const kopTipe = form.kop_tipe || 'pusaka';
   const selectedPegawai = useMemo(
     () => pegawaiList.filter((p) => (form.selectedPegawaiIds || []).includes(p.id)),
     [pegawaiList, form.selectedPegawaiIds]
@@ -294,7 +343,7 @@ const MiniA4Preview: React.FC<{
           transformOrigin: 'top left',
         }}
       >
-        {/* KOP SURAT RESMI KOMDIGI */}
+        {/* KOP SURAT RESMI KOMDIGI (3 OPSI) */}
         <div style={{ display: 'flex', alignItems: 'stretch', gap: '14px', marginBottom: '1px' }}>
           <img
             src="/komdigi_logo.png"
@@ -302,17 +351,40 @@ const MiniA4Preview: React.FC<{
             style={{ width: '130px', height: 'auto', display: 'block', flexShrink: 0 }}
           />
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.2', color: '#000' }}>
-                KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+            {kopTipe === 'sekjen' ? (
+              <div style={{ paddingTop: '4px' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.25', color: '#000' }}>
+                  KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.25', marginTop: '4px', color: '#000' }}>
+                  SEKRETARIAT JENDERAL
+                </div>
               </div>
-              <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.2', color: '#000' }}>
-                SEKRETARIAT JENDERAL
+            ) : kopTipe === 'djed' ? (
+              <div>
+                <div style={{ fontWeight: 'bold', fontSize: '14.5pt', lineHeight: '1.22', color: '#000' }}>
+                  KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '14pt', lineHeight: '1.22', color: '#000' }}>
+                  DIREKTORAT JENDERAL EKOSISTEM DIGITAL
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '10.8pt', lineHeight: '1.25', whiteSpace: 'nowrap', color: '#000' }}>
+                  SEKRETARIAT DIREKTORAT JENDERAL EKOSISTEM DIGITAL
+                </div>
               </div>
-              <div style={{ fontWeight: 'bold', fontSize: '14.5pt', lineHeight: '1.2', color: '#000' }}>
-                PUSAT KEBIJAKAN STRATEGIS
+            ) : (
+              <div>
+                <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.2', color: '#000' }}>
+                  KEMENTERIAN KOMUNIKASI DAN DIGITAL RI
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '15pt', lineHeight: '1.2', color: '#000' }}>
+                  SEKRETARIAT JENDERAL
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '14.5pt', lineHeight: '1.2', color: '#000' }}>
+                  PUSAT KEBIJAKAN STRATEGIS
+                </div>
               </div>
-            </div>
+            )}
             <div style={{ fontSize: '8.6pt', lineHeight: '1.15', marginTop: '10px', color: '#000' }}>
               Jl. Medan Merdeka Barat No. 9, Jakarta 10110 Telp./Fax. (021) 3503735{' '}
               <span style={{ textDecoration: 'underline' }}>www.komdigi.go.id</span>
@@ -611,6 +683,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
   simulatedYear,
   isSheetsConnected,
   activeFormDraft,
+  isSavedToDB = false,
+  editingRecord = null,
   onStartCreateNew,
   onContinueDraft,
   onEditRecentRecord,
@@ -622,9 +696,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [recentSearch, setRecentSearch] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState<number>(8);
 
-  // Cek apakah ada draf lokal yang sedang dikerjakan dan memiliki isi
+  // Cek draf yang tersimpan di perangkat beserta status apakah draf tersebut SUDAH TERBIT atau BELUM TERBIT
   const savedDrafts = useMemo(() => {
-    const drafts: Array<{ jenis: JenisNaskah; form: SuratTugasFormState; title: string }> = [];
+    const drafts: Array<{
+      jenis: JenisNaskah;
+      form: SuratTugasFormState;
+      title: string;
+      isPublished: boolean;
+      matchedRecord?: NomorSuratRecord;
+    }> = [];
     const jenisList: JenisNaskah[] = ['TUGAS', 'UNDANGAN', 'NOTA_DINAS'];
 
     for (const j of jenisList) {
@@ -639,30 +719,109 @@ export const HomeView: React.FC<HomeViewProps> = ({
       }
 
       if (draftObj) {
+        const normalizedDraft: SuratTugasFormState = { ...draftObj, jenis_naskah: j };
         const hasContent =
           j === 'TUGAS'
             ? Boolean(
-                draftObj.nama_acara?.trim() ||
-                  draftObj.menimbang_custom?.trim() ||
-                  (draftObj.selectedPegawaiIds && draftObj.selectedPegawaiIds.length > 0)
+                normalizedDraft.nama_acara?.trim() ||
+                  normalizedDraft.menimbang_custom?.trim() ||
+                  (normalizedDraft.selectedPegawaiIds && normalizedDraft.selectedPegawaiIds.length > 0)
               )
             : j === 'UNDANGAN'
-            ? Boolean(draftObj.undangan_hal?.trim() || draftObj.undangan_agenda?.trim())
-            : Boolean(draftObj.nota_hal?.trim() || draftObj.nota_isi?.trim());
+            ? Boolean(normalizedDraft.undangan_hal?.trim() || normalizedDraft.undangan_agenda?.trim())
+            : Boolean(normalizedDraft.nota_hal?.trim() || normalizedDraft.nota_isi?.trim());
 
         if (hasContent) {
           const title =
             j === 'TUGAS'
-              ? draftObj.nama_acara || 'Draf Surat Tugas'
+              ? normalizedDraft.nama_acara || 'Draf Surat Tugas'
               : j === 'UNDANGAN'
-              ? draftObj.undangan_hal || 'Draf Surat Undangan'
-              : draftObj.nota_hal || 'Draf Nota Dinas';
-          drafts.push({ jenis: j, form: { ...draftObj, jenis_naskah: j }, title });
+              ? normalizedDraft.undangan_hal || 'Draf Surat Undangan'
+              : normalizedDraft.nota_hal || 'Draf Nota Dinas';
+
+          const draftFp = getDraftPublishFingerprint(normalizedDraft);
+          const isCurrentActiveTab = (activeFormDraft.jenis_naskah || 'TUGAS') === j;
+
+          // Cari apakah dokumen dengan sidik jari atau nomor_lengkap terbitan ini sudah ada di nomorSuratList
+          const matchedRecord = nomorSuratList.find((rec) => {
+            if (rec.form_state && getDraftPublishFingerprint(rec.form_state) === draftFp) {
+              return true;
+            }
+            if (
+              normalizedDraft.published_nomor_lengkap &&
+              rec.nomor_lengkap === normalizedDraft.published_nomor_lengkap &&
+              normalizedDraft.published_fingerprint === draftFp
+            ) {
+              return true;
+            }
+            // Cek kecocokan perihal & jenis jika dari data sinkronisasi
+            const recJenisRaw = (rec.jenis_naskah || rec.jenis || 'TUGAS').toUpperCase();
+            const recJenis: JenisNaskah = recJenisRaw.includes('UND')
+              ? 'UNDANGAN'
+              : recJenisRaw.includes('ND') || recJenisRaw.includes('NOTA')
+              ? 'NOTA_DINAS'
+              : 'TUGAS';
+            if (
+              recJenis === j &&
+              rec.perihal &&
+              title &&
+              rec.perihal.trim().toLowerCase() === title.trim().toLowerCase() &&
+              rec.nomor_lengkap === normalizedDraft.nomor_lengkap
+            ) {
+              return true;
+            }
+            return false;
+          });
+
+          const isPublished = Boolean(
+            matchedRecord ||
+              (normalizedDraft.published_fingerprint &&
+                normalizedDraft.published_fingerprint === draftFp) ||
+              (isCurrentActiveTab && isSavedToDB) ||
+              (isCurrentActiveTab &&
+                editingRecord &&
+                getDraftPublishFingerprint(
+                  buildFormStateFromRecord(
+                    editingRecord,
+                    pegawaiList,
+                    pejabatList,
+                    simulatedMonth,
+                    simulatedYear
+                  )
+                ) === draftFp)
+          );
+
+          const effectiveDisplayForm: SuratTugasFormState = isPublished
+            ? {
+                ...normalizedDraft,
+                nomor_lengkap:
+                  normalizedDraft.published_nomor_lengkap ||
+                  matchedRecord?.nomor_lengkap ||
+                  normalizedDraft.nomor_lengkap,
+              }
+            : normalizedDraft;
+
+          drafts.push({
+            jenis: j,
+            form: effectiveDisplayForm,
+            title,
+            isPublished,
+            matchedRecord,
+          });
         }
       }
     }
     return drafts;
-  }, [activeFormDraft]);
+  }, [
+    activeFormDraft,
+    nomorSuratList,
+    isSavedToDB,
+    editingRecord,
+    pegawaiList,
+    pejabatList,
+    simulatedMonth,
+    simulatedYear,
+  ]);
 
   // Urutkan dokumen terbitan dari yang paling baru (nomor_urut terbesar di atas)
   const sortedRecentRecords = useMemo(() => {
@@ -690,7 +849,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         return true;
       })
       .sort((a, b) => {
-        // Prioritaskan dokumen yang memiliki form_state lengkap atau nomor_urut terbaru
         const noA =
           typeof a.nomor_urut === 'number'
             ? a.nomor_urut
@@ -726,75 +884,77 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="space-y-8 pb-12">
       {/* ═══════════════════════════════════════════════════════════════════════
-          ZONA 1: HERO BANNER & STATUS RINGKAS
+          ZONA 1: HERO BANNER & STATUS RINGKAS (NATURAL NEUTRAL)
       ═══════════════════════════════════════════════════════════════════════ */}
-      <section className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[6px_6px_0px_#1E293B] p-5 sm:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+      <section className="nn-card bg-[#FCFBF8] rounded-2xl border border-[#E6E2D8] p-6 sm:p-7">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           {/* Kiri: Sapaan & Identitas Sistem */}
-          <div className="space-y-2">
-            <div className="inline-flex items-center space-x-2 bg-[#99F6E4] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] px-3 py-1 rounded-md text-xs font-bold text-[#1E293B]">
-              <span>🏛️ PUSAT KEBIJAKAN STRATEGIS &bull; KOMDIGI RI</span>
+          <div className="space-y-2.5">
+            <div className="inline-flex items-center space-x-2 bg-[#EBF2EE] border border-[#CDE0D6] px-3 py-1 rounded-full text-[11px] font-semibold text-[#2F5246]">
+              <span>🏛️ Pusat Kebijakan Strategis &bull; Komdigi RI</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#1E293B] tracking-tight">
-              Selamat Bertugas, {currentUser.nama}!
+            <h1 className="text-xl sm:text-2xl font-bold text-[#2B2A27] tracking-tight">
+              Selamat Bertugas, {currentUser.nama}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-2xl leading-relaxed">
-              Pilih jenis naskah dinas yang ingin Anda buat hari ini, gunakan asisten{' '}
-              <strong className="text-[#1E293B]">Multimodal AI</strong> untuk menyusun surat dari berkas/prompt, atau lanjutkan dokumen terakhir dengan sekali klik.
+            <p className="text-xs sm:text-sm text-[#66625B] font-normal max-w-2xl leading-relaxed">
+              Pilih jenis naskah dinas yang ingin Anda susun hari ini, gunakan asisten{' '}
+              <strong className="text-[#2B2A27] font-semibold">Multimodal AI</strong> untuk menyusun surat dari berkas atau prompt, maupun lanjutkan pekerjaan terakhir dengan nyaman.
             </p>
           </div>
 
-          {/* Kanan: Quick Stats Badges */}
+          {/* Kanan: Quick Stats Soft Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
-            <div className="bg-[#FEF08A] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] rounded-lg p-3">
-              <div className="text-[10.5px] font-bold uppercase text-slate-700 flex items-center space-x-1">
-                <Hash className="w-3.5 h-3.5 text-[#1E293B]" />
-                <span>Nomor Urut Berikutnya</span>
+            <div className="bg-[#F6F3EC] border border-[#E5DFD3] rounded-xl p-3.5">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#757067] flex items-center space-x-1">
+                <Hash className="w-3.5 h-3.5 text-[#3D6356]" />
+                <span>Nomor Berikutnya</span>
               </div>
-              <div className="text-xl font-bold text-[#1E293B] font-mono mt-0.5">
+              <div className="text-xl font-bold text-[#2B2A27] font-mono mt-1">
                 #{nextNomorUrut}
               </div>
-              <div className="text-[10px] font-mono font-semibold text-slate-700 truncate mt-0.5" title={nextNomorLengkap}>
+              <div className="text-[10px] font-mono text-[#757067] truncate mt-0.5" title={nextNomorLengkap}>
                 {nextNomorLengkap}
               </div>
             </div>
 
             <div
               onClick={onOpenDatabase}
-              className="bg-[#BAE6FD] hover:bg-[#7DD3FC] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] rounded-lg p-3 cursor-pointer transition-colors"
+              className="bg-[#F6F3EC] hover:bg-[#EFECE3] border border-[#E5DFD3] rounded-xl p-3.5 cursor-pointer transition-colors"
               title="Klik untuk membuka Buku Agenda & Database"
             >
-              <div className="text-[10.5px] font-bold uppercase text-slate-700 flex items-center space-x-1">
-                <Database className="w-3.5 h-3.5 text-[#1E293B]" />
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#757067] flex items-center space-x-1">
+                <Database className="w-3.5 h-3.5 text-[#4B5E73]" />
                 <span>Total Arsip Naskah</span>
               </div>
-              <div className="text-xl font-bold text-[#1E293B] font-mono mt-0.5">
-                {stats.total} <span className="text-xs font-sans font-bold">Surat</span>
+              <div className="text-xl font-bold text-[#2B2A27] font-mono mt-1">
+                {stats.total} <span className="text-xs font-sans font-semibold text-[#66625B]">Surat</span>
               </div>
-              <div className="text-[10px] font-bold text-slate-800 mt-0.5">
+              <div className="text-[10px] font-medium text-[#66625B] mt-0.5">
                 {stats.st} ST &bull; {stats.und} UND &bull; {stats.nd} ND
               </div>
             </div>
 
             <div
               onClick={onOpenSheetsConfig}
-              className={`col-span-2 sm:col-span-1 border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] rounded-lg p-3 cursor-pointer transition-colors ${
-                isSheetsConnected ? 'bg-[#A7F3D0] hover:bg-[#6EE7B7]' : 'bg-[#FFE4E6] hover:bg-[#FECDD3]'
+              className={`col-span-2 sm:col-span-1 border rounded-xl p-3.5 cursor-pointer transition-colors ${
+                isSheetsConnected
+                  ? 'bg-[#EBF2EE]/80 hover:bg-[#E1EDE6] border-[#CDE0D6]'
+                  : 'bg-[#F7EFE2]/80 hover:bg-[#F0E4D1] border-[#E8D6BA]'
               }`}
               title="Klik untuk konfigurasi Google Sheets & Google Drive"
             >
-              <div className="text-[10.5px] font-bold uppercase text-slate-700 flex items-center space-x-1">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#5E5A52] flex items-center space-x-1">
                 {isSheetsConnected ? (
-                  <Wifi className="w-3.5 h-3.5 text-[#1E293B]" />
+                  <Wifi className="w-3.5 h-3.5 text-[#3D6356]" />
                 ) : (
-                  <WifiOff className="w-3.5 h-3.5 text-[#1E293B]" />
+                  <WifiOff className="w-3.5 h-3.5 text-[#9A6B3B]" />
                 )}
                 <span>Sinkronisasi Cloud</span>
               </div>
-              <div className="text-sm font-bold text-[#1E293B] mt-1">
+              <div className="text-sm font-bold text-[#2B2A27] mt-1">
                 {isSheetsConnected ? 'Sheets & Drive Aktif' : 'Mode Lokal Browser'}
               </div>
-              <div className="text-[10px] font-semibold text-slate-700 mt-0.5">
+              <div className="text-[10px] font-medium text-[#66625B] mt-0.5">
                 {pegawaiList.length} Pegawai &bull; {pejabatList.length} Pejabat
               </div>
             </div>
@@ -805,54 +965,52 @@ export const HomeView: React.FC<HomeViewProps> = ({
       {/* ═══════════════════════════════════════════════════════════════════════
           ZONA 2: CARD CHOICE JENIS SURAT ("MULAI BUAT NASKAH DINAS BARU")
       ═══════════════════════════════════════════════════════════════════════ */}
-      <section className="space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-[#1E293B] flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-md bg-[#1E293B] text-white flex items-center justify-center text-xs font-bold">
-                1
-              </span>
-              <span>Pilih Jenis Naskah Dinas yang Ingin Dibuat</span>
-            </h2>
-            <p className="text-xs text-slate-600 font-medium mt-0.5">
-              Klik kartu untuk memulai dari lembar formulir manual, atau gunakan tombol AI untuk membuat naskah lengkap beserta lampirannya dari prompt/berkas.
-            </p>
-          </div>
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-[#2B2A27] flex items-center space-x-2.5">
+            <span className="w-6 h-6 rounded-full bg-[#3D6356] text-[#FAF9F6] flex items-center justify-center text-xs font-semibold">
+              1
+            </span>
+            <span>Pilih Jenis Naskah Dinas yang Ingin Dibuat</span>
+          </h2>
+          <p className="text-xs text-[#66625B] mt-0.5 ml-8">
+            Mulai dari formulir manual yang terstruktur, atau gunakan tombol AI untuk menyusun surat beserta lampirannya secara otomatis.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* CARD 1: SURAT TUGAS */}
-          <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[5px_5px_0px_#1E293B] flex flex-col justify-between overflow-hidden transition-transform hover:-translate-y-0.5">
+          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#99F6E4] border-b-2 border-[#1E293B] px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-md bg-white border-2 border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-[#1E293B]" />
+              <div className="bg-[#EBF2EE]/75 border-b border-[#DCE8E1] px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#CDE0D6] shadow-2xs flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-[#3D6356]" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white border border-[#1E293B] rounded text-[#1E293B]">
+                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#CDE0D6] rounded-md text-[#2F5246]">
                       KODE: KP.01.06
                     </span>
-                    <h3 className="text-base font-bold text-[#1E293B] mt-0.5">Surat Tugas</h3>
+                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Surat Tugas</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-slate-700">
-                <p className="leading-relaxed font-medium">
-                  Naskah penugasan resmi pegawai Pusaka untuk menghadiri rapat, dinas luar, forum koordinasi, atau kegiatan kedinasan.
+              <div className="p-5 space-y-3 text-xs text-[#59554E]">
+                <p className="leading-relaxed">
+                  Naskah penugasan resmi pegawai untuk menghadiri rapat, dinas luar, forum koordinasi, atau kegiatan kedinasan.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#1E293B]">
+                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                    <span>1–3 Pegawai otomatis pas 1 halaman A4</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
+                    <span>1–3 Pegawai otomatis proporsional 1 halaman A4</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
                     <span>&gt;3 Pegawai otomatis membuat Tabel Lampiran</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
                     <span>Ekstraksi surat undangan masuk via AI</span>
                   </li>
                 </ul>
@@ -863,7 +1021,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('TUGAS', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#99F6E4] hover:bg-[#5EEAD4] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(61,99,86,0.18)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Surat Tugas</span>
@@ -871,47 +1029,47 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('TUGAS', true)}
-                className="flex items-center justify-center space-x-1.5 bg-white hover:bg-[#FEF08A] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EBF2EE] text-[#2F5246] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
                 title="Langsung buka pemindai dokumen / prompt AI untuk Surat Tugas"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5 text-[#3D6356]" />
                 <span>Via AI</span>
               </button>
             </div>
           </div>
 
           {/* CARD 2: SURAT UNDANGAN */}
-          <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[5px_5px_0px_#1E293B] flex flex-col justify-between overflow-hidden transition-transform hover:-translate-y-0.5">
+          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#FDE68A] border-b-2 border-[#1E293B] px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-md bg-white border-2 border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-[#1E293B]" />
+              <div className="bg-[#F7EFE2]/80 border-b border-[#EBDEC9] px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#E6D4B8] shadow-2xs flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-[#9A6B3B]" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white border border-[#1E293B] rounded text-[#1E293B]">
+                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#E6D4B8] rounded-md text-[#7A542E]">
                       INTERNAL / EKSTERNAL
                     </span>
-                    <h3 className="text-base font-bold text-[#1E293B] mt-0.5">Surat Undangan</h3>
+                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Surat Undangan</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-slate-700">
-                <p className="leading-relaxed font-medium">
-                  Naskah undangan rapat koordinasi, FGD, atau acara resmi yang diselenggarakan oleh Pusat Kebijakan Strategis.
+              <div className="p-5 space-y-3 text-xs text-[#59554E]">
+                <p className="leading-relaxed">
+                  Naskah undangan rapat koordinasi, FGD, atau acara resmi yang diselenggarakan oleh unit kerja.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#1E293B]">
+                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
                     <span>Mode tempat Luring (Offline), Daring, &amp; Hybrid</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
                     <span>Lampiran Daftar Pejabat/Tamu &amp; Rundown Acara</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
                     <span>Susun undangan + rundown otomatis via Prompt AI</span>
                   </li>
                 </ul>
@@ -922,7 +1080,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('UNDANGAN', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#FDE68A] hover:bg-[#FCD34D] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#8C6239] hover:bg-[#75502D] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(140,98,57,0.18)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Surat Undangan</span>
@@ -930,47 +1088,47 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('UNDANGAN', true)}
-                className="flex items-center justify-center space-x-1.5 bg-white hover:bg-[#FEF08A] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#F7EFE2] text-[#7A542E] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
                 title="Langsung buka pemindai TOR / prompt AI untuk Surat Undangan"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5 text-[#9A6B3B]" />
                 <span>Via AI</span>
               </button>
             </div>
           </div>
 
           {/* CARD 3: NOTA DINAS */}
-          <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[5px_5px_0px_#1E293B] flex flex-col justify-between overflow-hidden transition-transform hover:-translate-y-0.5">
+          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#C7D2FE] border-b-2 border-[#1E293B] px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-md bg-white border-2 border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center">
-                    <ScrollText className="w-5 h-5 text-[#1E293B]" />
+              <div className="bg-[#EDF0F4]/85 border-b border-[#DCE2EA] px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#D1D9E4] shadow-2xs flex items-center justify-center">
+                    <ScrollText className="w-5 h-5 text-[#45546B]" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white border border-[#1E293B] rounded text-[#1E293B]">
-                      KODE KLASIFIKASI CERDAS
+                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#D1D9E4] rounded-md text-[#3B4A62]">
+                      KLASIFIKASI CERDAS
                     </span>
-                    <h3 className="text-base font-bold text-[#1E293B] mt-0.5">Nota Dinas</h3>
+                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Nota Dinas</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-slate-700">
-                <p className="leading-relaxed font-medium">
-                  Naskah dinas internal untuk penyampaian laporan, telaah kebijakan, usulan, atau permohonan arahan kepada pimpinan.
+              <div className="p-5 space-y-3 text-xs text-[#59554E]">
+                <p className="leading-relaxed">
+                  Naskah dinas internal untuk penyampaian laporan, telaah kebijakan, usulan, atau permohonan arahan pimpinan.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#1E293B]">
+                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
                     <span>Rekomendasi kode klasifikasi Fasilitatif/Substantif</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
                     <span>Otomatisasi struktur Latar Belakang, Pokok &amp; Penutup</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
                     <span>Mendukung multi-halaman &amp; lampiran PDF merger</span>
                   </li>
                 </ul>
@@ -981,7 +1139,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('NOTA_DINAS', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#C7D2FE] hover:bg-[#A5B4FC] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#45546B] hover:bg-[#374457] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(69,84,107,0.18)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Nota Dinas</span>
@@ -989,10 +1147,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('NOTA_DINAS', true)}
-                className="flex items-center justify-center space-x-1.5 bg-white hover:bg-[#FEF08A] text-[#1E293B] font-bold text-xs py-2.5 px-3 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EDF0F4] text-[#3B4A62] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
                 title="Langsung buka pemindai laporan / prompt AI untuk Nota Dinas"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Sparkles className="w-3.5 h-3.5 text-[#45546B]" />
                 <span>Via AI</span>
               </button>
             </div>
@@ -1006,20 +1164,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-[#1E293B] flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-md bg-[#1E293B] text-white flex items-center justify-center text-xs font-bold">
+            <h2 className="text-base sm:text-lg font-bold text-[#2B2A27] flex items-center space-x-2.5">
+              <span className="w-6 h-6 rounded-full bg-[#3D6356] text-[#FAF9F6] flex items-center justify-center text-xs font-semibold">
                 2
               </span>
               <span>Dokumen Terakhir &amp; Draf Tersimpan (Live Preview)</span>
             </h2>
-            <p className="text-xs text-slate-600 font-medium mt-0.5">
-              Pratinjau di bawah menampilkan wujud asli naskah yang telah dibuat. Klik kartu untuk membuka &amp; mengedit isinya secara utuh, atau gunakan sebagai template surat baru.
+            <p className="text-xs text-[#66625B] mt-0.5 ml-8">
+              Pratinjau menampilkan wujud asli naskah dinas. Klik kartu untuk membuka &amp; mengedit isinya secara utuh, atau jadikan template surat baru.
             </p>
           </div>
 
           {/* Filter Tab & Search */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 bg-white p-1 rounded-lg border-2 border-[#1E293B] shadow-[2px_2px_0px_#1E293B]">
+            <div className="flex items-center gap-1 bg-[#EFECE5] p-1 rounded-xl border border-[#E2DDD2]">
               {(
                 [
                   ['ALL', 'Semua'],
@@ -1032,10 +1190,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   key={key}
                   type="button"
                   onClick={() => setRecentFilter(key)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer transition-all ${
                     recentFilter === key
-                      ? 'bg-[#FEF08A] text-[#1E293B] border border-[#1E293B]'
-                      : 'text-slate-600 hover:text-[#1E293B] hover:bg-slate-100'
+                      ? 'bg-[#FCFBF8] text-[#2B2A27] shadow-2xs border border-[#E4DFD4]'
+                      : 'text-[#66625B] hover:text-[#2B2A27]'
                   }`}
                 >
                   {label}
@@ -1044,28 +1202,28 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#1E293B] absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[#8A857C] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={recentSearch}
                 onChange={(e) => setRecentSearch(e.target.value)}
                 placeholder="Cari nomor / perihal..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-white border-2 border-[#1E293B] rounded-lg shadow-[2px_2px_0px_#1E293B] w-48 sm:w-56 font-medium"
+                className="pl-8 pr-3 py-1.5 text-xs bg-[#FCFBF8] border border-[#DFDBD0] rounded-xl w-48 sm:w-56 font-medium"
               />
             </div>
           </div>
         </div>
 
-        {/* SUB-SECTION: DRAF AKTIF BELUM DITERBITKAN (JIKA ADA) */}
+        {/* SUB-SECTION: DRAF SEDANG DIKERJAKAN (AUTO-SAVED DI PERANGKAT ANDA) */}
         {savedDrafts.length > 0 && !recentSearch && (
-          <div className="bg-[#FEF08A]/45 border-2 border-[#1E293B] rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-xs font-bold text-[#1E293B]">
-                <Clock className="w-4 h-4 text-[#1E293B]" />
+          <div className="bg-[#F9F6F0] border border-[#E5DFD3] rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-[0_2px_10px_rgba(43,42,39,0.025)]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center space-x-2 text-xs font-semibold text-[#2B2A27]">
+                <Clock className="w-4 h-4 text-[#3D6356]" />
                 <span>Draf Sedang Dikerjakan (Auto-Saved di Perangkat Anda)</span>
               </div>
-              <span className="text-[11px] font-semibold text-slate-700">
-                Klik untuk melanjutkan pengisian persis dari posisi terakhir
+              <span className="text-[11px] font-medium text-[#757067]">
+                Status terbit otomatis menyesuaikan saat dokumen disimpan
               </span>
             </div>
 
@@ -1073,28 +1231,36 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {savedDrafts
                 .filter((d) => recentFilter === 'ALL' || d.jenis === recentFilter)
                 .map((draft) => {
-                  const badgeBg =
+                  const badgePill =
                     draft.jenis === 'UNDANGAN'
-                      ? 'bg-[#FDE68A]'
+                      ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E6D4B8]'
                       : draft.jenis === 'NOTA_DINAS'
-                      ? 'bg-[#C7D2FE]'
-                      : 'bg-[#99F6E4]';
+                      ? 'bg-[#EDF0F4] text-[#3B4A62] border-[#D1D9E4]'
+                      : 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]';
                   const jenisLabel =
                     draft.jenis === 'UNDANGAN'
-                      ? 'Draf Undangan'
+                      ? 'Surat Undangan'
                       : draft.jenis === 'NOTA_DINAS'
-                      ? 'Draf Nota Dinas'
-                      : 'Draf Surat Tugas';
+                      ? 'Nota Dinas'
+                      : 'Surat Tugas';
+
+                  const handleOpenDraftItem = () => {
+                    if (draft.isPublished && draft.matchedRecord) {
+                      onEditRecentRecord(draft.matchedRecord);
+                    } else {
+                      onContinueDraft(draft.jenis);
+                    }
+                  };
 
                   return (
                     <div
                       key={`draft-${draft.jenis}`}
-                      onClick={() => onContinueDraft(draft.jenis)}
-                      className="group bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] hover:shadow-[6px_6px_0px_#1E293B] transition-all overflow-hidden flex flex-col cursor-pointer"
+                      onClick={handleOpenDraftItem}
+                      className="group nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl overflow-hidden flex flex-col cursor-pointer"
                     >
                       {/* Thumbnail Kertas A4 Asli */}
-                      <div className="bg-slate-200/80 border-b-2 border-[#1E293B] p-2.5 flex justify-center items-start relative overflow-hidden">
-                        <div className="border border-slate-400 shadow-xs bg-white overflow-hidden">
+                      <div className="bg-[#EAE6DD] border-b border-[#E4DFD4] p-3 flex justify-center items-start relative overflow-hidden">
+                        <div className="border border-[#DCD6C9] rounded-xs shadow-xs bg-white overflow-hidden">
                           <MiniA4Preview
                             form={draft.form}
                             pegawaiList={pegawaiList}
@@ -1103,21 +1269,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           />
                         </div>
                         <span
-                          className={`absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] text-[#1E293B] ${badgeBg}`}
+                          className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-2xs ${badgePill}`}
                         >
                           {jenisLabel}
                         </span>
-                        <span className="absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-[#FEF08A] border-[1.5px] border-[#1E293B] text-[#1E293B]">
-                          Belum Terbit
-                        </span>
+
+                        {draft.isPublished ? (
+                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#E3F1E8] text-[#23533D] border border-[#B8DAC5] shadow-2xs flex items-center space-x-1">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            <span>Sudah Terbit</span>
+                          </span>
+                        ) : (
+                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#FBF0DC] text-[#855828] border border-[#E8D2AC] shadow-2xs">
+                            Belum Terbit
+                          </span>
+                        )}
                       </div>
 
                       <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2.5">
                         <div>
-                          <div className="text-[11px] font-mono font-bold text-slate-600 truncate">
+                          <div className="text-[11px] font-mono font-medium text-[#757067] truncate">
                             {draft.form.nomor_lengkap || nextNomorLengkap}
                           </div>
-                          <h4 className="text-xs font-bold text-[#1E293B] line-clamp-2 mt-0.5 leading-snug">
+                          <h4 className="text-xs font-semibold text-[#2B2A27] line-clamp-2 mt-0.5 leading-snug">
                             {draft.title}
                           </h4>
                         </div>
@@ -1126,12 +1300,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onContinueDraft(draft.jenis);
+                            handleOpenDraftItem();
                           }}
-                          className={`w-full flex items-center justify-center space-x-1.5 py-1.5 px-2.5 rounded-md text-xs font-bold text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer ${badgeBg}`}
+                          className={`w-full flex items-center justify-center space-x-1.5 py-1.5 px-2.5 rounded-xl text-xs font-semibold border cursor-pointer ${
+                            draft.isPublished
+                              ? 'bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] border-[#CDE0D6]'
+                              : 'bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] border-transparent'
+                          }`}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
-                          <span>Lanjutkan Draf Ini</span>
+                          <span>{draft.isPublished ? 'Buka Dokumen Terbit' : 'Lanjutkan Draf Ini'}</span>
                         </button>
                       </div>
                     </div>
@@ -1143,12 +1321,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
         {/* GRID DOKUMEN RECENT YANG SUDAH DITERBITKAN */}
         {displayedRecords.length === 0 ? (
-          <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] p-10 text-center space-y-2">
-            <FileText className="w-8 h-8 text-slate-400 mx-auto" />
-            <div className="text-sm font-bold text-[#1E293B]">
+          <div className="nn-card bg-[#FCFBF8] rounded-2xl p-10 text-center space-y-2">
+            <FileText className="w-8 h-8 text-[#9E998E] mx-auto" />
+            <div className="text-sm font-semibold text-[#2B2A27]">
               Belum ada dokumen yang cocok dengan pencarian/filter
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#757067]">
               Silakan pilih salah satu kartu di atas untuk membuat naskah dinas baru.
             </p>
           </div>
@@ -1163,18 +1341,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 simulatedYear
               );
               const jenis = reconstructedForm.jenis_naskah || 'TUGAS';
-              const badgeBg =
+              const badgePill =
                 jenis === 'UNDANGAN'
-                  ? 'bg-[#FDE68A]'
+                  ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E6D4B8]'
                   : jenis === 'NOTA_DINAS'
-                  ? 'bg-[#C7D2FE]'
-                  : 'bg-[#99F6E4]';
+                  ? 'bg-[#EDF0F4] text-[#3B4A62] border-[#D1D9E4]'
+                  : 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]';
               const badgeCode =
                 jenis === 'UNDANGAN'
-                  ? 'SURAT UNDANGAN'
+                  ? 'Surat Undangan'
                   : jenis === 'NOTA_DINAS'
-                  ? 'NOTA DINAS'
-                  : 'SURAT TUGAS';
+                  ? 'Nota Dinas'
+                  : 'Surat Tugas';
 
               const titleText =
                 jenis === 'UNDANGAN'
@@ -1194,12 +1372,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div
                   key={rec.id}
                   onClick={() => onEditRecentRecord(rec)}
-                  className="group bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] hover:shadow-[6px_6px_0px_#1E293B] hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col justify-between cursor-pointer"
+                  className="group nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer"
                 >
                   {/* Atas: Live Miniature A4 Document */}
                   <div>
-                    <div className="bg-slate-200/80 border-b-2 border-[#1E293B] p-3 flex justify-center items-start relative overflow-hidden">
-                      <div className="border border-slate-400 shadow-xs bg-white overflow-hidden transition-transform duration-200 group-hover:scale-[1.02]">
+                    <div className="bg-[#EAE6DD] border-b border-[#E4DFD4] p-3 flex justify-center items-start relative overflow-hidden">
+                      <div className="border border-[#DCD6C9] rounded-xs shadow-[0_3px_12px_rgba(43,42,39,0.07)] bg-white overflow-hidden transition-transform duration-300 group-hover:scale-[1.02]">
                         <MiniA4Preview
                           form={reconstructedForm}
                           pegawaiList={pegawaiList}
@@ -1210,55 +1388,55 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       {/* Badge Jenis Naskah */}
                       <span
-                        className={`absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-bold border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] text-[#1E293B] ${badgeBg}`}
+                        className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-2xs ${badgePill}`}
                       >
                         {badgeCode}
                       </span>
 
                       {/* Badge Nomor Urut */}
-                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] text-[#1E293B]">
+                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#FCFBF8]/95 border border-[#DCD6C9] shadow-2xs text-[#3F3D38]">
                         #{rec.nomor_urut}
                       </span>
 
                       {/* Hover Overlay Quick Hint */}
-                      <div className="absolute inset-0 bg-[#1E293B]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                        <span className="bg-white text-[#1E293B] text-[11px] font-bold px-3 py-1.5 rounded-md border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B]">
+                      <div className="absolute inset-0 bg-[#2B2A27]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <span className="bg-[#FCFBF8]/95 backdrop-blur-xs text-[#2B2A27] text-[11px] font-semibold px-3.5 py-1.5 rounded-full border border-[#DFDBD0] shadow-md">
                           Klik untuk Buka di Generator
                         </span>
                       </div>
                     </div>
 
                     {/* Tengah: Metadata Dokumen */}
-                    <div className="p-3.5 space-y-1.5">
-                      <div className="flex items-center justify-between gap-1 text-[11px] font-mono font-bold text-slate-600">
+                    <div className="p-4 space-y-1.5">
+                      <div className="flex items-center justify-between gap-1 text-[11px] font-mono font-medium text-[#757067]">
                         <span className="truncate" title={reconstructedForm.nomor_lengkap}>
                           {reconstructedForm.nomor_lengkap}
                         </span>
                       </div>
 
                       <h3
-                        className="text-xs font-bold text-[#1E293B] line-clamp-2 leading-snug min-h-[32px]"
+                        className="text-xs font-semibold text-[#2B2A27] line-clamp-2 leading-snug min-h-[32px]"
                         title={titleText}
                       >
                         {titleText}
                       </h3>
 
-                      <div className="pt-1 flex items-center justify-between text-[10.5px] text-slate-600 font-medium border-t border-slate-200">
+                      <div className="pt-1.5 flex items-center justify-between text-[10.5px] text-[#6E6A63] border-t border-[#ECE8DF]">
                         <span className="truncate max-w-[125px]" title={rec.kepada || '-'}>
-                          Kepada: <strong className="text-[#1E293B]">{rec.kepada || '-'}</strong>
+                          Kepada: <strong className="text-[#2B2A27] font-semibold">{rec.kepada || '-'}</strong>
                         </span>
                         <span className="shrink-0">{tanggalLabel}</span>
                       </div>
                       {rec.konseptor && (
-                        <div className="text-[10px] text-slate-500 font-semibold truncate">
+                        <div className="text-[10px] text-[#8A857C] truncate">
                           Konseptor: {rec.konseptor}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Bawah: Opsi B — 2 Tombol Aksi (Buka/Edit Surat Ini & Gunakan Sebagai Template Baru) */}
-                  <div className="px-3.5 pb-3.5 pt-1 space-y-1.5">
+                  {/* Bawah: Opsi B — 2 Tombol Aksi */}
+                  <div className="px-4 pb-4 pt-0.5 space-y-1.5">
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
@@ -1266,7 +1444,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           e.stopPropagation();
                           onEditRecentRecord(rec);
                         }}
-                        className={`flex items-center justify-center space-x-1 py-1.5 px-2 rounded-md text-[11px] font-bold text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer ${badgeBg}`}
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] cursor-pointer"
                         title="Buka dokumen ini di Generator dengan seluruh isinya dan nomor urut aslinya"
                       >
                         <Edit3 className="w-3 h-3 shrink-0" />
@@ -1279,7 +1457,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           e.stopPropagation();
                           onDuplicateAsNewTemplate(rec);
                         }}
-                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-md text-[11px] font-bold bg-white hover:bg-[#F1F5F9] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] cursor-pointer"
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#3F3D38] border border-[#DFDBD0] cursor-pointer"
                         title="Salin seluruh isi surat ini sebagai draf baru dengan Nomor Urut baru (#berikutnya)"
                       >
                         <Copy className="w-3 h-3 shrink-0" />
@@ -1293,7 +1471,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full flex items-center justify-center space-x-1 py-1 px-2 rounded text-[10.5px] font-bold bg-[#A7F3D0]/60 hover:bg-[#A7F3D0] text-[#1E293B] border border-[#1E293B] transition-colors"
+                        className="w-full flex items-center justify-center space-x-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2F5246] border border-[#CDE0D6] transition-colors"
                       >
                         <ExternalLink className="w-3 h-3" />
                         <span>Buka Arsip Google Docs / Word</span>
@@ -1312,7 +1490,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <button
               type="button"
               onClick={() => setVisibleCount((prev) => prev + 8)}
-              className="px-4 py-2 bg-white hover:bg-slate-100 text-[#1E293B] text-xs font-bold rounded-md border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] cursor-pointer"
+              className="px-4 py-2 bg-[#FCFBF8] hover:bg-[#F2EFE8] text-[#2B2A27] text-xs font-semibold rounded-xl border border-[#DFDBD0] shadow-2xs cursor-pointer"
             >
               Tampilkan Lebih Banyak Dokumen ({sortedRecentRecords.length - visibleCount} lainnya)
             </button>
@@ -1320,7 +1498,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <button
             type="button"
             onClick={onOpenDatabase}
-            className="flex items-center space-x-1.5 px-4 py-2 bg-[#BAE6FD] hover:bg-[#7DD3FC] text-[#1E293B] text-xs font-bold rounded-md border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] cursor-pointer"
+            className="flex items-center space-x-1.5 px-4 py-2 bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] text-xs font-semibold rounded-xl border border-[#CDE0D6] cursor-pointer"
           >
             <Database className="w-3.5 h-3.5" />
             <span>Lihat Seluruh Tabel Buku Agenda ({nomorSuratList.length} Surat)</span>
@@ -1334,48 +1512,48 @@ export const HomeView: React.FC<HomeViewProps> = ({
       ═══════════════════════════════════════════════════════════════════════ */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
         {/* Kolom Kiri (5 Cols): Tentang Aplikasi PUSAKA */}
-        <div className="lg:col-span-5 bg-white rounded-lg border-2 border-[#1E293B] shadow-[5px_5px_0px_#1E293B] p-5 sm:p-6 flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-5 nn-card bg-[#FCFBF8] rounded-2xl p-6 flex flex-col justify-between space-y-4">
           <div className="space-y-3">
-            <div className="inline-flex items-center space-x-2 bg-[#C7D2FE] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] px-2.5 py-1 rounded-md text-xs font-bold text-[#1E293B]">
+            <div className="inline-flex items-center space-x-1.5 bg-[#EDF0F4] border border-[#D3DAE5] px-3 py-1 rounded-full text-[11px] font-semibold text-[#3B4A62]">
               <BookOpen className="w-3.5 h-3.5" />
-              <span>TENTANG SISTEM PUSAKA</span>
+              <span>Tentang Sistem PUSAKA</span>
             </div>
 
-            <h2 className="text-lg font-bold text-[#1E293B]">
+            <h2 className="text-lg font-bold text-[#2B2A27]">
               Sistem Otomasi Tata Naskah Dinas &amp; Buku Agenda Elektronik
             </h2>
 
-            <p className="text-xs text-slate-700 leading-relaxed font-medium">
-              <strong>Sistem Generator Surat PUSAKA</strong> adalah platform kerja internal yang dirancang khusus untuk mendukung tata usaha dan penyusunan naskah dinas di lingkungan{' '}
-              <strong>Pusat Kebijakan Strategis (PUSAKA), Sekretariat Jenderal Kementerian Komunikasi dan Digital RI</strong>.
+            <p className="text-xs text-[#59554E] leading-relaxed">
+              <strong className="text-[#2B2A27]">Sistem Generator Surat PUSAKA</strong> adalah platform kerja internal yang dirancang untuk mempermudah tata usaha dan penyusunan naskah dinas di lingkungan{' '}
+              <strong className="text-[#2B2A27]">Kementerian Komunikasi dan Digital RI</strong>.
             </p>
 
-            <div className="space-y-2 pt-1 text-xs">
-              <div className="p-2.5 bg-[#F8F9FA] border-[1.5px] border-[#1E293B] rounded-md flex items-start space-x-2.5">
-                <ShieldCheck className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5" />
+            <div className="space-y-2.5 pt-1 text-xs">
+              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
+                <ShieldCheck className="w-4 h-4 text-[#3D6356] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#1E293B] block">Sesuai Standar Tata Naskah Dinas Komdigi</strong>
-                  <span className="text-slate-600 text-[11px]">
-                    Format kop resmi, tipografi, margin halaman A4, kode klasifikasi arsip Fasilitatif &amp; Substantif, serta tata letak tanda tangan pejabat otomatis terstandarisasi.
+                  <strong className="text-[#2B2A27] block font-semibold">Sesuai Standar Tata Naskah Dinas Komdigi</strong>
+                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
+                    Mendukung 3 varian kop unit kerja resmi, tipografi, margin kertas A4, kode klasifikasi Fasilitatif &amp; Substantif, serta tata letak tanda tangan pejabat.
                   </span>
                 </div>
               </div>
 
-              <div className="p-2.5 bg-[#F8F9FA] border-[1.5px] border-[#1E293B] rounded-md flex items-start space-x-2.5">
-                <Sparkles className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5" />
+              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
+                <Sparkles className="w-4 h-4 text-[#9A6B3B] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#1E293B] block">Didukung Gemini Multimodal AI</strong>
-                  <span className="text-slate-600 text-[11px]">
-                    Mampu membaca dokumen PDF/Word/Gambar pindaian maupun perintah teks (*prompt-only*) untuk langsung menyusun surat lengkap beserta tabel lampirannya.
+                  <strong className="text-[#2B2A27] block font-semibold">Didukung Gemini Multimodal AI</strong>
+                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
+                    Membaca dokumen PDF/Word/Gambar pindaian maupun perintah teks (*prompt-only*) untuk menyusun surat lengkap beserta tabel lampirannya.
                   </span>
                 </div>
               </div>
 
-              <div className="p-2.5 bg-[#F8F9FA] border-[1.5px] border-[#1E293B] rounded-md flex items-start space-x-2.5">
-                <FileCheck2 className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5" />
+              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
+                <FileCheck2 className="w-4 h-4 text-[#45546B] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#1E293B] block">Integrasi Satu Pintu (Sheets &amp; Google Drive)</strong>
-                  <span className="text-slate-600 text-[11px]">
+                  <strong className="text-[#2B2A27] block font-semibold">Integrasi Satu Pintu (Sheets &amp; Google Drive)</strong>
+                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
                     Penomoran surat tercatat otomatis ke Google Spreadsheet kantor sekaligus mengarsipkan berkas Word (`.docx` / Google Docs) ke folder bulanan Google Drive.
                   </span>
                 </div>
@@ -1385,78 +1563,78 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* Kolom Kanan (7 Cols): Panduan & Cara Penggunaan (4 Langkah Mudah) */}
-        <div className="lg:col-span-7 bg-white rounded-lg border-2 border-[#1E293B] shadow-[5px_5px_0px_#1E293B] p-5 sm:p-6 space-y-4">
+        <div className="lg:col-span-7 nn-card bg-[#FCFBF8] rounded-2xl p-6 space-y-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center space-x-2 bg-[#A7F3D0] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] px-2.5 py-1 rounded-md text-xs font-bold text-[#1E293B]">
+            <div className="inline-flex items-center space-x-1.5 bg-[#EBF2EE] border border-[#CDE0D6] px-3 py-1 rounded-full text-[11px] font-semibold text-[#2F5246]">
               <Layers className="w-3.5 h-3.5" />
-              <span>PANDUAN PENGGUNAAN</span>
+              <span>Panduan Penggunaan</span>
             </div>
-            <h2 className="text-lg font-bold text-[#1E293B] pt-1">
+            <h2 className="text-lg font-bold text-[#2B2A27] pt-1">
               Cara Menggunakan Aplikasi dalam 4 Langkah
             </h2>
-            <p className="text-xs text-slate-600 font-medium">
-              Alur kerja cepat untuk menerbitkan naskah dinas resmi tanpa perlu mengatur format kertas secara manual.
+            <p className="text-xs text-[#66625B]">
+              Alur kerja tenang dan terstruktur untuk menerbitkan naskah dinas resmi tanpa mengatur format kertas secara manual.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
             {/* Step 1 */}
-            <div className="p-3.5 rounded-lg bg-[#F8F9FA] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] space-y-1.5">
+            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded bg-[#99F6E4] border-[1.5px] border-[#1E293B] font-bold text-xs flex items-center justify-center text-[#1E293B]">
+                <span className="w-6 h-6 rounded-full bg-[#EBF2EE] border border-[#CDE0D6] font-bold text-xs flex items-center justify-center text-[#2F5246]">
                   1
                 </span>
-                <h3 className="text-xs font-bold text-[#1E293B]">
-                  Pilih Naskah atau Gunakan Prompt AI
+                <h3 className="text-xs font-bold text-[#2B2A27]">
+                  Pilih Naskah, Kop &amp; Prompt AI
                 </h3>
               </div>
-              <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                Pilih kartu <strong>Surat Tugas</strong>, <strong>Surat Undangan</strong>, atau <strong>Nota Dinas</strong>. Klik tombol <strong>&quot;Via AI&quot;</strong> jika ingin mengunggah dokumen acuan (PDF/Word/Scan) atau cukup mengetik perintah prompt untuk diisi otomatis oleh AI.
+              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+                Pilih kartu <strong>Surat Tugas</strong>, <strong>Surat Undangan</strong>, atau <strong>Nota Dinas</strong>, sesuaikan unit Kop Surat bila diperlukan, atau klik <strong>&quot;Via AI&quot;</strong> untuk mengunggah acuan/prompt.
               </p>
             </div>
 
             {/* Step 2 */}
-            <div className="p-3.5 rounded-lg bg-[#F8F9FA] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] space-y-1.5">
+            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded bg-[#FDE68A] border-[1.5px] border-[#1E293B] font-bold text-xs flex items-center justify-center text-[#1E293B]">
+                <span className="w-6 h-6 rounded-full bg-[#F7EFE2] border border-[#E6D4B8] font-bold text-xs flex items-center justify-center text-[#7A542E]">
                   2
                 </span>
-                <h3 className="text-xs font-bold text-[#1E293B]">
+                <h3 className="text-xs font-bold text-[#2B2A27]">
                   Edit Formulir &amp; Kertas A4 Dua Arah
                 </h3>
               </div>
-              <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                Sesuaikan atribut surat, pilih pegawai yang ditugaskan, atau klik &amp; ketik langsung di atas lembar <strong>Live Preview Kertas A4</strong> di sebelah kanan. Gunakan toolbar melayang untuk memformat teks tebal/miring/daftar.
+              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+                Lengkapi atribut surat di panel kiri atau klik &amp; ketik langsung di atas lembar <strong>Live Preview Kertas A4</strong> di sebelah kanan layaknya pengolah kata.
               </p>
             </div>
 
             {/* Step 3 */}
-            <div className="p-3.5 rounded-lg bg-[#F8F9FA] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] space-y-1.5">
+            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded bg-[#C7D2FE] border-[1.5px] border-[#1E293B] font-bold text-xs flex items-center justify-center text-[#1E293B]">
+                <span className="w-6 h-6 rounded-full bg-[#EDF0F4] border border-[#D1D9E4] font-bold text-xs flex items-center justify-center text-[#3B4A62]">
                   3
                 </span>
-                <h3 className="text-xs font-bold text-[#1E293B]">
+                <h3 className="text-xs font-bold text-[#2B2A27]">
                   Atur Klasifikasi &amp; Lampiran Merger
                 </h3>
               </div>
-              <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                Untuk Undangan &amp; Nota Dinas, pilih <strong>Kode Klasifikasi</strong> (tersedia rekomendasi cerdas). Tambahkan lampiran Daftar Undangan, Tabel Rundown, atau unggah PDF eksternal untuk digabung langsung ke dokumen.
+              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+                Pilih <strong>Kode Klasifikasi</strong> (tersedia rekomendasi cerdas), lalu tambahkan lampiran Daftar Undangan, Tabel Rundown, atau PDF eksternal.
               </p>
             </div>
 
             {/* Step 4 */}
-            <div className="p-3.5 rounded-lg bg-[#F8F9FA] border-2 border-[#1E293B] shadow-[3px_3px_0px_#1E293B] space-y-1.5">
+            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded bg-[#A7F3D0] border-[1.5px] border-[#1E293B] font-bold text-xs flex items-center justify-center text-[#1E293B]">
+                <span className="w-6 h-6 rounded-full bg-[#EBF2EE] border border-[#CDE0D6] font-bold text-xs flex items-center justify-center text-[#2F5246]">
                   4
                 </span>
-                <h3 className="text-xs font-bold text-[#1E293B]">
+                <h3 className="text-xs font-bold text-[#2B2A27]">
                   Terbitkan ke Cloud &amp; Unduh Dokumen
                 </h3>
               </div>
-              <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                Klik <strong>&quot;Terbitkan &amp; Simpan&quot;</strong> untuk mencatat nomor surat ke Google Sheets dan mengunggah arsip ke Google Drive. Anda juga dapat langsung mengunduh file <strong>PDF</strong> atau <strong>Microsoft Word (.docx)</strong>.
+              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+                Klik <strong>&quot;Terbitkan &amp; Simpan&quot;</strong> untuk mencatat nomor surat ke Google Sheets dan mengunggah arsip ke Google Drive, atau unduh sebagai <strong>PDF</strong> / <strong>Word (.docx)</strong>.
               </p>
             </div>
           </div>

@@ -1,19 +1,37 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SOFT NEO-BRUTALISM (CORPORATE EDITION) DESIGN SYSTEM
-   - Soft Canvas: #F8F9FA
-   - Slate Dark Outline & Text: #1E293B (1.5px - 2px solid)
-   - Hard Shadow (3D Offset): 3px 3px 0px #1E293B / 4px 4px 0px #1E293B
-   - Headings: Space Grotesk | Body/Form: Plus Jakarta Sans
+   NATURAL NEUTRAL DESIGN SYSTEM (ANTI-EYE STRAIN • ORGANIC • SOFT FLOATING)
+   - Warm Alabaster / Oat Linen Canvas: #F5F3EE
+   - Soft Floating Card Surface: #FCFBF8 / #FFFFFF
+   - Warm Charcoal Ink: #2B2A27 | Stone Secondary: #636059
+   - Hairline Organic Border: 1px solid #E6E2D8
+   - Diffused Soft Ambient Shadows (Zero Harsh Outlines)
    - Kertas Surat Resmi (#surat-tugas-document): Terisolasi 100%
    ═══════════════════════════════════════════════════════════════════════════ */
 
+:root {
+  --nn-bg: #F5F3EE;
+  --nn-surface: #FCFBF8;
+  --nn-surface-pure: #FFFFFF;
+  --nn-surface-muted: #F2EFE9;
+  --nn-border: #E6E2D8;
+  --nn-border-strong: #D6D0C4;
+  --nn-ink: #2B2A27;
+  --nn-ink-muted: #66625B;
+  --nn-sage: #3D6356;
+  --nn-sage-soft: #EBF2EE;
+  --nn-sand-soft: #F7EFE2;
+  --nn-slate-soft: #EDF0F4;
+  --nn-shadow-card: 0 1px 3px rgba(43, 42, 39, 0.035), 0 8px 24px -6px rgba(43, 42, 39, 0.055);
+  --nn-shadow-float: 0 4px 14px rgba(43, 42, 39, 0.055), 0 18px 38px -8px rgba(43, 42, 39, 0.085);
+}
+
 @layer base {
   html {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    color: #1E293B;
-    background-color: #F8F9FA;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #2B2A27;
+    background-color: #F5F3EE;
   }
 
   * {
@@ -21,106 +39,106 @@
   }
 
   body {
-    background-color: #F8F9FA;
-    color: #1E293B;
+    background-color: #F5F3EE;
+    color: #2B2A27;
     @apply antialiased;
   }
 
-  /* Tipografi Space Grotesk untuk seluruh Header / Judul Section di luar kertas dokumen */
   h1:not(#surat-tugas-document *),
   h2:not(#surat-tugas-document *),
   h3:not(#surat-tugas-document *),
   h4:not(#surat-tugas-document *),
-  .nb-heading {
-    font-family: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
-    letter-spacing: -0.02em;
+  .nn-heading {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    letter-spacing: -0.018em;
+    color: #2B2A27;
   }
 }
 
-/* ─── Kartu Modular & Panel Formulir (Card-Based Neo-Brutalism) ─── */
+/* ─── Soft Floating Cards (Elevasi & Shadow Halus Organik) ─── */
+.nn-card,
 .nb-card,
 .lg\:col-span-5 > div.bg-white,
-.lg\:col-span-5 > div.bg-amber-50 {
-  border: 2px solid #1E293B !important;
-  border-radius: 8px !important;
-  box-shadow: 4px 4px 0px #1E293B !important;
+.lg\:col-span-5 > div.bg-\[\#FCFBF8\] {
+  background-color: #FCFBF8;
+  border: 1px solid #E6E2D8 !important;
+  border-radius: 16px !important;
+  box-shadow: var(--nn-shadow-card) !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.nn-card-interactive:hover {
+  border-color: #D6D0C4 !important;
+  box-shadow: var(--nn-shadow-float) !important;
+  transform: translateY(-1.5px);
 }
 
 /* ─── Form Controls (Input, Select, Textarea) di luar kertas surat ─── */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *),
 select:not(#surat-tugas-document *),
 textarea:not(#surat-tugas-document *) {
-  border: 1.5px solid #1E293B !important;
-  border-radius: 6px !important;
-  color: #1E293B !important;
-  font-weight: 500;
-  transition: box-shadow 0.12s ease, transform 0.08s ease, background-color 0.12s ease;
+  background-color: #F8F6F2;
+  border: 1px solid #DFDBD0 !important;
+  border-radius: 10px !important;
+  color: #2B2A27 !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *):hover,
+select:not(#surat-tugas-document *):hover,
+textarea:not(#surat-tugas-document *):hover {
+  border-color: #C9C3B5 !important;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *):focus,
 select:not(#surat-tugas-document *):focus,
 textarea:not(#surat-tugas-document *):focus {
   background-color: #FFFFFF !important;
-  box-shadow: 3px 3px 0px #1E293B !important;
+  border-color: #5C8374 !important;
+  box-shadow: 0 0 0 3px rgba(61, 99, 86, 0.13) !important;
   outline: none !important;
 }
 
-/* ─── Tombol Taktil & Responsif (Efek Tombol "Masuk" Saat Ditekan) ─── */
-button:not(#surat-tugas-document *):not(.nb-flat) {
-  border: 1.5px solid #1E293B !important;
-  border-radius: 6px !important;
-  box-shadow: 2.5px 2.5px 0px #1E293B;
-  transition: transform 0.08s ease, box-shadow 0.08s ease, background-color 0.12s ease;
+/* ─── Tombol Halus & Tenang (Natural Tactile Transitions) ─── */
+button:not(#surat-tugas-document *) {
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.14s ease;
 }
 
-button:not(#surat-tugas-document *):not(.nb-flat):hover:not(:disabled) {
-  transform: translate(-1px, -1px);
-  box-shadow: 3.5px 3.5px 0px #1E293B;
+button:not(#surat-tugas-document *):active:not(:disabled) {
+  transform: scale(0.985);
 }
 
-button:not(#surat-tugas-document *):not(.nb-flat):active:not(:disabled) {
-  transform: translate(2px, 2px) !important;
-  box-shadow: 0px 0px 0px #1E293B !important;
-}
-
-button:not(#surat-tugas-document *):not(.nb-flat):disabled {
-  box-shadow: none !important;
-  transform: none !important;
-}
-
-/* ─── Bingkai Kanvas Pratinjau & Kertas A4 di Layar ─── */
+/* ─── Bingkai Kanvas Pratinjau & Kertas A4 di Layar (Warm Studio Mat) ─── */
 .preview-scroll-container {
-  background-color: #E2E8F0 !important;
-  background-image: radial-gradient(#94A3B8 1px, transparent 1px);
-  background-size: 16px 16px;
-  border: 2px solid #1E293B !important;
-  border-radius: 8px !important;
-  box-shadow: 4px 4px 0px #1E293B !important;
+  background-color: #EAE6DD !important;
+  border: 1px solid #DFDBD0 !important;
+  border-radius: 16px !important;
+  box-shadow: inset 0 2px 6px rgba(43, 42, 39, 0.035) !important;
 }
 
 #surat-tugas-document .print-page {
-  border: 2px solid #1E293B;
-  box-shadow: 6px 6px 0px #1E293B;
+  border: 1px solid #DFDBD0;
+  box-shadow: 0 6px 26px -4px rgba(43, 42, 39, 0.09), 0 2px 6px rgba(43, 42, 39, 0.04);
 }
 
-/* ─── Panel Kiri Form: scroll independen ─────────────────── */
+/* ─── Panel Kiri Form: scroll independen lembut ─────────────────── */
 .lg\:col-span-5[style*="overflow-y: auto"] {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: #D5CFC3 transparent;
 }
 .lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar {
   width: 5px;
 }
 .lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: #D5CFC3;
+  border-radius: 9999px;
 }
 
-/* ─── Panel Kanan Preview: scroll independen ─────────────── */
+/* ─── Panel Kanan Preview: scroll independen lembut ─────────────── */
 .preview-scroll-container,
 .lg\:col-span-7[style*="overflow-y: auto"] {
   scrollbar-width: thin;
-  scrollbar-color: #94a3b8 transparent;
+  scrollbar-color: #C7C0B2 transparent;
 }
 .preview-scroll-container::-webkit-scrollbar,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar {
@@ -133,12 +151,12 @@ button:not(#surat-tugas-document *):not(.nb-flat):disabled {
 }
 .preview-scroll-container::-webkit-scrollbar-thumb,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 4px;
+  background: #C7C0B2;
+  border-radius: 9999px;
 }
 .preview-scroll-container::-webkit-scrollbar-thumb:hover,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #A9A192;
 }
 
 /* Styling untuk kanvas dokumen kertas (bebas kotak/outline layaknya MS Word & Google Docs) */
@@ -209,6 +227,7 @@ button:not(#surat-tugas-document *):not(.nb-flat):disabled {
     background: transparent !important;
     border: none !important;
     border-radius: 0 !important;
+    box-shadow: none !important;
     display: block !important;
   }
 
@@ -249,34 +268,87 @@ button:not(#surat-tugas-document *):not(.nb-flat):disabled {
     height: 296mm !important;
     max-height: 296mm !important;
     overflow: hidden !important;
-    page-break-after: avoid !important;
-    break-after: avoid !important;
   }
 
-  .print-page.is-lampiran {
-    page-break-after: always !important;
-    break-after: page !important;
-  }
-
-  @page {
-    size: A4 portrait;
-    margin: 0;
+  .print-page + .print-page {
+    margin-top: 0 !important;
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
 
-
-/* --- Format teks ringan (RichEditable / pratinjau) --- */
-.rt-line { min-height: 1em; }
-.rt-line[data-list='b'] { position: relative; padding-left: 20px; }
-.rt-line[data-list='b']::before { content: '\2022'; position: absolute; left: 6px; }
-.rt-h1 { font-weight: 700; font-size: 1.17em; text-indent: 0 !important; margin: 5px 0 3px; }
-.rt-h2 { font-weight: 700; font-size: 1.08em; text-indent: 0 !important; margin: 4px 0 3px; }
-.rt-nota .rt-p { text-indent: 32px; margin: 4px 0; line-height: 1.42; text-align: justify; }
-.rt-nota .rt-p[data-indent] { text-indent: 0 !important; }
-.rt-nota .rt-num { padding-left: 24px; text-indent: -24px; margin: 5px 0 3px; line-height: 1.42; text-align: justify; }
-.rt-nota .rt-sub { padding-left: 38px; text-indent: -18px; margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
-.rt-nota .rt-b { margin: 2px 0 2px; line-height: 1.42; text-align: justify; }
-.rt-nota .rt-kv { display: flex; align-items: flex-start; padding-left: 32px; text-indent: 0 !important; margin: 2px 0; line-height: 1.4; text-align: left; }
-.rt-nota .rt-kv-key { width: 155px; flex-shrink: 0; }
-.rt-nota .rt-kv-sep { width: 16px; flex-shrink: 0; text-align: center; }
-.rt-nota .rt-kv-val { flex: 1; min-width: 0; }
+/* Rich text blocks inside #surat-tugas-document */
+.rt-line {
+  min-height: 1em;
+}
+.rt-line[data-list='b'] {
+  position: relative;
+  padding-left: 20px;
+}
+.rt-line[data-list='b']::before {
+  content: '\2022';
+  position: absolute;
+  left: 6px;
+}
+.rt-h1 {
+  font-weight: 700;
+  font-size: 1.17em;
+  text-indent: 0 !important;
+  margin: 5px 0 3px;
+}
+.rt-h2 {
+  font-weight: 700;
+  font-size: 1.08em;
+  text-indent: 0 !important;
+  margin: 4px 0 3px;
+}
+.rt-nota .rt-p {
+  text-indent: 32px;
+  margin: 4px 0;
+  line-height: 1.42;
+  text-align: justify;
+}
+.rt-nota .rt-p[data-indent] {
+  text-indent: 0 !important;
+}
+.rt-nota .rt-num {
+  padding-left: 24px;
+  text-indent: -24px;
+  margin: 5px 0 3px;
+  line-height: 1.42;
+  text-align: justify;
+}
+.rt-nota .rt-sub {
+  padding-left: 38px;
+  text-indent: -18px;
+  margin: 2px 0 2px;
+  line-height: 1.42;
+  text-align: justify;
+}
+.rt-nota .rt-b {
+  margin: 2px 0 2px;
+  line-height: 1.42;
+  text-align: justify;
+}
+.rt-nota .rt-kv {
+  display: flex;
+  align-items: flex-start;
+  padding-left: 32px;
+  text-indent: 0 !important;
+  margin: 2px 0;
+  line-height: 1.4;
+  text-align: left;
+}
+.rt-nota .rt-kv-key {
+  width: 155px;
+  flex-shrink: 0;
+}
+.rt-nota .rt-kv-sep {
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.rt-nota .rt-kv-val {
+  flex: 1;
+  min-width: 0;
+}

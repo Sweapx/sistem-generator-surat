@@ -34,6 +34,7 @@ import {
   AuthState,
   User,
   JenisNaskah,
+  KopSuratTipe,
   KlasifikasiItem,
 } from './types';
 import {
@@ -44,7 +45,7 @@ import {
 } from './data/initialData';
 import { Navbar } from './components/Navbar';
 import { LoginView } from './components/LoginView';
-import { HomeView, buildFormStateFromRecord } from './components/HomeView';
+import { HomeView, buildFormStateFromRecord, getDraftPublishFingerprint } from './components/HomeView';
 import { InvitationUploadModal } from './components/InvitationUploadModal';
 import { SuratPreview } from './components/SuratPreview';
 import { DatabaseView } from './components/DatabaseView';
@@ -229,6 +230,7 @@ export function App() {
     const initialNomor = formatNomorNaskah('TUGAS', 1, defaultKlas.kode_lengkap, simulatedMonth, simulatedYear);
     const baseDefault: SuratTugasFormState = {
       jenis_naskah: 'TUGAS',
+      kop_tipe: 'pusaka',
       kode_klasifikasi: defaultKlas.kode_lengkap,
       kategori_klasifikasi: defaultKlas.kategori_utama,
       uraian_klasifikasi: defaultKlas.uraian,
@@ -949,6 +951,8 @@ export function App() {
       nomor_lengkap: newNomorLengkap,
       tanggal_surat: new Date().toISOString().split('T')[0],
       custom_tanggal_surat_text: undefined,
+      published_fingerprint: undefined,
+      published_nomor_lengkap: undefined,
     });
 
     setActiveTab('generator');
@@ -1077,8 +1081,15 @@ export function App() {
       return rawUrl;
     };
 
+    const publishedFp = getDraftPublishFingerprint(form);
+
     if (editingRecord) {
       // ── MODE EDIT: Perbarui record yang ada tanpa membuat nomor baru ──
+      const savedFormSnapshot: SuratTugasFormState = {
+        ...form,
+        published_fingerprint: publishedFp,
+        published_nomor_lengkap: currentNomorLengkap,
+      };
       const updatedRecord: NomorSuratRecord = {
         ...editingRecord,
         tanggal: form.tanggal_surat,
@@ -1102,7 +1113,7 @@ export function App() {
         docx_base64: docxBase64,
         docx_filename: docFileName,
         file_mime_type: docxMimeType,
-        form_state: { ...form },
+        form_state: savedFormSnapshot,
         pegawai_ids: form.selectedPegawaiIds,
         pejabat_id: form.selectedPejabatId,
       };
@@ -1110,6 +1121,11 @@ export function App() {
       setNomorSuratList((prev) =>
         prev.map((r) => (r.id === editingRecord.id ? updatedRecord : r))
       );
+      setForm((prev) => ({
+        ...prev,
+        published_fingerprint: publishedFp,
+        published_nomor_lengkap: currentNomorLengkap,
+      }));
       setIsSavedToDB(true);
 
       if (isSheetsConnected) {
@@ -1150,12 +1166,22 @@ export function App() {
       }
     } else {
       // ── MODE BUAT BARU ──
+      const publishedNomor = nextNomorInfo.nomor_lengkap;
+      const savedFormSnapshot: SuratTugasFormState = {
+        ...form,
+        nomor_urut: nextNomorInfo.nomor_urut,
+        tahun: nextNomorInfo.tahun,
+        bulan: nextNomorInfo.bulan,
+        nomor_lengkap: publishedNomor,
+        published_fingerprint: publishedFp,
+        published_nomor_lengkap: publishedNomor,
+      };
       const newRecord: NomorSuratRecord = {
         id: `ns-${Date.now()}`,
         nomor_urut: nextNomorInfo.nomor_urut,
         tahun: nextNomorInfo.tahun,
         bulan: nextNomorInfo.bulan,
-        nomor_lengkap: nextNomorInfo.nomor_lengkap,
+        nomor_lengkap: publishedNomor,
         tanggal: form.tanggal_surat,
         tanggal_surat: form.tanggal_surat,
         tanggal_dibuat: new Date().toLocaleDateString('id-ID', {
@@ -1185,18 +1211,18 @@ export function App() {
         docx_base64: docxBase64,
         docx_filename: docFileName,
         file_mime_type: docxMimeType,
-        form_state: { ...form },
+        form_state: savedFormSnapshot,
         pegawai_ids: form.selectedPegawaiIds,
         pejabat_id: form.selectedPejabatId,
       };
 
       setNomorSuratList((prev) => [...prev, newRecord]);
+      setForm((prev) => ({
+        ...prev,
+        published_fingerprint: publishedFp,
+        published_nomor_lengkap: publishedNomor,
+      }));
       setIsSavedToDB(true);
-      // Hapus draft tersimpan dari localStorage & IndexedDB setelah berhasil diterbitkan & disimpan
-      removeDraftFromIndexedDB(currentJenis);
-      try {
-        localStorage.removeItem(`pusaka_draft_${currentJenis}`);
-      } catch {}
 
       if (isSheetsConnected) {
         try {
@@ -1397,7 +1423,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#1E293B] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F5F3EE] text-[#2B2A27] flex flex-col font-sans">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -1412,12 +1438,12 @@ export function App() {
       {/* Sync Status Bar */}
       {(isSyncingSheets || lastSyncMsg) && (
         <div
-          className={`w-full text-center text-[11px] font-bold py-1.5 px-4 no-print print:hidden border-b-2 border-[#1E293B] ${
+          className={`w-full text-center text-[11px] font-medium py-1.5 px-4 no-print print:hidden border-b ${
             isSyncingSheets
-              ? 'bg-[#99F6E4] text-[#1E293B]'
+              ? 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]'
               : lastSyncMsg.includes('Gagal') || lastSyncMsg.includes('gagal')
-              ? 'bg-[#FEF08A] text-[#1E293B]'
-              : 'bg-[#A7F3D0] text-[#1E293B]'
+              ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E8D6BA]'
+              : 'bg-[#EBF2EE] text-[#2B4F43] border-[#CDE0D6]'
           }`}
         >
           {isSyncingSheets ? (
@@ -1433,7 +1459,7 @@ export function App() {
                   href={lastSavedDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-bold underline hover:bg-[#1E293B] hover:text-white inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-white px-2 py-0.5 rounded border border-[#1E293B] shadow-[2px_2px_0px_#1E293B]"
+                  className="font-semibold underline hover:bg-[#3D6356] hover:text-white inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-[#FCFBF8] px-2.5 py-0.5 rounded-full border border-[#CDE0D6] transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
                   <span>Buka Dokumen (GDocs / Word)</span>
@@ -1459,6 +1485,8 @@ export function App() {
             simulatedYear={simulatedYear}
             isSheetsConnected={isSheetsConnected}
             activeFormDraft={form}
+            isSavedToDB={isSavedToDB}
+            editingRecord={editingRecord}
             onStartCreateNew={handleStartCreateFromHome}
             onContinueDraft={handleContinueDraftFromHome}
             onEditRecentRecord={handleEditSurat}
@@ -1478,87 +1506,117 @@ export function App() {
             <div className="lg:col-span-5 space-y-4 no-print print:hidden" style={{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: '6px', paddingBottom: '8px' }}>
               {/* Banner Mode Edit di Kolom Form */}
               {editingRecord && (
-                <div className="bg-[#FEF08A] border-2 border-[#1E293B] rounded-lg p-3.5 flex items-center justify-between text-xs text-[#1E293B] shadow-[4px_4px_0px_#1E293B]">
+                <div className="bg-[#F7EFE2] border border-[#E6D4B8] rounded-2xl p-3.5 flex items-center justify-between text-xs text-[#6E4B26] shadow-2xs">
                   <div>
-                    <div className="font-bold flex items-center space-x-1.5 text-[#1E293B]">
-                      <Edit3 className="w-4 h-4 text-[#1E293B]" />
-                      <span>Mode Edit Surat Tugas #{editingRecord.nomor_urut}</span>
+                    <div className="font-bold flex items-center space-x-1.5 text-[#5C3D1E]">
+                      <Edit3 className="w-4 h-4 text-[#8C6239]" />
+                      <span>Mode Edit Surat #{editingRecord.nomor_urut}</span>
                     </div>
-                    <div className="text-[11px] text-slate-800 mt-0.5 font-medium">
+                    <div className="text-[11px] text-[#7A542E] mt-0.5 font-medium">
                       {editingRecord.nomor_lengkap} • Nomor urut tetap dipertahankan
                     </div>
                   </div>
                   <button
                     onClick={handleCancelEdit}
-                    className="px-2.5 py-1 bg-white hover:bg-[#FFE4E6] text-[#1E293B] border-[1.5px] border-[#1E293B] rounded-md text-xs font-bold cursor-pointer transition-colors shadow-[2px_2px_0px_#1E293B]"
+                    className="px-2.5 py-1 bg-[#FCFBF8] hover:bg-[#F9ECEA] text-[#7A542E] hover:text-[#8C3B32] border border-[#E2CEAE] rounded-xl text-xs font-semibold cursor-pointer transition-colors"
                   >
                     Batal Edit
                   </button>
                 </div>
               )}
 
-              {/* Selector Jenis Naskah Dinas */}
-              <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] p-2.5">
-                <div className="text-[11px] font-bold text-[#1E293B] uppercase tracking-wider px-1 pb-2 flex items-center justify-between" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <span>Pilih Jenis Naskah Dinas:</span>
+              {/* Selector Jenis Naskah Dinas & Judul Kop Surat */}
+              <div className="nn-card bg-[#FCFBF8] rounded-2xl p-3.5 space-y-3">
+                <div>
+                  <div className="text-[11px] font-semibold text-[#6E6A63] uppercase tracking-wider px-0.5 pb-1.5 flex items-center justify-between">
+                    <span>Pilih Jenis Naskah Dinas</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#EFECE5] border border-[#E2DDD2] rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => handleChangeJenisNaskah('TUGAS')}
+                      className={`flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg text-xs transition-all cursor-pointer ${
+                        (form.jenis_naskah || 'TUGAS') === 'TUGAS'
+                          ? 'bg-[#3D6356] text-[#FAF9F6] font-semibold shadow-2xs'
+                          : 'text-[#66625B] hover:text-[#2B2A27] hover:bg-[#FAF8F4]/70 font-medium'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Surat Tugas</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleChangeJenisNaskah('UNDANGAN')}
+                      className={`flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg text-xs transition-all cursor-pointer ${
+                        form.jenis_naskah === 'UNDANGAN'
+                          ? 'bg-[#8C6239] text-[#FAF9F6] font-semibold shadow-2xs'
+                          : 'text-[#66625B] hover:text-[#2B2A27] hover:bg-[#FAF8F4]/70 font-medium'
+                      }`}
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Surat Undangan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleChangeJenisNaskah('NOTA_DINAS')}
+                      className={`flex items-center justify-center space-x-1.5 py-2 px-2 rounded-lg text-xs transition-all cursor-pointer ${
+                        form.jenis_naskah === 'NOTA_DINAS'
+                          ? 'bg-[#45546B] text-[#FAF9F6] font-semibold shadow-2xs'
+                          : 'text-[#66625B] hover:text-[#2B2A27] hover:bg-[#FAF8F4]/70 font-medium'
+                      }`}
+                    >
+                      <ScrollText className="w-3.5 h-3.5" />
+                      <span>Nota Dinas</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleChangeJenisNaskah('TUGAS')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
-                      (form.jenis_naskah || 'TUGAS') === 'TUGAS'
-                        ? 'bg-[#99F6E4] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Surat Tugas</span>
-                  </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleChangeJenisNaskah('UNDANGAN')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
-                      form.jenis_naskah === 'UNDANGAN'
-                        ? 'bg-[#FDE68A] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
-                    }`}
+                {/* Pilihan Unit / Judul Kop Surat (3 Opsi Resmi) */}
+                <div className="pt-2 border-t border-[#ECE8DF]">
+                  <label className="block text-[11px] font-semibold text-[#6E6A63] uppercase tracking-wider px-0.5 mb-1.5">
+                    Pilih Judul Kop Surat:
+                  </label>
+                  <select
+                    value={form.kop_tipe || 'pusaka'}
+                    onChange={(e) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        kop_tipe: e.target.value as KopSuratTipe,
+                      }));
+                      setIsSavedToDB(false);
+                    }}
+                    className="w-full p-2 text-xs font-medium bg-[#F6F4EF] border border-[#DFDBD0] rounded-xl text-[#2B2A27]"
                   >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Surat Undangan</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleChangeJenisNaskah('NOTA_DINAS')}
-                    className={`flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-md text-xs font-bold transition-all cursor-pointer border-[1.5px] border-[#1E293B] ${
-                      form.jenis_naskah === 'NOTA_DINAS'
-                        ? 'bg-[#C7D2FE] text-[#1E293B] shadow-[2px_2px_0px_#1E293B]'
-                        : 'bg-[#F8F9FA] text-slate-700 hover:bg-slate-200/70 hover:text-[#1E293B]'
-                    }`}
-                  >
-                    <ScrollText className="w-3.5 h-3.5" />
-                    <span>Nota Dinas</span>
-                  </button>
+                    <option value="pusaka">
+                      1. Sekretariat Jenderal — Pusat Kebijakan Strategis (Default)
+                    </option>
+                    <option value="sekjen">
+                      2. Sekretariat Jenderal
+                    </option>
+                    <option value="djed">
+                      3. Ditjen Ekosistem Digital — Sekretariat Ditjen Ekosistem Digital
+                    </option>
+                  </select>
                 </div>
               </div>
 
               {/* Card Klasifikasi & Nomor Surat (Disembunyikan untuk Surat Tugas karena kode tetap KP.01.06) */}
               {form.jenis_naskah && form.jenis_naskah !== 'TUGAS' && (
-                <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[4px_4px_0px_#1E293B] p-4 space-y-3">
-                  <div className="flex items-center justify-between border-b-2 border-[#1E293B]/15 pb-2.5">
+                <div className="nn-card bg-[#FCFBF8] rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#ECE8DF] pb-2.5">
                     <div className="flex items-center space-x-2">
                       <span
-                        className={`w-6 h-6 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center font-bold text-xs text-[#1E293B] ${
+                        className={`w-6 h-6 rounded-lg border flex items-center justify-center font-bold text-xs ${
                           form.jenis_naskah === 'NOTA_DINAS'
-                            ? 'bg-[#C7D2FE]'
-                            : 'bg-[#FDE68A]'
+                            ? 'bg-[#EDF0F4] text-[#3B4A62] border-[#D1D9E4]'
+                            : 'bg-[#F7EFE2] text-[#7A542E] border-[#E6D4B8]'
                         }`}
                       >
                         <Tag className="w-3 h-3" />
                       </span>
-                      <h3 className="text-sm font-bold text-[#1E293B]">
+                      <h3 className="text-sm font-bold text-[#2B2A27]">
                         Penomoran &amp; Klasifikasi Surat
                       </h3>
                     </div>
@@ -1566,10 +1624,10 @@ export function App() {
                     <button
                       type="button"
                       onClick={() => setIsKlasifikasiModalOpen(true)}
-                      className={`flex items-center space-x-1 text-[#1E293B] text-xs font-bold px-2.5 py-1 rounded-md border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-all cursor-pointer ${
+                      className={`flex items-center space-x-1 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                         form.jenis_naskah === 'NOTA_DINAS'
-                          ? 'bg-[#C7D2FE] hover:bg-[#A5B4FC]'
-                          : 'bg-[#FDE68A] hover:bg-[#FCD34D]'
+                          ? 'bg-[#EDF0F4] hover:bg-[#E1E6EE] text-[#3B4A62] border-[#D1D9E4]'
+                          : 'bg-[#F7EFE2] hover:bg-[#F0E3CE] text-[#7A542E] border-[#E6D4B8]'
                       }`}
                     >
                       <Tag className="w-3 h-3" />

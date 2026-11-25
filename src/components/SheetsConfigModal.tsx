@@ -137,28 +137,28 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-lg border-2 border-[#1E293B] shadow-[6px_6px_0px_#1E293B] w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2A27]/45 backdrop-blur-sm">
+      <div className="bg-[#FCFBF8] rounded-2xl border border-[#E6E2D8] shadow-[0_20px_50px_-10px_rgba(43,42,39,0.18)] w-full max-w-xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-4 pb-3.5 border-b-2 border-[#1E293B] bg-[#F8F9FA]">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#E6E2D8] bg-[#F6F4EF]">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-md bg-[#A7F3D0] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#EBF2EE] border border-[#CDE0D6] flex items-center justify-center">
               {isSheetsConfigured() ? (
-                <Wifi className="w-4.5 h-4.5 text-[#1E293B]" />
+                <Wifi className="w-4.5 h-4.5 text-[#3D6356]" />
               ) : (
-                <WifiOff className="w-4.5 h-4.5 text-[#1E293B]" />
+                <WifiOff className="w-4.5 h-4.5 text-[#9A6B3B]" />
               )}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#1E293B]">
+              <h2 className="text-sm font-bold text-[#2B2A27]">
                 Konfigurasi Google Sheets
               </h2>
-              <p className="text-xs text-slate-600 font-medium">Sinkronisasi nomor surat & database pegawai</p>
+              <p className="text-xs text-[#66625B]">Sinkronisasi nomor surat &amp; database pegawai</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md bg-white hover:bg-[#FFE4E6] text-[#1E293B] border-[1.5px] border-[#1E293B] shadow-[2px_2px_0px_#1E293B] transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-[#FCFBF8] hover:bg-[#EAE6DD] text-[#66625B] hover:text-[#2B2A27] border border-[#E2DDD2] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
