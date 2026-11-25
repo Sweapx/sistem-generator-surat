@@ -7,47 +7,77 @@
 
 import { User, AuthState } from '../types';
 import { INITIAL_USERS } from '../data/initialData';
-import { getSheetsWebAppUrl, isSheetsConfigured } from './sheetsService';
+import {
+  getSheetsWebAppUrl,
+  isSheetsConfigured,
+  DEFAULT_SHEETS_URL,
+  resetSheetsWebAppUrlToDefault,
+} from './sheetsService';
 
 const STORAGE_KEY_AUTH = 'pusaka_auth_session_v1';
 const STORAGE_KEY_USERS = 'pusaka_users_local_v1';
 
 /**
- * Panggil endpoint API Google Apps Script untuk operasi Autentikasi
+ * Panggil endpoint API Google Apps Script untuk operasi Autentikasi (dengan auto-recovery URL)
  */
 async function callAuthApi<T>(action: string, payload?: Record<string, unknown>): Promise<T> {
-  const baseUrl = getSheetsWebAppUrl();
+  let baseUrl = getSheetsWebAppUrl();
   if (!baseUrl) {
     throw new Error('URL Google Apps Script belum dikonfigurasi.');
   }
 
-  const url = new URL(baseUrl);
-  url.searchParams.set('action', action);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set('action', action);
+      if (!payload) {
+        url.searchParams.set('_t', String(Date.now()));
+      }
 
-  const response = await fetch(url.toString(), {
-    method: payload ? 'POST' : 'GET',
-    headers: payload ? { 'Content-Type': 'text/plain;charset=utf-8' } : {},
-    body: payload ? JSON.stringify(payload) : undefined,
-    redirect: 'follow',
-  });
+      const response = await fetch(url.toString(), {
+        method: payload ? 'POST' : 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        headers: payload ? { 'Content-Type': 'text/plain;charset=utf-8' } : undefined,
+        body: payload ? JSON.stringify(payload) : undefined,
+        redirect: 'follow',
+      });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      }
+
+      const rawText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Respons server bukan JSON: ${rawText.slice(0, 100)}...`);
+      }
+
+      if (data.status === 'error') {
+        throw new Error(data.message || 'Gagal memproses autentikasi.');
+      }
+
+      return data.result as T;
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('tidak sesuai') ||
+        msg.includes('dinonaktifkan') ||
+        msg.includes('wajib diisi')
+      ) {
+        throw err;
+      }
+      if (attempt === 1 && baseUrl !== DEFAULT_SHEETS_URL) {
+        baseUrl = resetSheetsWebAppUrlToDefault();
+        continue;
+      }
+      if (attempt === 2) throw err;
+    }
   }
 
-  const rawText = await response.text();
-  let data: any;
-  try {
-    data = JSON.parse(rawText);
-  } catch {
-    throw new Error(`Respons server bukan JSON: ${rawText.slice(0, 100)}...`);
-  }
-
-  if (data.status === 'error') {
-    throw new Error(data.message || 'Gagal memproses autentikasi.');
-  }
-
-  return data.result as T;
+  throw new Error('Gagal memproses autentikasi.');
 }
 
 // ─────────────────────────────────────────────
