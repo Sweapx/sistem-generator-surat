@@ -330,10 +330,10 @@ export const InvitationUploadModal: React.FC<InvitationUploadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#2B2A27]/45 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-[#FCFBF8] rounded-2xl shadow-[0_20px_50px_-10px_rgba(43,42,39,0.18)] max-w-3xl w-full overflow-hidden border border-[#E6E2D8] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#1E1C18]/45 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-[#FAF8F3]/90 backdrop-blur-2xl rounded-3xl shadow-[0_24px_60px_-12px_rgba(24,22,18,0.28)] max-w-3xl w-full overflow-hidden border border-white/85 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#E6E2D8] flex items-center justify-between bg-[#F6F4EF]">
+        <div className="px-6 py-4 border-b border-white/75 flex items-center justify-between bg-white/50">
           <div className="flex items-center space-x-3">
             <div
               className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold text-xs ${

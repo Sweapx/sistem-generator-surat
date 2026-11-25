@@ -484,52 +484,54 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   return (
     <div className="space-y-5">
       {/* ─── Sub-Tab Navigation & Search ──────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E6E2D8] pb-3.5">
-        <div className="flex flex-wrap items-center gap-1 bg-[#EFECE5] p-1 rounded-xl border border-[#E2DDD2]">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/65 pb-3.5">
+        <div className="flex flex-wrap items-center gap-1 bg-white/55 backdrop-blur-md p-1 rounded-2xl border border-white/80 shadow-2xs">
           <button
             onClick={() => {
               setSubTab('nomor');
               setCurrentPage(1);
             }}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-xl transition-all cursor-pointer ${
               subTab === 'nomor'
-                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
-                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
+                ? 'bg-white text-[#1F4A3A] font-bold border border-white shadow-sm'
+                : 'text-[#524E46] hover:text-[#242320] hover:bg-white/50 font-medium'
             }`}
           >
-            <Hash className="w-3.5 h-3.5 text-[#3D6356]" />
+            <Hash className="w-3.5 h-3.5 text-[#2F6B57]" />
             <span>Arsip Nomor Surat (Sheets)</span>
-            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
+            <span className="text-[11px] text-[#66625B] font-mono font-semibold ml-1">
               ({nomorSuratList.length})
             </span>
           </button>
 
           <button
-            onClick={() => setSubTab('kepegawaian')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
+            onClick={() => {
+              setSubTab('kepegawaian');
+            }}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-xl transition-all cursor-pointer ${
               subTab === 'kepegawaian'
-                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
-                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
+                ? 'bg-white text-[#2D4263] font-bold border border-white shadow-sm'
+                : 'text-[#524E46] hover:text-[#242320] hover:bg-white/50 font-medium'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-[#45546B]" />
+            <Users className="w-3.5 h-3.5 text-[#3D5275]" />
             <span>Data Pegawai Pusaka</span>
-            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
+            <span className="text-[11px] text-[#66625B] font-mono font-semibold ml-1">
               ({pegawaiList.length})
             </span>
           </button>
 
           <button
             onClick={() => setSubTab('pejabat')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-xl transition-all cursor-pointer ${
               subTab === 'pejabat'
-                ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
-                : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
+                ? 'bg-white text-[#7A4819] font-bold border border-white shadow-sm'
+                : 'text-[#524E46] hover:text-[#242320] hover:bg-white/50 font-medium'
             }`}
           >
-            <Award className="w-3.5 h-3.5 text-[#9A6B3B]" />
+            <Award className="w-3.5 h-3.5 text-[#A86A2D]" />
             <span>Pejabat Penandatangan</span>
-            <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
+            <span className="text-[11px] text-[#66625B] font-mono font-semibold ml-1">
               ({pejabatList.length})
             </span>
           </button>
@@ -537,15 +539,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
           {currentUser?.role === 'admin' && (
             <button
               onClick={() => setSubTab('pengguna')}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-lg transition-all cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs rounded-xl transition-all cursor-pointer ${
                 subTab === 'pengguna'
-                  ? 'bg-[#FCFBF8] text-[#2B2A27] font-semibold border border-[#E4DFD4] shadow-2xs'
-                  : 'text-[#66625B] hover:text-[#2B2A27] font-medium'
+                  ? 'bg-white text-[#1F4A3A] font-bold border border-white shadow-sm'
+                  : 'text-[#524E46] hover:text-[#242320] hover:bg-white/50 font-medium'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#3D6356]" />
+              <ShieldCheck className="w-3.5 h-3.5 text-[#2F6B57]" />
               <span>Kelola Akun Pengguna</span>
-              <span className="text-[11px] text-[#757067] font-mono font-semibold ml-1">
+              <span className="text-[11px] text-[#66625B] font-mono font-semibold ml-1">
                 ({usersList.length})
               </span>
             </button>

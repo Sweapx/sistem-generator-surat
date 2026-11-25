@@ -884,77 +884,81 @@ export const HomeView: React.FC<HomeViewProps> = ({
   return (
     <div className="space-y-8 pb-12">
       {/* ═══════════════════════════════════════════════════════════════════════
-          ZONA 1: HERO BANNER & STATUS RINGKAS (NATURAL NEUTRAL)
+          ZONA 1: HERO BANNER & STATUS RINGKAS (NATURAL NEUTRAL GLASSMORPHISM)
       ═══════════════════════════════════════════════════════════════════════ */}
-      <section className="nn-card bg-[#FCFBF8] rounded-2xl border border-[#E6E2D8] p-6 sm:p-7">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <section className="nn-card rounded-3xl p-6 sm:p-7 relative overflow-hidden">
+        {/* Subtle decorative glass glow inside Hero */}
+        <div className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#2F6B57]/12 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/3 w-72 h-72 rounded-full bg-[#B07234]/10 blur-2xl" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           {/* Kiri: Sapaan & Identitas Sistem */}
           <div className="space-y-2.5">
-            <div className="inline-flex items-center space-x-2 bg-[#EBF2EE] border border-[#CDE0D6] px-3 py-1 rounded-full text-[11px] font-semibold text-[#2F5246]">
+            <div className="inline-flex items-center space-x-2 bg-[#DDF0E7]/90 border border-[#B2D8C5] px-3 py-1 rounded-full text-[11px] font-bold text-[#1F4A3A] shadow-2xs">
               <span>🏛️ Pusat Kebijakan Strategis &bull; Komdigi RI</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#2B2A27] tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#242320] tracking-tight">
               Selamat Bertugas, {currentUser.nama}
             </h1>
-            <p className="text-xs sm:text-sm text-[#66625B] font-normal max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#545049] font-normal max-w-2xl leading-relaxed">
               Pilih jenis naskah dinas yang ingin Anda susun hari ini, gunakan asisten{' '}
-              <strong className="text-[#2B2A27] font-semibold">Multimodal AI</strong> untuk menyusun surat dari berkas atau prompt, maupun lanjutkan pekerjaan terakhir dengan nyaman.
+              <strong className="text-[#1F4A3A] font-semibold">Multimodal AI</strong> untuk menyusun surat dari berkas atau prompt, maupun lanjutkan pekerjaan terakhir dengan nyaman.
             </p>
           </div>
 
-          {/* Kanan: Quick Stats Soft Cards */}
+          {/* Kanan: Quick Stats Frosted Accent Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
-            <div className="bg-[#F6F3EC] border border-[#E5DFD3] rounded-xl p-3.5">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#757067] flex items-center space-x-1">
-                <Hash className="w-3.5 h-3.5 text-[#3D6356]" />
+            <div className="bg-gradient-to-br from-[#FDF4E3]/92 to-[#F7E6C8]/80 backdrop-blur-md border border-white/85 shadow-[0_4px_14px_rgba(168,106,45,0.10)] rounded-2xl p-3.5">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#825221] flex items-center space-x-1">
+                <Hash className="w-3.5 h-3.5 text-[#A86A2D]" />
                 <span>Nomor Berikutnya</span>
               </div>
-              <div className="text-xl font-bold text-[#2B2A27] font-mono mt-1">
+              <div className="text-xl font-bold text-[#242320] font-mono mt-1">
                 #{nextNomorUrut}
               </div>
-              <div className="text-[10px] font-mono text-[#757067] truncate mt-0.5" title={nextNomorLengkap}>
+              <div className="text-[10px] font-mono font-medium text-[#6E563B] truncate mt-0.5" title={nextNomorLengkap}>
                 {nextNomorLengkap}
               </div>
             </div>
 
             <div
               onClick={onOpenDatabase}
-              className="bg-[#F6F3EC] hover:bg-[#EFECE3] border border-[#E5DFD3] rounded-xl p-3.5 cursor-pointer transition-colors"
+              className="bg-gradient-to-br from-[#ECF1F8]/92 to-[#DDE6F2]/80 hover:from-[#E3ECF7] hover:to-[#D2DFEF] backdrop-blur-md border border-white/85 shadow-[0_4px_14px_rgba(61,82,117,0.10)] rounded-2xl p-3.5 cursor-pointer transition-all"
               title="Klik untuk membuka Buku Agenda & Database"
             >
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#757067] flex items-center space-x-1">
-                <Database className="w-3.5 h-3.5 text-[#4B5E73]" />
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#35496B] flex items-center space-x-1">
+                <Database className="w-3.5 h-3.5 text-[#3D5275]" />
                 <span>Total Arsip Naskah</span>
               </div>
-              <div className="text-xl font-bold text-[#2B2A27] font-mono mt-1">
-                {stats.total} <span className="text-xs font-sans font-semibold text-[#66625B]">Surat</span>
+              <div className="text-xl font-bold text-[#242320] font-mono mt-1">
+                {stats.total} <span className="text-xs font-sans font-semibold text-[#4D5A70]">Surat</span>
               </div>
-              <div className="text-[10px] font-medium text-[#66625B] mt-0.5">
+              <div className="text-[10px] font-semibold text-[#3D5275] mt-0.5">
                 {stats.st} ST &bull; {stats.und} UND &bull; {stats.nd} ND
               </div>
             </div>
 
             <div
               onClick={onOpenSheetsConfig}
-              className={`col-span-2 sm:col-span-1 border rounded-xl p-3.5 cursor-pointer transition-colors ${
+              className={`col-span-2 sm:col-span-1 backdrop-blur-md border border-white/85 rounded-2xl p-3.5 cursor-pointer transition-all ${
                 isSheetsConnected
-                  ? 'bg-[#EBF2EE]/80 hover:bg-[#E1EDE6] border-[#CDE0D6]'
-                  : 'bg-[#F7EFE2]/80 hover:bg-[#F0E4D1] border-[#E8D6BA]'
+                  ? 'bg-gradient-to-br from-[#E2F3EB]/92 to-[#CDE8DB]/82 hover:from-[#D5EDE2] hover:to-[#C0E2D2] shadow-[0_4px_14px_rgba(47,107,87,0.11)]'
+                  : 'bg-gradient-to-br from-[#FCEAD2]/92 to-[#F6DCBA]/82 hover:from-[#F9E1C2] hover:to-[#F1D1A8] shadow-[0_4px_14px_rgba(168,106,45,0.11)]'
               }`}
               title="Klik untuk konfigurasi Google Sheets & Google Drive"
             >
-              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-[#5E5A52] flex items-center space-x-1">
+              <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#244E3E] flex items-center space-x-1">
                 {isSheetsConnected ? (
-                  <Wifi className="w-3.5 h-3.5 text-[#3D6356]" />
+                  <Wifi className="w-3.5 h-3.5 text-[#2F6B57]" />
                 ) : (
-                  <WifiOff className="w-3.5 h-3.5 text-[#9A6B3B]" />
+                  <WifiOff className="w-3.5 h-3.5 text-[#A86A2D]" />
                 )}
                 <span>Sinkronisasi Cloud</span>
               </div>
-              <div className="text-sm font-bold text-[#2B2A27] mt-1">
-                {isSheetsConnected ? 'Sheets & Drive Aktif' : 'Mode Lokal Browser'}
+              <div className="text-sm font-bold text-[#242320] mt-1">
+                {isSheetsConnected ? 'Sheets & Drive Aktif' : 'Cek Koneksi Cloud'}
               </div>
-              <div className="text-[10px] font-medium text-[#66625B] mt-0.5">
+              <div className="text-[10px] font-medium text-[#4A5952] mt-0.5">
                 {pegawaiList.length} Pegawai &bull; {pejabatList.length} Pejabat
               </div>
             </div>
@@ -967,50 +971,55 @@ export const HomeView: React.FC<HomeViewProps> = ({
       ═══════════════════════════════════════════════════════════════════════ */}
       <section className="space-y-4">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-[#2B2A27] flex items-center space-x-2.5">
-            <span className="w-6 h-6 rounded-full bg-[#3D6356] text-[#FAF9F6] flex items-center justify-center text-xs font-semibold">
+          <h2 className="text-base sm:text-lg font-bold text-[#242320] flex items-center space-x-2.5">
+            <span className="w-6 h-6 rounded-full bg-[#2F6B57] text-white shadow-[0_2px_6px_rgba(47,107,87,0.3)] flex items-center justify-center text-xs font-bold">
               1
             </span>
             <span>Pilih Jenis Naskah Dinas yang Ingin Dibuat</span>
           </h2>
-          <p className="text-xs text-[#66625B] mt-0.5 ml-8">
+          <p className="text-xs text-[#524E46] font-medium mt-0.5 ml-8">
             Mulai dari formulir manual yang terstruktur, atau gunakan tombol AI untuk menyusun surat beserta lampirannya secara otomatis.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* CARD 1: SURAT TUGAS */}
-          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
+          <div className="nn-card nn-card-interactive rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#EBF2EE]/75 border-b border-[#DCE8E1] px-5 py-4 flex items-center justify-between">
+              <div
+                className="border-b border-white/75 px-5 py-4 flex items-center justify-between"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(47, 107, 87, 0.20) 0%, rgba(47, 107, 87, 0.07) 100%)',
+                }}
+              >
                 <div className="flex items-center space-x-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#CDE0D6] shadow-2xs flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-[#3D6356]" />
+                  <div className="w-10 h-10 rounded-xl bg-[#2F6B57] text-white shadow-[0_4px_12px_rgba(47,107,87,0.32)] flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#CDE0D6] rounded-md text-[#2F5246]">
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white/85 border border-[#B2D8C5] rounded-md text-[#1F4A3A]">
                       KODE: KP.01.06
                     </span>
-                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Surat Tugas</h3>
+                    <h3 className="text-base font-bold text-[#242320] mt-0.5">Surat Tugas</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-[#59554E]">
-                <p className="leading-relaxed">
+              <div className="p-5 space-y-3 text-xs text-[#4F4B44]">
+                <p className="leading-relaxed font-medium">
                   Naskah penugasan resmi pegawai untuk menghadiri rapat, dinas luar, forum koordinasi, atau kegiatan kedinasan.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
+                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#2E2C28]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2F6B57] shrink-0" />
                     <span>1–3 Pegawai otomatis proporsional 1 halaman A4</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2F6B57] shrink-0" />
                     <span>&gt;3 Pegawai otomatis membuat Tabel Lampiran</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D6356] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2F6B57] shrink-0" />
                     <span>Ekstraksi surat undangan masuk via AI</span>
                   </li>
                 </ul>
@@ -1021,7 +1030,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('TUGAS', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(61,99,86,0.18)] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-gradient-to-b from-[#367560] to-[#285A48] hover:from-[#2E6653] hover:to-[#204A3B] text-white font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_4px_12px_rgba(47,107,87,0.28),inset_0_1px_0_rgba(255,255,255,0.25)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Surat Tugas</span>
@@ -1029,47 +1038,52 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('TUGAS', true)}
-                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EBF2EE] text-[#2F5246] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-white/85 hover:bg-[#DDF0E7] text-[#1F4A3A] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#B2D8C5] shadow-2xs cursor-pointer"
                 title="Langsung buka pemindai dokumen / prompt AI untuk Surat Tugas"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#3D6356]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#2F6B57]" />
                 <span>Via AI</span>
               </button>
             </div>
           </div>
 
           {/* CARD 2: SURAT UNDANGAN */}
-          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
+          <div className="nn-card nn-card-interactive rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#F7EFE2]/80 border-b border-[#EBDEC9] px-5 py-4 flex items-center justify-between">
+              <div
+                className="border-b border-white/75 px-5 py-4 flex items-center justify-between"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(168, 106, 45, 0.22) 0%, rgba(168, 106, 45, 0.07) 100%)',
+                }}
+              >
                 <div className="flex items-center space-x-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#E6D4B8] shadow-2xs flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-[#9A6B3B]" />
+                  <div className="w-10 h-10 rounded-xl bg-[#A86A2D] text-white shadow-[0_4px_12px_rgba(168,106,45,0.32)] flex items-center justify-center">
+                    <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#E6D4B8] rounded-md text-[#7A542E]">
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white/85 border border-[#E6C9A2] rounded-md text-[#7A4819]">
                       INTERNAL / EKSTERNAL
                     </span>
-                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Surat Undangan</h3>
+                    <h3 className="text-base font-bold text-[#242320] mt-0.5">Surat Undangan</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-[#59554E]">
-                <p className="leading-relaxed">
+              <div className="p-5 space-y-3 text-xs text-[#4F4B44]">
+                <p className="leading-relaxed font-medium">
                   Naskah undangan rapat koordinasi, FGD, atau acara resmi yang diselenggarakan oleh unit kerja.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
+                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#2E2C28]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#A86A2D] shrink-0" />
                     <span>Mode tempat Luring (Offline), Daring, &amp; Hybrid</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#A86A2D] shrink-0" />
                     <span>Lampiran Daftar Pejabat/Tamu &amp; Rundown Acara</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#9A6B3B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#A86A2D] shrink-0" />
                     <span>Susun undangan + rundown otomatis via Prompt AI</span>
                   </li>
                 </ul>
@@ -1080,7 +1094,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('UNDANGAN', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#8C6239] hover:bg-[#75502D] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(140,98,57,0.18)] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-gradient-to-b from-[#B37334] to-[#915A23] hover:from-[#9E642B] hover:to-[#7C4C1C] text-white font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_4px_12px_rgba(168,106,45,0.28),inset_0_1px_0_rgba(255,255,255,0.25)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Surat Undangan</span>
@@ -1088,47 +1102,52 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('UNDANGAN', true)}
-                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#F7EFE2] text-[#7A542E] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-white/85 hover:bg-[#FCEAD2] text-[#7A4819] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#E6C9A2] shadow-2xs cursor-pointer"
                 title="Langsung buka pemindai TOR / prompt AI untuk Surat Undangan"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#9A6B3B]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#A86A2D]" />
                 <span>Via AI</span>
               </button>
             </div>
           </div>
 
           {/* CARD 3: NOTA DINAS */}
-          <div className="nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl flex flex-col justify-between overflow-hidden">
+          <div className="nn-card nn-card-interactive rounded-2xl flex flex-col justify-between overflow-hidden">
             <div>
-              <div className="bg-[#EDF0F4]/85 border-b border-[#DCE2EA] px-5 py-4 flex items-center justify-between">
+              <div
+                className="border-b border-white/75 px-5 py-4 flex items-center justify-between"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(61, 82, 117, 0.22) 0%, rgba(61, 82, 117, 0.07) 100%)',
+                }}
+              >
                 <div className="flex items-center space-x-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-[#FCFBF8] border border-[#D1D9E4] shadow-2xs flex items-center justify-center">
-                    <ScrollText className="w-5 h-5 text-[#45546B]" />
+                  <div className="w-10 h-10 rounded-xl bg-[#3D5275] text-white shadow-[0_4px_12px_rgba(61,82,117,0.32)] flex items-center justify-center">
+                    <ScrollText className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-semibold uppercase px-2 py-0.5 bg-[#FCFBF8] border border-[#D1D9E4] rounded-md text-[#3B4A62]">
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-white/85 border border-[#BCCAE0] rounded-md text-[#2D4263]">
                       KLASIFIKASI CERDAS
                     </span>
-                    <h3 className="text-base font-bold text-[#2B2A27] mt-0.5">Nota Dinas</h3>
+                    <h3 className="text-base font-bold text-[#242320] mt-0.5">Nota Dinas</h3>
                   </div>
                 </div>
               </div>
 
-              <div className="p-5 space-y-3 text-xs text-[#59554E]">
-                <p className="leading-relaxed">
+              <div className="p-5 space-y-3 text-xs text-[#4F4B44]">
+                <p className="leading-relaxed font-medium">
                   Naskah dinas internal untuk penyampaian laporan, telaah kebijakan, usulan, atau permohonan arahan pimpinan.
                 </p>
-                <ul className="space-y-1.5 text-[11.5px] font-medium text-[#3A3834]">
+                <ul className="space-y-1.5 text-[11.5px] font-semibold text-[#2E2C28]">
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D5275] shrink-0" />
                     <span>Rekomendasi kode klasifikasi Fasilitatif/Substantif</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D5275] shrink-0" />
                     <span>Otomatisasi struktur Latar Belakang, Pokok &amp; Penutup</span>
                   </li>
                   <li className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#45546B] shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3D5275] shrink-0" />
                     <span>Mendukung multi-halaman &amp; lampiran PDF merger</span>
                   </li>
                 </ul>
@@ -1139,7 +1158,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('NOTA_DINAS', false)}
-                className="flex-1 flex items-center justify-center space-x-1.5 bg-[#45546B] hover:bg-[#374457] text-[#FAF9F6] font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_2px_6px_rgba(69,84,107,0.18)] cursor-pointer"
+                className="flex-1 flex items-center justify-center space-x-1.5 bg-gradient-to-b from-[#465E85] to-[#354868] hover:from-[#3C5175] hover:to-[#2B3B56] text-white font-semibold text-xs py-2.5 px-3 rounded-xl shadow-[0_4px_12px_rgba(61,82,117,0.28),inset_0_1px_0_rgba(255,255,255,0.25)] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Nota Dinas</span>
@@ -1147,10 +1166,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onStartCreateNew('NOTA_DINAS', true)}
-                className="flex items-center justify-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EDF0F4] text-[#3B4A62] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#D8D3C7] cursor-pointer"
+                className="flex items-center justify-center space-x-1.5 bg-white/85 hover:bg-[#E4ECF7] text-[#2D4263] font-semibold text-xs py-2.5 px-3 rounded-xl border border-[#BCCAE0] shadow-2xs cursor-pointer"
                 title="Langsung buka pemindai laporan / prompt AI untuk Nota Dinas"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#45546B]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#3D5275]" />
                 <span>Via AI</span>
               </button>
             </div>
@@ -1164,20 +1183,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-[#2B2A27] flex items-center space-x-2.5">
-              <span className="w-6 h-6 rounded-full bg-[#3D6356] text-[#FAF9F6] flex items-center justify-center text-xs font-semibold">
+            <h2 className="text-base sm:text-lg font-bold text-[#242320] flex items-center space-x-2.5">
+              <span className="w-6 h-6 rounded-full bg-[#2F6B57] text-white shadow-[0_2px_6px_rgba(47,107,87,0.3)] flex items-center justify-center text-xs font-bold">
                 2
               </span>
               <span>Dokumen Terakhir &amp; Draf Tersimpan (Live Preview)</span>
             </h2>
-            <p className="text-xs text-[#66625B] mt-0.5 ml-8">
+            <p className="text-xs text-[#524E46] font-medium mt-0.5 ml-8">
               Pratinjau menampilkan wujud asli naskah dinas. Klik kartu untuk membuka &amp; mengedit isinya secara utuh, atau jadikan template surat baru.
             </p>
           </div>
 
           {/* Filter Tab & Search */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 bg-[#EFECE5] p-1 rounded-xl border border-[#E2DDD2]">
+            <div className="flex items-center gap-1 bg-white/55 backdrop-blur-md p-1 rounded-xl border border-white/75 shadow-2xs">
               {(
                 [
                   ['ALL', 'Semua'],
@@ -1192,8 +1211,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   onClick={() => setRecentFilter(key)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer transition-all ${
                     recentFilter === key
-                      ? 'bg-[#FCFBF8] text-[#2B2A27] shadow-2xs border border-[#E4DFD4]'
-                      : 'text-[#66625B] hover:text-[#2B2A27]'
+                      ? 'bg-[#2F6B57] text-white shadow-2xs'
+                      : 'text-[#524E46] hover:text-[#242320] hover:bg-white/60'
                   }`}
                 >
                   {label}
@@ -1202,13 +1221,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-[#8A857C] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[#787268] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={recentSearch}
                 onChange={(e) => setRecentSearch(e.target.value)}
                 placeholder="Cari nomor / perihal..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-[#FCFBF8] border border-[#DFDBD0] rounded-xl w-48 sm:w-56 font-medium"
+                className="pl-8 pr-3 py-1.5 text-xs rounded-xl w-48 sm:w-56 font-medium"
               />
             </div>
           </div>
@@ -1216,13 +1235,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
         {/* SUB-SECTION: DRAF SEDANG DIKERJAKAN (AUTO-SAVED DI PERANGKAT ANDA) */}
         {savedDrafts.length > 0 && !recentSearch && (
-          <div className="bg-[#F9F6F0] border border-[#E5DFD3] rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-[0_2px_10px_rgba(43,42,39,0.025)]">
+          <div className="nn-card rounded-3xl p-4 sm:p-5 space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center space-x-2 text-xs font-semibold text-[#2B2A27]">
-                <Clock className="w-4 h-4 text-[#3D6356]" />
+              <div className="flex items-center space-x-2 text-xs font-bold text-[#242320]">
+                <Clock className="w-4 h-4 text-[#2F6B57]" />
                 <span>Draf Sedang Dikerjakan (Auto-Saved di Perangkat Anda)</span>
               </div>
-              <span className="text-[11px] font-medium text-[#757067]">
+              <span className="text-[11px] font-medium text-[#5C5850]">
                 Status terbit otomatis menyesuaikan saat dokumen disimpan
               </span>
             </div>
@@ -1233,10 +1252,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 .map((draft) => {
                   const badgePill =
                     draft.jenis === 'UNDANGAN'
-                      ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E6D4B8]'
+                      ? 'bg-[#A86A2D] text-white'
                       : draft.jenis === 'NOTA_DINAS'
-                      ? 'bg-[#EDF0F4] text-[#3B4A62] border-[#D1D9E4]'
-                      : 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]';
+                      ? 'bg-[#3D5275] text-white'
+                      : 'bg-[#2F6B57] text-white';
                   const jenisLabel =
                     draft.jenis === 'UNDANGAN'
                       ? 'Surat Undangan'
@@ -1256,11 +1275,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     <div
                       key={`draft-${draft.jenis}`}
                       onClick={handleOpenDraftItem}
-                      className="group nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl overflow-hidden flex flex-col cursor-pointer"
+                      className="group bg-white/80 hover:bg-white/95 backdrop-blur-lg border border-white/85 rounded-2xl shadow-[0_6px_20px_-4px_rgba(34,31,26,0.10)] hover:shadow-[0_14px_30px_-6px_rgba(34,31,26,0.15)] transition-all overflow-hidden flex flex-col cursor-pointer"
                     >
                       {/* Thumbnail Kertas A4 Asli */}
-                      <div className="bg-[#EAE6DD] border-b border-[#E4DFD4] p-3 flex justify-center items-start relative overflow-hidden">
-                        <div className="border border-[#DCD6C9] rounded-xs shadow-xs bg-white overflow-hidden">
+                      <div className="bg-[#C8C0B1]/55 border-b border-white/75 p-3 flex justify-center items-start relative overflow-hidden">
+                        <div className="border border-[#BFB7A8] rounded-xs shadow-[0_4px_14px_rgba(30,28,24,0.12)] bg-white overflow-hidden">
                           <MiniA4Preview
                             form={draft.form}
                             pegawaiList={pegawaiList}
@@ -1269,18 +1288,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           />
                         </div>
                         <span
-                          className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-2xs ${badgePill}`}
+                          className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold shadow-sm ${badgePill}`}
                         >
                           {jenisLabel}
                         </span>
 
                         {draft.isPublished ? (
-                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#E3F1E8] text-[#23533D] border border-[#B8DAC5] shadow-2xs flex items-center space-x-1">
+                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#DDF0E7] text-[#1B4938] border border-[#9ECDB6] shadow-sm flex items-center space-x-1">
                             <CheckCircle2 className="w-3 h-3 shrink-0" />
                             <span>Sudah Terbit</span>
                           </span>
                         ) : (
-                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#FBF0DC] text-[#855828] border border-[#E8D2AC] shadow-2xs">
+                          <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FCEAD2] text-[#7A4819] border border-[#E3BE8E] shadow-sm">
                             Belum Terbit
                           </span>
                         )}
@@ -1288,10 +1307,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       <div className="p-3.5 flex-1 flex flex-col justify-between space-y-2.5">
                         <div>
-                          <div className="text-[11px] font-mono font-medium text-[#757067] truncate">
+                          <div className="text-[11px] font-mono font-semibold text-[#66625B] truncate">
                             {draft.form.nomor_lengkap || nextNomorLengkap}
                           </div>
-                          <h4 className="text-xs font-semibold text-[#2B2A27] line-clamp-2 mt-0.5 leading-snug">
+                          <h4 className="text-xs font-bold text-[#242320] line-clamp-2 mt-0.5 leading-snug">
                             {draft.title}
                           </h4>
                         </div>
@@ -1304,8 +1323,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           }}
                           className={`w-full flex items-center justify-center space-x-1.5 py-1.5 px-2.5 rounded-xl text-xs font-semibold border cursor-pointer ${
                             draft.isPublished
-                              ? 'bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] border-[#CDE0D6]'
-                              : 'bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] border-transparent'
+                              ? 'bg-[#DDF0E7] hover:bg-[#CCE7DA] text-[#1F4A3A] border-[#A7D3BE]'
+                              : 'bg-[#2F6B57] hover:bg-[#265847] text-white border-transparent shadow-2xs'
                           }`}
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1321,12 +1340,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
         {/* GRID DOKUMEN RECENT YANG SUDAH DITERBITKAN */}
         {displayedRecords.length === 0 ? (
-          <div className="nn-card bg-[#FCFBF8] rounded-2xl p-10 text-center space-y-2">
-            <FileText className="w-8 h-8 text-[#9E998E] mx-auto" />
-            <div className="text-sm font-semibold text-[#2B2A27]">
+          <div className="nn-card rounded-2xl p-10 text-center space-y-2">
+            <FileText className="w-8 h-8 text-[#8A8479] mx-auto" />
+            <div className="text-sm font-semibold text-[#242320]">
               Belum ada dokumen yang cocok dengan pencarian/filter
             </div>
-            <p className="text-xs text-[#757067]">
+            <p className="text-xs text-[#66625B]">
               Silakan pilih salah satu kartu di atas untuk membuat naskah dinas baru.
             </p>
           </div>
@@ -1343,10 +1362,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
               const jenis = reconstructedForm.jenis_naskah || 'TUGAS';
               const badgePill =
                 jenis === 'UNDANGAN'
-                  ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E6D4B8]'
+                  ? 'bg-[#A86A2D] text-white'
                   : jenis === 'NOTA_DINAS'
-                  ? 'bg-[#EDF0F4] text-[#3B4A62] border-[#D1D9E4]'
-                  : 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]';
+                  ? 'bg-[#3D5275] text-white'
+                  : 'bg-[#2F6B57] text-white';
               const badgeCode =
                 jenis === 'UNDANGAN'
                   ? 'Surat Undangan'
@@ -1372,12 +1391,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div
                   key={rec.id}
                   onClick={() => onEditRecentRecord(rec)}
-                  className="group nn-card nn-card-interactive bg-[#FCFBF8] rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer"
+                  className="group nn-card nn-card-interactive rounded-2xl overflow-hidden flex flex-col justify-between cursor-pointer"
                 >
                   {/* Atas: Live Miniature A4 Document */}
                   <div>
-                    <div className="bg-[#EAE6DD] border-b border-[#E4DFD4] p-3 flex justify-center items-start relative overflow-hidden">
-                      <div className="border border-[#DCD6C9] rounded-xs shadow-[0_3px_12px_rgba(43,42,39,0.07)] bg-white overflow-hidden transition-transform duration-300 group-hover:scale-[1.02]">
+                    <div className="bg-[#C8C0B1]/55 border-b border-white/75 p-3 flex justify-center items-start relative overflow-hidden">
+                      <div className="border border-[#BFB7A8] rounded-xs shadow-[0_6px_18px_rgba(30,28,24,0.13)] bg-white overflow-hidden transition-transform duration-300 group-hover:scale-[1.02]">
                         <MiniA4Preview
                           form={reconstructedForm}
                           pegawaiList={pegawaiList}
@@ -1388,19 +1407,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       {/* Badge Jenis Naskah */}
                       <span
-                        className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shadow-2xs ${badgePill}`}
+                        className={`absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold shadow-sm ${badgePill}`}
                       >
                         {badgeCode}
                       </span>
 
                       {/* Badge Nomor Urut */}
-                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#FCFBF8]/95 border border-[#DCD6C9] shadow-2xs text-[#3F3D38]">
+                      <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-white/95 border border-white shadow-sm text-[#242320]">
                         #{rec.nomor_urut}
                       </span>
 
                       {/* Hover Overlay Quick Hint */}
-                      <div className="absolute inset-0 bg-[#2B2A27]/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                        <span className="bg-[#FCFBF8]/95 backdrop-blur-xs text-[#2B2A27] text-[11px] font-semibold px-3.5 py-1.5 rounded-full border border-[#DFDBD0] shadow-md">
+                      <div className="absolute inset-0 bg-[#242320]/15 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <span className="bg-white/95 backdrop-blur-md text-[#242320] text-[11px] font-bold px-3.5 py-1.5 rounded-full border border-white shadow-lg">
                           Klik untuk Buka di Generator
                         </span>
                       </div>
@@ -1408,27 +1427,27 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                     {/* Tengah: Metadata Dokumen */}
                     <div className="p-4 space-y-1.5">
-                      <div className="flex items-center justify-between gap-1 text-[11px] font-mono font-medium text-[#757067]">
+                      <div className="flex items-center justify-between gap-1 text-[11px] font-mono font-semibold text-[#66625B]">
                         <span className="truncate" title={reconstructedForm.nomor_lengkap}>
                           {reconstructedForm.nomor_lengkap}
                         </span>
                       </div>
 
                       <h3
-                        className="text-xs font-semibold text-[#2B2A27] line-clamp-2 leading-snug min-h-[32px]"
+                        className="text-xs font-bold text-[#242320] line-clamp-2 leading-snug min-h-[32px]"
                         title={titleText}
                       >
                         {titleText}
                       </h3>
 
-                      <div className="pt-1.5 flex items-center justify-between text-[10.5px] text-[#6E6A63] border-t border-[#ECE8DF]">
+                      <div className="pt-1.5 flex items-center justify-between text-[10.5px] text-[#5C5850] border-t border-[#E2DDD2]/80">
                         <span className="truncate max-w-[125px]" title={rec.kepada || '-'}>
-                          Kepada: <strong className="text-[#2B2A27] font-semibold">{rec.kepada || '-'}</strong>
+                          Kepada: <strong className="text-[#242320] font-semibold">{rec.kepada || '-'}</strong>
                         </span>
-                        <span className="shrink-0">{tanggalLabel}</span>
+                        <span className="shrink-0 font-medium">{tanggalLabel}</span>
                       </div>
                       {rec.konseptor && (
-                        <div className="text-[10px] text-[#8A857C] truncate">
+                        <div className="text-[10px] text-[#757067] truncate">
                           Konseptor: {rec.konseptor}
                         </div>
                       )}
@@ -1444,7 +1463,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           e.stopPropagation();
                           onEditRecentRecord(rec);
                         }}
-                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] cursor-pointer"
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-[#2F6B57] hover:bg-[#255646] text-white shadow-2xs cursor-pointer"
                         title="Buka dokumen ini di Generator dengan seluruh isinya dan nomor urut aslinya"
                       >
                         <Edit3 className="w-3 h-3 shrink-0" />
@@ -1457,7 +1476,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           e.stopPropagation();
                           onDuplicateAsNewTemplate(rec);
                         }}
-                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#3F3D38] border border-[#DFDBD0] cursor-pointer"
+                        className="flex items-center justify-center space-x-1 py-1.5 px-2 rounded-xl text-[11px] font-semibold bg-white/85 hover:bg-white text-[#2E2C28] border border-[#D4CEC2] shadow-2xs cursor-pointer"
                         title="Salin seluruh isi surat ini sebagai draf baru dengan Nomor Urut baru (#berikutnya)"
                       >
                         <Copy className="w-3 h-3 shrink-0" />
@@ -1471,7 +1490,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full flex items-center justify-center space-x-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2F5246] border border-[#CDE0D6] transition-colors"
+                        className="w-full flex items-center justify-center space-x-1 py-1 px-2 rounded-lg text-[10.5px] font-semibold bg-[#DDF0E7]/90 hover:bg-[#CCE7DA] text-[#1F4A3A] border border-[#A8D4BF] transition-colors"
                       >
                         <ExternalLink className="w-3 h-3" />
                         <span>Buka Arsip Google Docs / Word</span>
@@ -1490,7 +1509,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <button
               type="button"
               onClick={() => setVisibleCount((prev) => prev + 8)}
-              className="px-4 py-2 bg-[#FCFBF8] hover:bg-[#F2EFE8] text-[#2B2A27] text-xs font-semibold rounded-xl border border-[#DFDBD0] shadow-2xs cursor-pointer"
+              className="px-4 py-2 bg-white/80 hover:bg-white text-[#242320] text-xs font-semibold rounded-xl border border-white/85 shadow-sm backdrop-blur-md cursor-pointer"
             >
               Tampilkan Lebih Banyak Dokumen ({sortedRecentRecords.length - visibleCount} lainnya)
             </button>
@@ -1498,7 +1517,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <button
             type="button"
             onClick={onOpenDatabase}
-            className="flex items-center space-x-1.5 px-4 py-2 bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] text-xs font-semibold rounded-xl border border-[#CDE0D6] cursor-pointer"
+            className="flex items-center space-x-1.5 px-4 py-2 bg-[#2F6B57] hover:bg-[#255646] text-white text-xs font-semibold rounded-xl shadow-[0_4px_12px_rgba(47,107,87,0.25)] cursor-pointer"
           >
             <Database className="w-3.5 h-3.5" />
             <span>Lihat Seluruh Tabel Buku Agenda ({nomorSuratList.length} Surat)</span>
@@ -1512,48 +1531,48 @@ export const HomeView: React.FC<HomeViewProps> = ({
       ═══════════════════════════════════════════════════════════════════════ */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
         {/* Kolom Kiri (5 Cols): Tentang Aplikasi PUSAKA */}
-        <div className="lg:col-span-5 nn-card bg-[#FCFBF8] rounded-2xl p-6 flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-5 nn-card rounded-3xl p-6 flex flex-col justify-between space-y-4">
           <div className="space-y-3">
-            <div className="inline-flex items-center space-x-1.5 bg-[#EDF0F4] border border-[#D3DAE5] px-3 py-1 rounded-full text-[11px] font-semibold text-[#3B4A62]">
+            <div className="inline-flex items-center space-x-1.5 bg-[#E4ECF7] border border-[#BCCAE0] px-3 py-1 rounded-full text-[11px] font-bold text-[#2D4263]">
               <BookOpen className="w-3.5 h-3.5" />
               <span>Tentang Sistem PUSAKA</span>
             </div>
 
-            <h2 className="text-lg font-bold text-[#2B2A27]">
+            <h2 className="text-lg font-bold text-[#242320]">
               Sistem Otomasi Tata Naskah Dinas &amp; Buku Agenda Elektronik
             </h2>
 
-            <p className="text-xs text-[#59554E] leading-relaxed">
-              <strong className="text-[#2B2A27]">Sistem Generator Surat PUSAKA</strong> adalah platform kerja internal yang dirancang untuk mempermudah tata usaha dan penyusunan naskah dinas di lingkungan{' '}
-              <strong className="text-[#2B2A27]">Kementerian Komunikasi dan Digital RI</strong>.
+            <p className="text-xs text-[#4F4B44] leading-relaxed">
+              <strong className="text-[#242320]">Sistem Generator Surat PUSAKA</strong> adalah platform kerja internal yang dirancang untuk mempermudah tata usaha dan penyusunan naskah dinas di lingkungan{' '}
+              <strong className="text-[#242320]">Kementerian Komunikasi dan Digital RI</strong>.
             </p>
 
             <div className="space-y-2.5 pt-1 text-xs">
-              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
-                <ShieldCheck className="w-4 h-4 text-[#3D6356] shrink-0 mt-0.5" />
+              <div className="p-3 bg-white/65 border border-white/85 rounded-2xl shadow-2xs flex items-start space-x-2.5">
+                <ShieldCheck className="w-4 h-4 text-[#2F6B57] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#2B2A27] block font-semibold">Sesuai Standar Tata Naskah Dinas Komdigi</strong>
-                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
+                  <strong className="text-[#242320] block font-semibold">Sesuai Standar Tata Naskah Dinas Komdigi</strong>
+                  <span className="text-[#5C5850] text-[11px] leading-relaxed block mt-0.5">
                     Mendukung 3 varian kop unit kerja resmi, tipografi, margin kertas A4, kode klasifikasi Fasilitatif &amp; Substantif, serta tata letak tanda tangan pejabat.
                   </span>
                 </div>
               </div>
 
-              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
-                <Sparkles className="w-4 h-4 text-[#9A6B3B] shrink-0 mt-0.5" />
+              <div className="p-3 bg-white/65 border border-white/85 rounded-2xl shadow-2xs flex items-start space-x-2.5">
+                <Sparkles className="w-4 h-4 text-[#A86A2D] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#2B2A27] block font-semibold">Didukung Gemini Multimodal AI</strong>
-                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
+                  <strong className="text-[#242320] block font-semibold">Didukung Gemini Multimodal AI</strong>
+                  <span className="text-[#5C5850] text-[11px] leading-relaxed block mt-0.5">
                     Membaca dokumen PDF/Word/Gambar pindaian maupun perintah teks (*prompt-only*) untuk menyusun surat lengkap beserta tabel lampirannya.
                   </span>
                 </div>
               </div>
 
-              <div className="p-3 bg-[#F6F4EF] border border-[#E6E2D8] rounded-xl flex items-start space-x-2.5">
-                <FileCheck2 className="w-4 h-4 text-[#45546B] shrink-0 mt-0.5" />
+              <div className="p-3 bg-white/65 border border-white/85 rounded-2xl shadow-2xs flex items-start space-x-2.5">
+                <FileCheck2 className="w-4 h-4 text-[#3D5275] shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-[#2B2A27] block font-semibold">Integrasi Satu Pintu (Sheets &amp; Google Drive)</strong>
-                  <span className="text-[#66625B] text-[11px] leading-relaxed block mt-0.5">
+                  <strong className="text-[#242320] block font-semibold">Integrasi Satu Pintu (Sheets &amp; Google Drive)</strong>
+                  <span className="text-[#5C5850] text-[11px] leading-relaxed block mt-0.5">
                     Penomoran surat tercatat otomatis ke Google Spreadsheet kantor sekaligus mengarsipkan berkas Word (`.docx` / Google Docs) ke folder bulanan Google Drive.
                   </span>
                 </div>
@@ -1563,77 +1582,77 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         {/* Kolom Kanan (7 Cols): Panduan & Cara Penggunaan (4 Langkah Mudah) */}
-        <div className="lg:col-span-7 nn-card bg-[#FCFBF8] rounded-2xl p-6 space-y-4">
+        <div className="lg:col-span-7 nn-card rounded-3xl p-6 space-y-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center space-x-1.5 bg-[#EBF2EE] border border-[#CDE0D6] px-3 py-1 rounded-full text-[11px] font-semibold text-[#2F5246]">
+            <div className="inline-flex items-center space-x-1.5 bg-[#DDF0E7] border border-[#B2D8C5] px-3 py-1 rounded-full text-[11px] font-bold text-[#1F4A3A]">
               <Layers className="w-3.5 h-3.5" />
               <span>Panduan Penggunaan</span>
             </div>
-            <h2 className="text-lg font-bold text-[#2B2A27] pt-1">
+            <h2 className="text-lg font-bold text-[#242320] pt-1">
               Cara Menggunakan Aplikasi dalam 4 Langkah
             </h2>
-            <p className="text-xs text-[#66625B]">
+            <p className="text-xs text-[#5C5850]">
               Alur kerja tenang dan terstruktur untuk menerbitkan naskah dinas resmi tanpa mengatur format kertas secara manual.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
             {/* Step 1 */}
-            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
+            <div className="p-4 rounded-2xl bg-white/65 border border-white/85 shadow-2xs space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-[#EBF2EE] border border-[#CDE0D6] font-bold text-xs flex items-center justify-center text-[#2F5246]">
+                <span className="w-6 h-6 rounded-full bg-[#2F6B57] text-white font-bold text-xs flex items-center justify-center">
                   1
                 </span>
-                <h3 className="text-xs font-bold text-[#2B2A27]">
+                <h3 className="text-xs font-bold text-[#242320]">
                   Pilih Naskah, Kop &amp; Prompt AI
                 </h3>
               </div>
-              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+              <p className="text-[11.5px] text-[#5C5850] leading-relaxed">
                 Pilih kartu <strong>Surat Tugas</strong>, <strong>Surat Undangan</strong>, atau <strong>Nota Dinas</strong>, sesuaikan unit Kop Surat bila diperlukan, atau klik <strong>&quot;Via AI&quot;</strong> untuk mengunggah acuan/prompt.
               </p>
             </div>
 
             {/* Step 2 */}
-            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
+            <div className="p-4 rounded-2xl bg-white/65 border border-white/85 shadow-2xs space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-[#F7EFE2] border border-[#E6D4B8] font-bold text-xs flex items-center justify-center text-[#7A542E]">
+                <span className="w-6 h-6 rounded-full bg-[#A86A2D] text-white font-bold text-xs flex items-center justify-center">
                   2
                 </span>
-                <h3 className="text-xs font-bold text-[#2B2A27]">
+                <h3 className="text-xs font-bold text-[#242320]">
                   Edit Formulir &amp; Kertas A4 Dua Arah
                 </h3>
               </div>
-              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+              <p className="text-[11.5px] text-[#5C5850] leading-relaxed">
                 Lengkapi atribut surat di panel kiri atau klik &amp; ketik langsung di atas lembar <strong>Live Preview Kertas A4</strong> di sebelah kanan layaknya pengolah kata.
               </p>
             </div>
 
             {/* Step 3 */}
-            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
+            <div className="p-4 rounded-2xl bg-white/65 border border-white/85 shadow-2xs space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-[#EDF0F4] border border-[#D1D9E4] font-bold text-xs flex items-center justify-center text-[#3B4A62]">
+                <span className="w-6 h-6 rounded-full bg-[#3D5275] text-white font-bold text-xs flex items-center justify-center">
                   3
                 </span>
-                <h3 className="text-xs font-bold text-[#2B2A27]">
+                <h3 className="text-xs font-bold text-[#242320]">
                   Atur Klasifikasi &amp; Lampiran Merger
                 </h3>
               </div>
-              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+              <p className="text-[11.5px] text-[#5C5850] leading-relaxed">
                 Pilih <strong>Kode Klasifikasi</strong> (tersedia rekomendasi cerdas), lalu tambahkan lampiran Daftar Undangan, Tabel Rundown, atau PDF eksternal.
               </p>
             </div>
 
             {/* Step 4 */}
-            <div className="p-4 rounded-xl bg-[#F6F4EF] border border-[#E6E2D8] space-y-1.5">
+            <div className="p-4 rounded-2xl bg-white/65 border border-white/85 shadow-2xs space-y-1.5">
               <div className="flex items-center space-x-2">
-                <span className="w-6 h-6 rounded-full bg-[#EBF2EE] border border-[#CDE0D6] font-bold text-xs flex items-center justify-center text-[#2F5246]">
+                <span className="w-6 h-6 rounded-full bg-[#2F6B57] text-white font-bold text-xs flex items-center justify-center">
                   4
                 </span>
-                <h3 className="text-xs font-bold text-[#2B2A27]">
+                <h3 className="text-xs font-bold text-[#242320]">
                   Terbitkan ke Cloud &amp; Unduh Dokumen
                 </h3>
               </div>
-              <p className="text-[11.5px] text-[#66625B] leading-relaxed">
+              <p className="text-[11.5px] text-[#5C5850] leading-relaxed">
                 Klik <strong>&quot;Terbitkan &amp; Simpan&quot;</strong> untuk mencatat nomor surat ke Google Sheets dan mengunggah arsip ke Google Drive, atau unduh sebagai <strong>PDF</strong> / <strong>Word (.docx)</strong>.
               </p>
             </div>

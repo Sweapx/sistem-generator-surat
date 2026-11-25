@@ -1,37 +1,40 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   NATURAL NEUTRAL DESIGN SYSTEM (ANTI-EYE STRAIN • ORGANIC • SOFT FLOATING)
-   - Warm Alabaster / Oat Linen Canvas: #F5F3EE
-   - Soft Floating Card Surface: #FCFBF8 / #FFFFFF
-   - Warm Charcoal Ink: #2B2A27 | Stone Secondary: #636059
-   - Hairline Organic Border: 1px solid #E6E2D8
-   - Diffused Soft Ambient Shadows (Zero Harsh Outlines)
+   NATURAL NEUTRAL + GLASSMORPHISM DESIGN SYSTEM
+   - Darker Warm Stone / Greige Base Canvas (#DDD7CB) + Organic Ambient Mesh
+     agar kartu kaca (frosted glass) & warna aksen fitur tampil kontras dan jelas
+   - Frosted Translucent Surfaces: rgba(255, 254, 251, 0.76) + backdrop-blur(20px)
+   - Specular Glass Rim Border: 1px solid rgba(255, 255, 255, 0.82)
+   - Soft Multi-Layered Floating Shadows (Anti-Eye Strain, Tenang & Elegan)
    - Kertas Surat Resmi (#surat-tugas-document): Terisolasi 100%
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --nn-bg: #F5F3EE;
-  --nn-surface: #FCFBF8;
-  --nn-surface-pure: #FFFFFF;
-  --nn-surface-muted: #F2EFE9;
-  --nn-border: #E6E2D8;
-  --nn-border-strong: #D6D0C4;
-  --nn-ink: #2B2A27;
-  --nn-ink-muted: #66625B;
-  --nn-sage: #3D6356;
-  --nn-sage-soft: #EBF2EE;
-  --nn-sand-soft: #F7EFE2;
-  --nn-slate-soft: #EDF0F4;
-  --nn-shadow-card: 0 1px 3px rgba(43, 42, 39, 0.035), 0 8px 24px -6px rgba(43, 42, 39, 0.055);
-  --nn-shadow-float: 0 4px 14px rgba(43, 42, 39, 0.055), 0 18px 38px -8px rgba(43, 42, 39, 0.085);
+  --nn-bg-base: #DDD7CB;
+  --nn-glass-bg: linear-gradient(145deg, rgba(255, 254, 251, 0.80) 0%, rgba(252, 249, 243, 0.68) 100%);
+  --nn-glass-bg-hover: linear-gradient(145deg, rgba(255, 255, 255, 0.88) 0%, rgba(253, 251, 247, 0.78) 100%);
+  --nn-glass-border: rgba(255, 255, 255, 0.82);
+  --nn-glass-outline: rgba(43, 40, 34, 0.07);
+  --nn-ink: #242320;
+  --nn-ink-muted: #5C5850;
+  --nn-shadow-glass:
+    0 10px 30px -8px rgba(34, 31, 26, 0.11),
+    0 2px 6px rgba(34, 31, 26, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.90),
+    0 0 0 1px rgba(43, 40, 34, 0.06);
+  --nn-shadow-glass-float:
+    0 18px 42px -10px rgba(34, 31, 26, 0.16),
+    0 4px 12px rgba(34, 31, 26, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 0 0 1px rgba(47, 107, 87, 0.18);
 }
 
 @layer base {
   html {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    color: #2B2A27;
-    background-color: #F5F3EE;
+    color: #242320;
+    background-color: #DDD7CB;
   }
 
   * {
@@ -39,8 +42,14 @@
   }
 
   body {
-    background-color: #F5F3EE;
-    color: #2B2A27;
+    background-color: #DDD7CB;
+    background-image:
+      radial-gradient(at 10% 8%, rgba(47, 107, 87, 0.16) 0px, transparent 48%),
+      radial-gradient(at 90% 12%, rgba(176, 114, 52, 0.15) 0px, transparent 46%),
+      radial-gradient(at 52% 92%, rgba(61, 82, 117, 0.15) 0px, transparent 52%),
+      linear-gradient(180deg, #E2DDD2 0%, #D9D2C5 100%);
+    background-attachment: fixed;
+    color: #242320;
     @apply antialiased;
   }
 
@@ -51,86 +60,105 @@
   .nn-heading {
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     letter-spacing: -0.018em;
-    color: #2B2A27;
+    color: #242320;
   }
 }
 
-/* ─── Soft Floating Cards (Elevasi & Shadow Halus Organik) ─── */
+/* ─── Frosted Glassmorphism Floating Cards ─── */
 .nn-card,
 .nb-card,
 .lg\:col-span-5 > div.bg-white,
 .lg\:col-span-5 > div.bg-\[\#FCFBF8\] {
-  background-color: #FCFBF8;
-  border: 1px solid #E6E2D8 !important;
-  border-radius: 16px !important;
-  box-shadow: var(--nn-shadow-card) !important;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  background: var(--nn-glass-bg) !important;
+  backdrop-filter: blur(20px) saturate(145%);
+  -webkit-backdrop-filter: blur(20px) saturate(145%);
+  border: 1px solid var(--nn-glass-border) !important;
+  border-radius: 18px !important;
+  box-shadow: var(--nn-shadow-glass) !important;
+  transition: box-shadow 0.22s ease, transform 0.22s ease, background 0.22s ease, border-color 0.22s ease;
 }
 
 .nn-card-interactive:hover {
-  border-color: #D6D0C4 !important;
-  box-shadow: var(--nn-shadow-float) !important;
-  transform: translateY(-1.5px);
+  background: var(--nn-glass-bg-hover) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: var(--nn-shadow-glass-float) !important;
+  transform: translateY(-2px);
+}
+
+/* Sub-surface inset glass (untuk well/kotak dalam kartu) */
+.nn-glass-inset {
+  background: rgba(235, 230, 220, 0.58);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: inset 0 1px 3px rgba(34, 31, 26, 0.06);
 }
 
 /* ─── Form Controls (Input, Select, Textarea) di luar kertas surat ─── */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *),
 select:not(#surat-tugas-document *),
 textarea:not(#surat-tugas-document *) {
-  background-color: #F8F6F2;
-  border: 1px solid #DFDBD0 !important;
-  border-radius: 10px !important;
-  color: #2B2A27 !important;
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(168, 160, 146, 0.48) !important;
+  border-radius: 11px !important;
+  color: #242320 !important;
+  box-shadow: inset 0 1px 2px rgba(34, 31, 26, 0.03), 0 1px 0 rgba(255, 255, 255, 0.7);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *):hover,
 select:not(#surat-tugas-document *):hover,
 textarea:not(#surat-tugas-document *):hover {
-  border-color: #C9C3B5 !important;
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(130, 122, 108, 0.62) !important;
 }
 
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(#surat-tugas-document *):focus,
 select:not(#surat-tugas-document *):focus,
 textarea:not(#surat-tugas-document *):focus {
   background-color: #FFFFFF !important;
-  border-color: #5C8374 !important;
-  box-shadow: 0 0 0 3px rgba(61, 99, 86, 0.13) !important;
+  border-color: #2F6B57 !important;
+  box-shadow: 0 0 0 3.5px rgba(47, 107, 87, 0.16) !important;
   outline: none !important;
 }
 
-/* ─── Tombol Halus & Tenang (Natural Tactile Transitions) ─── */
+/* ─── Tombol Halus & Taktil ─── */
 button:not(#surat-tugas-document *) {
-  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.14s ease;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.14s ease, filter 0.18s ease;
 }
 
 button:not(#surat-tugas-document *):active:not(:disabled) {
   transform: scale(0.985);
 }
 
-/* ─── Bingkai Kanvas Pratinjau & Kertas A4 di Layar (Warm Studio Mat) ─── */
+/* ─── Bingkai Kanvas Pratinjau & Kertas A4 di Layar (Smoked Stone Glass Well) ─── */
 .preview-scroll-container {
-  background-color: #EAE6DD !important;
-  border: 1px solid #DFDBD0 !important;
-  border-radius: 16px !important;
-  box-shadow: inset 0 2px 6px rgba(43, 42, 39, 0.035) !important;
+  background: rgba(196, 189, 176, 0.56) !important;
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  border-radius: 18px !important;
+  box-shadow:
+    inset 0 2px 10px rgba(34, 31, 26, 0.08),
+    0 8px 24px -6px rgba(34, 31, 26, 0.08),
+    0 0 0 1px rgba(43, 40, 34, 0.06) !important;
 }
 
 #surat-tugas-document .print-page {
-  border: 1px solid #DFDBD0;
-  box-shadow: 0 6px 26px -4px rgba(43, 42, 39, 0.09), 0 2px 6px rgba(43, 42, 39, 0.04);
+  border: 1px solid #D5CEC0;
+  box-shadow: 0 12px 34px -6px rgba(30, 28, 24, 0.16), 0 3px 8px rgba(30, 28, 24, 0.07);
 }
 
 /* ─── Panel Kiri Form: scroll independen lembut ─────────────────── */
 .lg\:col-span-5[style*="overflow-y: auto"] {
   scrollbar-width: thin;
-  scrollbar-color: #D5CFC3 transparent;
+  scrollbar-color: #B8B0A0 transparent;
 }
 .lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar {
   width: 5px;
 }
 .lg\:col-span-5[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background: #D5CFC3;
+  background: #B8B0A0;
   border-radius: 9999px;
 }
 
@@ -138,7 +166,7 @@ button:not(#surat-tugas-document *):active:not(:disabled) {
 .preview-scroll-container,
 .lg\:col-span-7[style*="overflow-y: auto"] {
   scrollbar-width: thin;
-  scrollbar-color: #C7C0B2 transparent;
+  scrollbar-color: #9E9585 transparent;
 }
 .preview-scroll-container::-webkit-scrollbar,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar {
@@ -151,12 +179,12 @@ button:not(#surat-tugas-document *):active:not(:disabled) {
 }
 .preview-scroll-container::-webkit-scrollbar-thumb,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background: #C7C0B2;
+  background: #9E9585;
   border-radius: 9999px;
 }
 .preview-scroll-container::-webkit-scrollbar-thumb:hover,
 .lg\:col-span-7[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
-  background: #A9A192;
+  background: #847B6B;
 }
 
 /* Styling untuk kanvas dokumen kertas (bebas kotak/outline layaknya MS Word & Google Docs) */
@@ -184,6 +212,7 @@ button:not(#surat-tugas-document *):active:not(:disabled) {
 @media print {
   html, body {
     background: #ffffff !important;
+    background-image: none !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -225,6 +254,7 @@ button:not(#surat-tugas-document *):active:not(:disabled) {
     height: auto !important;
     padding: 0 !important;
     background: transparent !important;
+    backdrop-filter: none !important;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;

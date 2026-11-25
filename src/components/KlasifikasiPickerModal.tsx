@@ -111,10 +111,10 @@ export const KlasifikasiPickerModal: React.FC<KlasifikasiPickerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2A27]/45 backdrop-blur-sm animate-fade-in">
-      <div className="bg-[#FCFBF8] rounded-2xl shadow-[0_20px_50px_-10px_rgba(43,42,39,0.18)] border border-[#E6E2D8] w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E1C18]/45 backdrop-blur-md animate-fade-in">
+      <div className="bg-[#FAF8F3]/90 backdrop-blur-2xl rounded-3xl shadow-[0_24px_60px_-12px_rgba(24,22,18,0.28)] border border-white/85 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="p-5 border-b border-[#E6E2D8] bg-[#F6F4EF] text-[#2B2A27] flex items-center justify-between">
+        <div className="p-5 border-b border-white/75 bg-white/50 text-[#242320] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-[#EDF0F4] rounded-xl border border-[#D3DAE5]">
               <Tag className="w-5 h-5 text-[#45546B]" />

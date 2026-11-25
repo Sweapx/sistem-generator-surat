@@ -14,6 +14,7 @@ import {
 import {
   getSheetsWebAppUrl,
   setSheetsWebAppUrl,
+  resetSheetsWebAppUrlToDefault,
   isSheetsConfigured,
   pingSheets,
   testDriveConnection,
@@ -137,28 +138,28 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2B2A27]/45 backdrop-blur-sm">
-      <div className="bg-[#FCFBF8] rounded-2xl border border-[#E6E2D8] shadow-[0_20px_50px_-10px_rgba(43,42,39,0.18)] w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E1C18]/45 backdrop-blur-md">
+      <div className="bg-[#FAF8F3]/90 backdrop-blur-2xl rounded-3xl border border-white/85 shadow-[0_24px_60px_-12px_rgba(24,22,18,0.28)] w-full max-w-xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#E6E2D8] bg-[#F6F4EF]">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/75 bg-white/50">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-[#EBF2EE] border border-[#CDE0D6] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#2F6B57] text-white shadow-[0_3px_10px_rgba(47,107,87,0.28)] flex items-center justify-center">
               {isSheetsConfigured() ? (
-                <Wifi className="w-4.5 h-4.5 text-[#3D6356]" />
+                <Wifi className="w-4.5 h-4.5" />
               ) : (
-                <WifiOff className="w-4.5 h-4.5 text-[#9A6B3B]" />
+                <WifiOff className="w-4.5 h-4.5" />
               )}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#2B2A27]">
-                Konfigurasi Google Sheets
+              <h2 className="text-sm font-bold text-[#242320]">
+                Konfigurasi Google Sheets &amp; Drive
               </h2>
-              <p className="text-xs text-[#66625B]">Sinkronisasi nomor surat &amp; database pegawai</p>
+              <p className="text-xs text-[#5C5850]">Sinkronisasi nomor surat &amp; arsip Word/Google Docs</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-[#FCFBF8] hover:bg-[#EAE6DD] text-[#66625B] hover:text-[#2B2A27] border border-[#E2DDD2] transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl bg-white/80 hover:bg-white text-[#5C5850] hover:text-[#242320] border border-white shadow-2xs transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -220,9 +221,23 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
 
           {/* URL Input */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              URL Google Apps Script Web App:
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-[#242320]">
+                URL Google Apps Script Web App:
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const def = resetSheetsWebAppUrlToDefault();
+                  setUrl(def);
+                  setTestResult(null);
+                  setDriveTestResult(null);
+                }}
+                className="text-[11px] font-semibold text-[#2F6B57] hover:underline cursor-pointer"
+              >
+                Pulihkan URL Default Kantor
+              </button>
+            </div>
             <div className="flex space-x-2">
               <input
                 type="url"
@@ -232,7 +247,7 @@ export const SheetsConfigModal: React.FC<SheetsConfigModalProps> = ({
                   setTestResult(null);
                 }}
                 placeholder="https://script.google.com/macros/s/AKfyc.../exec"
-                className="flex-1 text-xs p-2.5 font-mono bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:bg-white"
+                className="flex-1 text-xs p-2.5 font-mono rounded-xl"
               />
             </div>
           </div>

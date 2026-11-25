@@ -562,14 +562,14 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
     <div className="flex flex-col space-y-2.5 h-[calc(100vh-120px)] print:h-auto print:block print:space-y-0">
       {/* ─── BILAH TOMBOL AKSI (NON-SCROLLABLE / TETAP DI ATAS) ─────── */}
       <div className="action-bar-print-hide shrink-0 space-y-2">
-        {/* ─── Action Bar (Natural Neutral Soft Floating Card) ──────────── */}
-        <div className="nn-card bg-[#FCFBF8] px-3.5 py-2.5 rounded-2xl border border-[#E6E2D8] flex flex-wrap items-center justify-between gap-2">
+        {/* ─── Action Bar (Natural Neutral Frosted Glassmorphism) ──────────── */}
+        <div className="nn-card px-3.5 py-2.5 rounded-2xl flex flex-wrap items-center justify-between gap-2">
           {/* Kelompok Kiri: Utilitas Form & Pindai AI */}
           <div className="flex flex-wrap items-center gap-1.5">
             {isEditMode && onCancelEdit && (
               <button
                 onClick={onCancelEdit}
-                className="flex items-center space-x-1.5 bg-[#F9ECEA] hover:bg-[#F3DFDC] text-[#8C3B32] border border-[#ECCBC7] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#FCE6E3] hover:bg-[#F8D5D0] text-[#8C332A] border border-[#EBBAB3] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Batalkan pengeditan dan kembali ke formulir surat baru"
               >
                 <RotateCcw className="w-3.5 h-3.5 shrink-0" />
@@ -581,7 +581,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onResetIsiPembuatan}
-                className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#4A4741] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-white/80 hover:bg-white text-[#3F3D38] border border-white/90 shadow-2xs text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Hapus semua isi form untuk memulai dari awal"
               >
                 <RefreshCw className="w-3.5 h-3.5 shrink-0" />
@@ -593,7 +593,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onGenerateGeneralTemplate}
-                className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#4A4741] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-white/80 hover:bg-white text-[#3F3D38] border border-white/90 shadow-2xs text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Isi otomatis dengan template general sesuai jenis surat"
               >
                 <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -605,12 +605,12 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               <button
                 type="button"
                 onClick={onOpenAiScanner}
-                className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border cursor-pointer whitespace-nowrap ${
+                className={`flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border shadow-2xs cursor-pointer whitespace-nowrap ${
                   isNotaDinas
-                    ? 'bg-[#EDF0F4] hover:bg-[#E1E6EE] text-[#3B4A62] border-[#D3DAE5]'
+                    ? 'bg-[#E4ECF7] hover:bg-[#D5E2F3] text-[#2D4263] border-[#BCCAE0]'
                     : form.jenis_naskah === 'UNDANGAN'
-                    ? 'bg-[#F7EFE2] hover:bg-[#F0E3CE] text-[#7A542E] border-[#E8D6BA]'
-                    : 'bg-[#EBF2EE] hover:bg-[#DFECE5] text-[#2B4F43] border-[#CDE0D6]'
+                    ? 'bg-[#FCEAD2] hover:bg-[#F8DFBE] text-[#7A4819] border-[#E6C9A2]'
+                    : 'bg-[#DDF0E7] hover:bg-[#CCE7DA] text-[#1F4A3A] border-[#A8D4BF]'
                 }`}
                 title={
                   isNotaDinas
@@ -636,7 +636,7 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
           <div className="flex flex-wrap items-center gap-1.5 ml-auto">
             <button
               onClick={() => window.print()}
-              className="flex items-center space-x-1.5 bg-[#F5F3EE] hover:bg-[#EAE6DD] text-[#3F3D38] border border-[#E2DDD2] text-xs font-medium px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-white/80 hover:bg-white text-[#33312C] border border-white/90 shadow-2xs text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
               title="Cetak langsung ke printer atau Simpan sebagai PDF dari browser"
             >
               <Printer className="w-3.5 h-3.5 shrink-0" />
@@ -645,16 +645,16 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
             <button
               onClick={onDownloadPdf}
               disabled={isGeneratingPdf}
-              className="flex items-center space-x-1.5 bg-[#FAF8F4] hover:bg-[#EFECE4] text-[#2B2A27] border border-[#DDD8CC] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              className="flex items-center space-x-1.5 bg-white/90 hover:bg-white text-[#1F4A3A] border border-[#B2D8C5] shadow-2xs text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer disabled:opacity-50 whitespace-nowrap"
               title="Unduh dokumen langsung dalam format file PDF resmi"
             >
-              <Download className="w-3.5 h-3.5 shrink-0 text-[#3D6356]" />
+              <Download className="w-3.5 h-3.5 shrink-0 text-[#2F6B57]" />
               <span>{isGeneratingPdf ? 'Membuat PDF...' : 'Unduh PDF'}</span>
             </button>
             {onDownloadDocx && (
               <button
                 onClick={onDownloadDocx}
-                className="flex items-center space-x-1.5 bg-[#EDF0F4] hover:bg-[#E1E6EE] text-[#3B4A62] border border-[#D3DAE5] text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
+                className="flex items-center space-x-1.5 bg-[#E4ECF7] hover:bg-[#D5E2F3] text-[#2D4263] border border-[#BCCAE0] shadow-2xs text-xs font-semibold px-2.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap"
                 title="Unduh dokumen dalam format Microsoft Word (.docx)"
               >
                 <FileText className="w-3.5 h-3.5 shrink-0" />
@@ -666,10 +666,10 @@ export const SuratPreview: React.FC<SuratPreviewProps> = ({
               disabled={isSaved}
               className={`flex items-center space-x-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-xl cursor-pointer whitespace-nowrap ${
                 isSaved
-                  ? 'bg-[#E9E6DF] text-[#8A857C] border border-[#DCD7CB] cursor-not-allowed'
+                  ? 'bg-white/60 text-[#7A756C] border border-white/80 cursor-not-allowed'
                   : isEditMode
-                  ? 'bg-[#9A6B3B] hover:bg-[#82582E] text-[#FAF9F6] shadow-[0_2px_6px_rgba(154,107,59,0.2)]'
-                  : 'bg-[#3D6356] hover:bg-[#315247] text-[#FAF9F6] shadow-[0_2px_6px_rgba(61,99,86,0.2)]'
+                  ? 'bg-gradient-to-b from-[#B37334] to-[#915A23] hover:from-[#9E642B] hover:to-[#7C4C1C] text-white shadow-[0_4px_12px_rgba(168,106,45,0.28)]'
+                  : 'bg-gradient-to-b from-[#367560] to-[#285A48] hover:from-[#2E6653] hover:to-[#204A3B] text-white shadow-[0_4px_12px_rgba(47,107,87,0.28)]'
               }`}
             >
               <FileCheck className="w-3.5 h-3.5 shrink-0" />

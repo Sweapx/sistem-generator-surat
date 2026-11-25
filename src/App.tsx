@@ -170,34 +170,70 @@ export function App() {
   useEffect(() => saveToStorage(LS_PEJABAT, pejabatList), [pejabatList]);
   useEffect(() => saveToStorage(LS_NOMOR_SURAT, nomorSuratList), [nomorSuratList]);
 
-  // ─── Sync from Google Sheets ─────────────────────────────────────────────────
+  // ─── Sync from Google Sheets (Sequential & Preserves Local Rich Snapshots) ───
   const syncFromSheets = useCallback(async () => {
     if (!isSheetsConfigured()) return;
     setIsSyncingSheets(true);
     try {
-      const [pegawai, pejabat, nomorSurat, users] = await Promise.all([
-        fetchPegawaiFromSheets(),
-        fetchPejabatFromSheets(),
-        fetchNomorSuratFromSheets(),
-        fetchUsersList().catch(() => [] as User[]),
-      ]);
-      if (pegawai.length > 0) setPegawaiList(pegawai);
-      if (pejabat.length > 0) setPejabatList(pejabat);
-      if (nomorSurat.length > 0) {
-        const withUnique = nomorSurat.map((item, idx) => ({
-          ...item,
-          id: `ns-${item.nomor_urut || idx}-${idx}`,
-        }));
-        setNomorSuratList(withUnique);
+      const nomorSurat = await fetchNomorSuratFromSheets();
+      if (Array.isArray(nomorSurat) && nomorSurat.length > 0) {
+        setNomorSuratList((prev) => {
+          // Simpan peta form_state lokal agar pratinjau penuh naskah yang dibuat di perangkat ini tetap terjaga
+          const localByUrut = new Map<string, NomorSuratRecord>();
+          prev.forEach((loc) => {
+            if (loc.nomor_urut) {
+              localByUrut.set(`${loc.nomor_urut}-${(loc.perihal || '').trim().toLowerCase()}`, loc);
+              localByUrut.set(String(loc.nomor_urut), loc);
+            }
+          });
+
+          return nomorSurat.map((item, idx) => {
+            const exactKey = `${item.nomor_urut}-${(item.perihal || '').trim().toLowerCase()}`;
+            const localMatch = localByUrut.get(exactKey) || localByUrut.get(String(item.nomor_urut));
+            const samePerihal =
+              localMatch &&
+              (!item.perihal ||
+                !localMatch.perihal ||
+                localMatch.perihal.trim().toLowerCase() === item.perihal.trim().toLowerCase());
+
+            return {
+              ...(samePerihal
+                ? {
+                    form_state: localMatch.form_state,
+                    pegawai_ids: localMatch.pegawai_ids,
+                    pejabat_id: localMatch.pejabat_id,
+                    kode_klasifikasi: item.kode_klasifikasi || localMatch.kode_klasifikasi,
+                    kategori_klasifikasi: item.kategori_klasifikasi || localMatch.kategori_klasifikasi,
+                    nomor_lengkap:
+                      localMatch.nomor_lengkap && !item.nomor_lengkap?.includes('/KP.01.06/09/')
+                        ? localMatch.nomor_lengkap
+                        : localMatch.form_state?.nomor_lengkap || item.nomor_lengkap,
+                  }
+                : {}),
+              ...item,
+              ...(samePerihal && localMatch?.form_state ? { form_state: localMatch.form_state } : {}),
+              id: `ns-${item.nomor_urut || idx}-${idx}`,
+            };
+          });
+        });
       }
-      if (users && users.length > 0) {
-        setUsersList(users);
-      }
+
+      // Ambil daftar pengguna secara berurutan (bukan paralel serentak) agar tidak memicu rate-limit Google Apps Script
+      try {
+        const users = await fetchUsersList();
+        if (users && users.length > 0) {
+          setUsersList(users);
+        }
+      } catch {}
+
       setIsSheetsConnected(true);
-      setLastSyncMsg(`Tersinkronisasi (${nomorSurat.length} surat) ${new Date().toLocaleTimeString('id-ID')}`);
-    } catch (err) {
+      setLastSyncMsg(
+        `Tersinkronisasi dengan Google Sheets (${nomorSurat.length} surat) • ${new Date().toLocaleTimeString('id-ID')}`
+      );
+    } catch (err: any) {
       console.warn('Sheets sync failed, using local data:', err);
-      setLastSyncMsg('Gagal sinkronisasi — memakai data lokal');
+      const detail = err?.message ? ` (${String(err.message).slice(0, 80)})` : '';
+      setLastSyncMsg(`Gagal sinkronisasi ke Sheets${detail} — memakai data lokal`);
     } finally {
       setIsSyncingSheets(false);
     }
@@ -1081,7 +1117,40 @@ export function App() {
       return rawUrl;
     };
 
+    // Helper untuk membuat DOCX ringan (tanpa halaman gambar PDF raksasa) apabila lampiran terlalu besar untuk kuota POST Apps Script
+    const buildLightweightDocxBase64 = async (): Promise<string | undefined> => {
+      try {
+        const lightForm: SuratTugasFormState = {
+          ...form,
+          lampiran_items: stripHeavyLampiran(form.lampiran_items),
+          undangan_lampiran_items: stripHeavyLampiran(form.undangan_lampiran_items),
+          nota_lampiran_items: stripHeavyLampiran(form.nota_lampiran_items),
+        };
+        const lightBlob = await exportNaskahDinasDocx(lightForm, selectedPegawaiList, selectedPejabatObj);
+        return await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => {
+            const d = typeof r.result === 'string' ? r.result : '';
+            resolve(d.includes('base64,') ? d.split('base64,')[1] : '');
+          };
+          r.onerror = () => resolve('');
+          r.readAsDataURL(lightBlob);
+        });
+      } catch {
+        return undefined;
+      }
+    };
+
+    // Jika ukuran DOCX base64 melebihi ~6 MB (misal lampiran PDF scan belasan halaman), otomatis gunakan DOCX ringan untuk arsip Drive agar upload tidak ditolak server Google
+    if (docxBase64 && docxBase64.length > 6_000_000) {
+      const compactBase64 = await buildLightweightDocxBase64();
+      if (compactBase64) {
+        docxBase64 = compactBase64;
+      }
+    }
+
     const publishedFp = getDraftPublishFingerprint(form);
+    const shouldSyncCloud = isSheetsConfigured();
 
     if (editingRecord) {
       // ── MODE EDIT: Perbarui record yang ada tanpa membuat nomor baru ──
@@ -1108,7 +1177,6 @@ export function App() {
         konseptor: form.konseptor || editingRecord.konseptor || 'TU Pusaka',
         link_word: ' ',
         link_pdf: docFileName,
-        pdf_base64: docxBase64,
         pdf_filename: docFileName,
         docx_base64: docxBase64,
         docx_filename: docFileName,
@@ -1128,10 +1196,11 @@ export function App() {
       }));
       setIsSavedToDB(true);
 
-      if (isSheetsConnected) {
+      if (shouldSyncCloud) {
         try {
           setLastSyncMsg('Memperbarui berkas Word (.docx / Google Docs) di Google Sheets & Drive...');
           const result = await updateNomorSuratInSheets(updatedRecord);
+          setIsSheetsConnected(true);
           if (result && (result.drive_url || result.drive_file_id)) {
             const finalDocUrl = resolveGoogleDocsUrl(result.drive_url, result.drive_file_id) || result.drive_url!;
             setLastSavedDriveUrl(finalDocUrl);
@@ -1154,9 +1223,10 @@ export function App() {
           } else {
             setLastSyncMsg(`✓ Surat ${updatedRecord.nomor_lengkap} berhasil diperbarui di Spreadsheet`);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.warn('Gagal update ke Sheets:', err);
-          setLastSyncMsg('Tersimpan lokal — gagal memperbarui ke Google Sheets');
+          const errDetail = err?.message ? `: ${String(err.message).slice(0, 90)}` : '';
+          setLastSyncMsg(`Tersimpan lokal — gagal memperbarui ke Sheets/Drive${errDetail}`);
         } finally {
           setIsSavingToSheets(false);
         }
@@ -1206,7 +1276,6 @@ export function App() {
         status_surat: 'OK',
         link_word: ' ',
         link_pdf: docFileName,
-        pdf_base64: docxBase64,
         pdf_filename: docFileName,
         docx_base64: docxBase64,
         docx_filename: docFileName,
@@ -1224,10 +1293,11 @@ export function App() {
       }));
       setIsSavedToDB(true);
 
-      if (isSheetsConnected) {
+      if (shouldSyncCloud) {
         try {
           setLastSyncMsg('Mengunggah dokumen Word (.docx / Google Docs) ke Google Drive & mencatat ke Spreadsheet...');
           const savedResult = await appendNomorSuratToSheets(newRecord);
+          setIsSheetsConnected(true);
           if (savedResult && (savedResult as any).drive_error) {
             setLastSyncMsg(`⚠️ Tercatat di Sheets, namun Google Drive kendala: ${(savedResult as any).drive_error}`);
             alert(
@@ -1263,9 +1333,10 @@ export function App() {
           } else {
             setLastSyncMsg(`Nomor surat ${newRecord.nomor_lengkap} tersinkronisasi ke Sheets ✓`);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.warn('Failed to sync to Sheets & Drive:', err);
-          setLastSyncMsg('Tersimpan lokal — gagal sinkronisasi ke Sheets/Drive');
+          const errDetail = err?.message ? `: ${String(err.message).slice(0, 90)}` : '';
+          setLastSyncMsg(`Tersimpan lokal — gagal sinkronisasi ke Sheets/Drive${errDetail}`);
         } finally {
           setIsSavingToSheets(false);
         }
@@ -1423,43 +1494,55 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F3EE] text-[#2B2A27] flex flex-col font-sans">
+    <div className="min-h-screen bg-transparent text-[#242320] flex flex-col font-sans">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         nextNomorLengkap={nextNomorInfo.nomor_lengkap}
         isSheetsConnected={isSheetsConnected}
+        isSyncingSheets={isSyncingSheets}
+        onSyncNow={syncFromSheets}
         onOpenSheetsConfig={() => setIsSheetsModalOpen(true)}
         currentUser={auth.user}
         onLogout={handleLogout}
       />
 
-      {/* Sync Status Bar */}
+      {/* Frosted Glass Sync Status Bar */}
       {(isSyncingSheets || lastSyncMsg) && (
         <div
-          className={`w-full text-center text-[11px] font-medium py-1.5 px-4 no-print print:hidden border-b ${
+          className={`w-full text-center text-[11px] font-semibold py-1.5 px-4 no-print print:hidden backdrop-blur-md border-b ${
             isSyncingSheets
-              ? 'bg-[#EBF2EE] text-[#2F5246] border-[#CDE0D6]'
+              ? 'bg-[#DDF0E7]/85 text-[#1F4A3A] border-white/60'
               : lastSyncMsg.includes('Gagal') || lastSyncMsg.includes('gagal')
-              ? 'bg-[#F7EFE2] text-[#7A542E] border-[#E8D6BA]'
-              : 'bg-[#EBF2EE] text-[#2B4F43] border-[#CDE0D6]'
+              ? 'bg-[#FCEAD2]/90 text-[#7A4819] border-white/60'
+              : 'bg-[#DDF0E7]/85 text-[#1F4A3A] border-white/60'
           }`}
         >
           {isSyncingSheets ? (
             <span className="flex items-center justify-center space-x-1.5">
               <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>Menyinkronisasi data dari Google Sheets...</span>
+              <span>Menyinkronisasi data dari Google Sheets &amp; Drive...</span>
             </span>
           ) : (
-            <span className="inline-flex items-center justify-center space-x-2">
+            <span className="inline-flex flex-wrap items-center justify-center gap-2">
               <span>{isSheetsConnected ? '☁️' : '💾'} {lastSyncMsg}</span>
+              {(lastSyncMsg.includes('Gagal') || lastSyncMsg.includes('gagal')) && (
+                <button
+                  type="button"
+                  onClick={syncFromSheets}
+                  className="font-semibold inline-flex items-center space-x-1 bg-white/85 hover:bg-white text-[#242320] px-2.5 py-0.5 rounded-full border border-[#D4C3A8] shadow-2xs cursor-pointer"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Coba Sinkron Ulang</span>
+                </button>
+              )}
               {lastSavedDriveUrl && (
                 <a
                   href={lastSavedDriveUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-semibold underline hover:bg-[#3D6356] hover:text-white inline-flex items-center space-x-1 ml-1.5 cursor-pointer bg-[#FCFBF8] px-2.5 py-0.5 rounded-full border border-[#CDE0D6] transition-colors"
+                  className="font-semibold hover:bg-[#2F6B57] hover:text-white inline-flex items-center space-x-1 ml-1 cursor-pointer bg-white/90 text-[#1F4A3A] px-2.5 py-0.5 rounded-full border border-[#B5D8C7] shadow-2xs transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
                   <span>Buka Dokumen (GDocs / Word)</span>
